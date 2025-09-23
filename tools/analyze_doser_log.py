@@ -30,8 +30,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from chihiros_device_manager.doser_status import parse_status_payload
-
+from chihiros_device_manager.doser_status import (  # noqa: E402
+    parse_status_payload,
+)
 
 LINE_RE = re.compile(
     r"^(?P<timestamp>[^ ]+ [^ ]+ [^ ]+)\s+"
@@ -70,7 +71,8 @@ class Record:
         body = " ".join(f"{b:02X}" for b in self.payload)
         return (
             f"[{self.timestamp}] {self.kind} cmd=0x{self.cmd_id:02X} "
-            f"mode=0x{self.mode:02X} msg={self.msg_id_hi:02X}:{self.msg_id_lo:02X} "
+            f"mode=0x{self.mode:02X} msg={
+                self.msg_id_hi:02X}:{self.msg_id_lo:02X} "
             f"data=[{body}] chk=0x{self.checksum:02X}"
         )
 
@@ -84,7 +86,9 @@ def _extract_uart_bytes(raw_field: str) -> bytes:
     frame prefixed by the ATT header (11 bytes) which we strip away.
     """
 
-    chunks = [part.strip() for part in raw_field.strip().split("  ") if part.strip()]
+    chunks = [
+        part.strip() for part in raw_field.strip().split("  ") if part.strip()
+    ]
     head = chunks[0].replace("…", "").strip()
     try:
         return bytes.fromhex(head)
@@ -92,7 +96,8 @@ def _extract_uart_bytes(raw_field: str) -> bytes:
         if len(chunks) < 2:
             raise
         full_frame = bytes.fromhex(chunks[1])
-        # ATT opcode (1) + handle (2) + offset (2) + value length (2) + uuid (4) = 11 bytes
+        # ATT opcode (1), handle (2), offset (2), value length (2) and uuid (4)
+        # combine to 11 bytes.
         return full_frame[11:]
 
 
@@ -127,7 +132,9 @@ def parse_log(path: Path) -> Iterable[Record]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("log", type=Path, help="Path to RAW PacketLogger export")
+    parser.add_argument(
+        "log", type=Path, help="Path to RAW PacketLogger export"
+    )
     args = parser.parse_args()
 
     for record in parse_log(args.log):
@@ -147,10 +154,13 @@ def main() -> None:
             if status.weekday is not None:
                 header_bits.append(f"weekday={status.weekday}")
             if status.hour is not None and status.minute is not None:
-                header_bits.append(f"time={status.hour:02d}:{status.minute:02d}")
+                header_bits.append(
+                    f"time={status.hour:02d}:{status.minute:02d}"
+                )
             if status.message_id is not None:
                 header_bits.append(
-                    f"msg={status.message_id[0]:02X}:{status.message_id[1]:02X}"
+                    f"msg={status.message_id[0]:02X}:{
+                        status.message_id[1]:02X}"
                 )
             if status.response_mode is not None:
                 header_bits.append(f"resp=0x{status.response_mode:02X}")

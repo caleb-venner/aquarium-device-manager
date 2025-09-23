@@ -42,13 +42,19 @@ class LightDevice(BaseDevice):
             mode = payload[5]
             if mode == 0xFE:
                 self._last_status = LightStatus(raw_payload=payload)
-                self._logger.debug("%s: Status payload: %s", self.name, payload.hex())
+                self._logger.debug(
+                    "%s: Status payload: %s", self.name, payload.hex()
+                )
                 return
             if mode == 0x0A:
-                self._logger.debug("%s: Handshake ack: %s", self.name, payload.hex())
+                self._logger.debug(
+                    "%s: Handshake ack: %s", self.name, payload.hex()
+                )
                 return
 
-        self._logger.debug("%s: Notification received: %s", self.name, payload.hex())
+        self._logger.debug(
+            "%s: Notification received: %s", self.name, payload.hex()
+        )
 
     @property
     def last_status(self) -> Optional[LightStatus]:

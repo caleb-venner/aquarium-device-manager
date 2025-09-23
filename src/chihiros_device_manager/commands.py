@@ -3,7 +3,9 @@
 import datetime
 
 
-def next_message_id(current_msg_id: tuple[int, int] = (0, 0)) -> tuple[int, int]:
+def next_message_id(
+    current_msg_id: tuple[int, int] = (0, 0)
+) -> tuple[int, int]:
     """Generate bluetooth message id."""
     msg_id_higher_byte, msg_id_lower_byte = current_msg_id
     if msg_id_lower_byte == 255:
@@ -36,7 +38,9 @@ def _create_command_encoding(
 ) -> bytearray:
     """Encode command."""
     # make sure that no parameter is 90
-    sanitized_params: list[int] = list(map(lambda x: x if x != 90 else 89, parameters))
+    sanitized_params: list[int] = list(
+        map(lambda x: x if x != 90 else 89, parameters)
+    )
 
     command = bytearray(
         [cmd_id, 1, len(parameters) + 5, msg_id[0], msg_id[1], cmd_mode]
@@ -47,7 +51,9 @@ def _create_command_encoding(
     if verification_byte == 90:
         # make sure that verification byte is not 90
         new_msg_id = (msg_id[0], msg_id[1] + 1)
-        return _create_command_encoding(cmd_id, cmd_mode, new_msg_id, sanitized_params)
+        return _create_command_encoding(
+            cmd_id, cmd_mode, new_msg_id, sanitized_params
+        )
 
     return command + bytes([verification_byte])
 
@@ -55,7 +61,14 @@ def _create_command_encoding(
 def _encode_timestamp(ts: datetime.datetime) -> list[int]:
     """Encode timestamp."""
     # note: day is weekday e.g. 3 for wednesday
-    return [ts.year - 2000, ts.month, ts.isoweekday(), ts.hour, ts.minute, ts.second]
+    return [
+        ts.year - 2000,
+        ts.month,
+        ts.isoweekday(),
+        ts.hour,
+        ts.minute,
+        ts.second,
+    ]
 
 
 def create_set_time_command(msg_id: tuple[int, int]) -> bytearray:
@@ -68,10 +81,13 @@ def create_set_time_command(msg_id: tuple[int, int]) -> bytearray:
 def create_manual_setting_command(
     msg_id: tuple[int, int], color: int, brightness_level: int
 ) -> bytearray:
-    """Set brightness.
+    """Set brightness for a color channel.
 
-    param: color: 0-2 (0 is red, 1 is green, 2 is blue; on non-RGB models, 0 is white)
-    param: brightness_level: 0 - 100
+    Args:
+        msg_id: Tuple identifying the command sequence.
+        color: Channel index (0=red, 1=green, 2=blue; 0=white on
+            non-RGB models).
+        brightness_level: Target brightness between 0 and 100.
     """
     return _create_command_encoding(90, 7, msg_id, [color, brightness_level])
 
@@ -84,12 +100,16 @@ def create_add_auto_setting_command(
     ramp_up_minutes: int,
     weekdays: int,
 ) -> bytearray:
-    """Add auto setting.
+    """Add a timed automation entry.
 
-    brightness: tuple of 3 ints for red, green, and blue brightness, respectively
-                on non-RGB models, set to (white brightness, 255, 255)
-    weekdays: int resulting of selection bit mask
-              (Monday Tuesday Wednesday Thursday Friday Saturday Sunday) in decimal
+    Args:
+        msg_id: Tuple identifying the command sequence.
+        sunrise: Time when the program starts.
+        sunset: Time when the program ends.
+        brightness: RGB brightness tuple. Use (white, 255, 255)
+            on non-RGB models.
+        ramp_up_minutes: Fade-in duration in minutes.
+        weekdays: Bit mask selecting active weekdays.
     """
     parameters = [
         sunrise.hour,

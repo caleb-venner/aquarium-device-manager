@@ -17,7 +17,6 @@ from .doser_status import parse_status_payload
 from .light_status import ParsedLightStatus, parse_light_status
 from .weekday_encoding import WeekdaySelect
 
-
 app = typer.Typer()
 
 msg_id = commands.next_message_id()
@@ -39,7 +38,9 @@ def _parse_weekday_options(
         member = _WEEKDAY_NAME_MAP.get(name.lower())
         if member is None:
             choices = ", ".join(sorted(_WEEKDAY_NAME_MAP))
-            raise typer.BadParameter(f"Invalid weekday '{name}'. Use one of: {choices}")
+            raise typer.BadParameter(
+                f"Invalid weekday '{name}'. Use one of: {choices}"
+            )
         resolved.append(member)
     return resolved
 
@@ -68,7 +69,9 @@ def _render_status_payload(payload: bytes) -> None:
         print("  header:", ", ".join(header_info))
 
     if parsed.heads:
-        head_table = Table(show_header=True, header_style="bold", box=None, pad_edge=False)
+        head_table = Table(
+            show_header=True, header_style="bold", box=None, pad_edge=False
+        )
         head_table.add_column("#", justify="right")
         head_table.add_column("mode", justify="left")
         head_table.add_column("time", justify="left")
@@ -88,7 +91,8 @@ def _render_status_payload(payload: bytes) -> None:
         print(head_table)
 
     if len(parsed.tail_targets) > len(parsed.heads):
-        remaining = parsed.tail_targets[len(parsed.heads) :]
+        start_index = len(parsed.heads)
+        remaining = parsed.tail_targets[start_index:]
         if remaining:
             print(
                 "  extra targets: "
@@ -181,10 +185,13 @@ def _format_command_bytes(command: bytes | bytearray) -> str:
 
 def _render_light_status(parsed: ParsedLightStatus) -> None:
     print("Light status:")
-    if parsed.weekday is not None and parsed.current_hour is not None and parsed.current_minute is not None:
-        print(
-            f"  Weekday {parsed.weekday} Time {parsed.current_hour:02d}:{parsed.current_minute:02d}"
-        )
+    if (
+        parsed.weekday is not None
+        and parsed.current_hour is not None
+        and parsed.current_minute is not None
+    ):
+        time_str = f"{parsed.current_hour:02d}:{parsed.current_minute:02d}"
+        print(f"  Weekday {parsed.weekday} Time {time_str}")
     if parsed.keyframes:
         print("  Time   -> Level")
         for frame in parsed.keyframes:
@@ -197,9 +204,11 @@ def _render_light_status(parsed: ParsedLightStatus) -> None:
 
 
 async def _prompt_weekdays() -> list[doser_commands.Weekday] | None:
-    raw = await _prompt(
-        "Weekdays (comma or space separated names like 'mon tue', leave blank for all): "
+    prompt = (
+        "Weekdays (comma or space separated names like 'mon tue', "
+        "leave blank for all): "
     )
+    raw = await _prompt(prompt)
     if not raw:
         return None
     tokens = [token for token in raw.replace(",", " ").split() if token]
@@ -216,7 +225,6 @@ async def _interactive_doser_menu(timeout: int) -> None:
     current_device: Doser | None = None
     current_address: str | None = None
     current_light: LightDevice | None = None
-    current_light_address: str | None = None
 
     async def _ensure_device_selected() -> Doser | None:
         nonlocal current_device
@@ -226,7 +234,9 @@ async def _interactive_doser_menu(timeout: int) -> None:
 
     async def _discover_devices() -> None:
         nonlocal supported_devices, discovered_devices
-        supported_devices = await api.discover_supported_devices(timeout=timeout)
+        supported_devices = await api.discover_supported_devices(
+            timeout=timeout
+        )
         discovered_devices = [device for device, _ in supported_devices]
 
     async def _request_light_status(light: LightDevice) -> None:
@@ -244,13 +254,18 @@ async def _interactive_doser_menu(timeout: int) -> None:
             print("\n=== Chihiros Doser Menu ===")
             if current_device and current_address:
                 hi, lo = current_device.current_msg_id
-                print(
-                    f"Connected to {current_device.name} ({current_address}) - Current msg_id: {hi:02X} {lo:02X}"
+                status_msg = (
+                    f"Connected to {current_device.name} ({current_address})"
+                    f" - Current msg_id: {hi:02X} {lo:02X}"
                 )
+                print(status_msg)
             print("1) Connect to dosing pump")
             print("2) Connect to light")
             print("3) Request status")
-            print("4) Configure daily schedule (prepare + select + dose + schedule)")
+            print(
+                "4) Configure daily schedule "
+                "(prepare + select + dose + schedule)"
+            )
             print("5) Send prepare command")
             print("6) Send head select command")
             print("7) Send head dose command")
@@ -281,11 +296,12 @@ async def _interactive_doser_menu(timeout: int) -> None:
                     if current_light:
                         await current_light.disconnect()
                         current_light = None
-                        current_light_address = None
                     device = model_class(ble_device)
                     current_device = device
                     current_address = ble_device.address
-                    print(f"Connected to {device.name} at {ble_device.address}.")
+                    print(
+                        f"Connected to {device.name} at {ble_device.address}."
+                    )
                     await device.request_status()
                     await asyncio.sleep(2)
                     status = device.last_status
@@ -303,7 +319,6 @@ async def _interactive_doser_menu(timeout: int) -> None:
                     if current_light:
                         await current_light.disconnect()
                         current_light = None
-                        current_light_address = None
                     current_device = device
                     current_address = address
                     print(f"Connected to {device.name} at {address}.")
@@ -334,8 +349,10 @@ async def _interactive_doser_menu(timeout: int) -> None:
                         current_address = None
                     light = model_class(ble_device)
                     current_light = light
-                    current_light_address = ble_device.address
-                    print(f"Connected to {light.name} at {ble_device.address}.")
+                    print(
+                        f"Connected to {light.name} at {
+                          ble_device.address}."
+                    )
                     await _request_light_status(light)
                 else:
                     light_devices = _print_discovered_devices(light_entries)
@@ -349,7 +366,6 @@ async def _interactive_doser_menu(timeout: int) -> None:
                         current_device = None
                         current_address = None
                     current_light = light
-                    current_light_address = address
                     if address:
                         print(f"Connected to {light.name} at {address}.")
                     await _request_light_status(light)
@@ -373,7 +389,9 @@ async def _interactive_doser_menu(timeout: int) -> None:
                     continue
                 try:
                     head_index = int(await _prompt("Head index (0-3): "))
-                    volume = int(await _prompt("Dose volume (tenths of mL 0-255): "))
+                    volume = int(
+                        await _prompt("Dose volume (tenths of mL 0-255): ")
+                    )
                     hour = int(await _prompt("Hour (0-23): "))
                     minute = int(await _prompt("Minute (0-59): "))
                 except ValueError:
@@ -396,9 +414,14 @@ async def _interactive_doser_menu(timeout: int) -> None:
                 device = await _ensure_device_selected()
                 if not device:
                     continue
-                stage_input = await _prompt("Stage value (04 or 05, hex allowed): ")
+                stage_input = await _prompt(
+                    "Stage value (04 or 05, hex allowed): "
+                )
                 try:
-                    stage = int(stage_input, 16 if stage_input.lower().startswith("0x") else 0)
+                    stage = int(
+                        stage_input,
+                        16 if stage_input.lower().startswith("0x") else 0,
+                    )
                 except ValueError:
                     print("Invalid stage value.")
                     continue
@@ -418,17 +441,22 @@ async def _interactive_doser_menu(timeout: int) -> None:
                 try:
                     head_index = int(await _prompt("Head index (0-3): "))
                     flag1 = int(
-                        (await _prompt("Flag1 (default 0, blank to skip): ")) or "0"
+                        (await _prompt("Flag1 (default 0, blank to skip): "))
+                        or "0"
                     )
                     flag2 = int(
-                        (await _prompt("Flag2 (default 1, blank to skip): ")) or "1"
+                        (await _prompt("Flag2 (default 1, blank to skip): "))
+                        or "1"
                     )
                 except ValueError:
                     print("Invalid numeric input.")
                     continue
                 try:
                     command = doser_commands.create_head_select_command(
-                        device.get_next_msg_id(), head_index, flag1=flag1, flag2=flag2
+                        device.get_next_msg_id(),
+                        head_index,
+                        flag1=flag1,
+                        flag2=flag2,
                     )
                 except ValueError as exc:
                     print(exc)
@@ -510,15 +538,15 @@ async def _interactive_doser_menu(timeout: int) -> None:
                 _print_discovered_devices(supported_devices)
             elif choice == "10":
                 if current_light and current_light.last_status:
-                    print(
-                        "Light raw payload:",
-                        current_light.last_status.raw_payload.hex(" ").upper(),
-                    )
+                    light_payload = current_light.last_status.raw_payload.hex(
+                        " "
+                    ).upper()
+                    print("Light raw payload:", light_payload)
                 if current_device and current_device.last_status:
-                    print(
-                        "Doser raw payload:",
-                        current_device.last_status.raw_payload.hex(" ").upper(),
-                    )
+                    doser_payload = current_device.last_status.raw_payload.hex(
+                        " "
+                    ).upper()
+                    print("Doser raw payload:", doser_payload)
                 if not (
                     (current_light and current_light.last_status)
                     or (current_device and current_device.last_status)
@@ -534,7 +562,6 @@ async def _interactive_doser_menu(timeout: int) -> None:
                     await current_light.disconnect()
                     print("Disconnected light.")
                 current_light = None
-                current_light_address = None
             else:
                 print("Unknown selection. Please choose a valid option.")
     except KeyboardInterrupt:  # pragma: no cover - interactive guard
@@ -544,7 +571,6 @@ async def _interactive_doser_menu(timeout: int) -> None:
             await current_device.disconnect()
         if current_light:
             await current_light.disconnect()
-
 
 
 def _run_device_func(device_address: str, **kwargs: Any) -> None:
@@ -625,7 +651,8 @@ def set_color_brightness(
 
 @app.command()
 def set_brightness(
-    device_address: str, brightness: Annotated[int, typer.Argument(min=0, max=100)]
+    device_address: str,
+    brightness: Annotated[int, typer.Argument(min=0, max=100)],
 ) -> None:
     """Set brightness of a light."""
     set_color_brightness(device_address, color=0, brightness=brightness)
@@ -633,7 +660,8 @@ def set_brightness(
 
 @app.command()
 def set_rgb_brightness(
-    device_address: str, brightness: Annotated[tuple[int, int, int], typer.Argument()]
+    device_address: str,
+    brightness: Annotated[tuple[int, int, int], typer.Argument()],
 ) -> None:
     """Set brightness of a RGB light."""
     _run_device_func(device_address, brightness=brightness)
@@ -646,7 +674,9 @@ def add_setting(
     sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
     max_brightness: Annotated[int, typer.Option(max=100, min=0)] = 100,
     ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [WeekdaySelect.everyday],
+    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
+        WeekdaySelect.everyday
+    ],
 ) -> None:
     """Add setting to a light."""
     _run_device_func(
@@ -664,9 +694,15 @@ def add_rgb_setting(
     device_address: str,
     sunrise: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
     sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-    max_brightness: Annotated[tuple[int, int, int], typer.Option()] = (100, 100, 100),
+    max_brightness: Annotated[tuple[int, int, int], typer.Option()] = (
+        100,
+        100,
+        100,
+    ),
     ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [WeekdaySelect.everyday],
+    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
+        WeekdaySelect.everyday
+    ],
 ) -> None:
     """Add setting to a RGB light."""
     _run_device_func(
@@ -685,7 +721,9 @@ def remove_setting(
     sunrise: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
     sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
     ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [WeekdaySelect.everyday],
+    weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
+        WeekdaySelect.everyday
+    ],
 ) -> None:
     """Remove setting from a light."""
     _run_device_func(
@@ -704,8 +742,17 @@ def set_daily_dose(
     volume_tenths_ml: Annotated[int, typer.Argument(min=0, max=255)],
     hour: Annotated[int, typer.Argument(min=0, max=23)],
     minute: Annotated[int, typer.Argument(min=0, max=59)],
-    weekdays: Annotated[list[str] | None, typer.Option("--weekday", "-w")] = None,
-    confirm: Annotated[bool, typer.Option("--confirm/--no-confirm", help="Request status after programming", show_default=True)] = False,
+    weekdays: Annotated[
+        list[str] | None, typer.Option("--weekday", "-w")
+    ] = None,
+    confirm: Annotated[
+        bool,
+        typer.Option(
+            "--confirm/--no-confirm",
+            help="Request status after programming",
+            show_default=True,
+        ),
+    ] = False,
     wait: Annotated[
         float,
         typer.Option(

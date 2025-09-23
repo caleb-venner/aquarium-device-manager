@@ -15,8 +15,9 @@ def _encode_uart_command(
     payload = list(params)
     sanitized = [(value if value != 0x5A else 0x59) for value in payload]
 
-    command = bytearray([cmd_id, 0x01, len(sanitized) + 5, 
-                         msg_hi, msg_lo, mode])
+    command = bytearray(
+        [cmd_id, 0x01, len(sanitized) + 5, msg_hi, msg_lo, mode]
+    )
     command.extend(sanitized)
 
     checksum = command[2]
@@ -44,8 +45,11 @@ def create_prepare_command(msg_id: tuple[int, int], stage: int) -> bytearray:
 
 
 def create_head_select_command(
-    msg_id: tuple[int, int], head_index: int, *, 
-    flag1: int = 0x00, flag2: int = 0x01
+    msg_id: tuple[int, int],
+    head_index: int,
+    *,
+    flag1: int = 0x00,
+    flag2: int = 0x01,
 ) -> bytearray:
     """Select the dosing head that will be modified next (mode 0x20)."""
 
@@ -110,8 +114,14 @@ def create_head_dose_command(
         0xA5,
         0x1B,
         msg_id,
-        [head_index, weekday_mask, schedule_mode, 
-         repeat_flag, reserved, volume_tenths_ml],
+        [
+            head_index,
+            weekday_mask,
+            schedule_mode,
+            repeat_flag,
+            reserved,
+            volume_tenths_ml,
+        ],
     )
 
 

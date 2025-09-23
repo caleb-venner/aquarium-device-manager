@@ -45,14 +45,14 @@ chihirosctl = "chihiros_device_manager.chihirosctl:app"
 chihiros-service = "chihiros_device_manager.service:main"
 
 [tool.black]
-line-length = 100
+line-length = 80
 
 [tool.isort]
 profile = "black"
-line_length = 100
+line_length = 80
 
-[tool.flake8]
-max-line-length = 100
+[flake8]
+max-line-length = 80
 extend-ignore = [
     "D101",
     "D102",
@@ -64,6 +64,9 @@ extend-ignore = [
 per-file-ignores = [
     "src/chihiros_device_manager/chihirosctl.py:F401,F841",
 ]
+extend-exclude = [
+    "archive",
+]
 
 [tool.doc8]
-max-line-length = 100
+max-line-length = 80

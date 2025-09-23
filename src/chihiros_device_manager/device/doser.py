@@ -56,18 +56,24 @@ class Doser(BaseDevice):
         hour: int,
         minute: int,
         *,
-        weekdays: doser_commands.Weekday
-        | Sequence[doser_commands.Weekday]
-        | None = None,
+        weekdays: (
+            doser_commands.Weekday | Sequence[doser_commands.Weekday] | None
+        ) = None,
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> DoserStatus | None:
-        """Update daily schedule for a head and optionally confirm via status."""
+        """Update daily schedule and optionally refresh status."""
 
         weekday_mask = doser_commands.encode_weekdays(weekdays)
         command_batch = [
-            doser_commands.create_prepare_command(self.get_next_msg_id(), 0x04),
-            doser_commands.create_prepare_command(self.get_next_msg_id(), 0x05),
+            doser_commands.create_prepare_command(
+                self.get_next_msg_id(),
+                0x04,
+            ),
+            doser_commands.create_prepare_command(
+                self.get_next_msg_id(),
+                0x05,
+            ),
             doser_commands.create_head_select_command(
                 self.get_next_msg_id(), head_index
             ),

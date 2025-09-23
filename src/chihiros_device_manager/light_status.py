@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
+from typing import Optional, Tuple
 
 
 @dataclass(slots=True)
@@ -27,13 +27,22 @@ class ParsedLightStatus:
     weekday: Optional[int]
     current_hour: Optional[int]
     current_minute: Optional[int]
-    keyframes: List[LightKeyframe]
-    time_markers: List[Tuple[int, int]]
+    keyframes: list[LightKeyframe]
+    time_markers: list[Tuple[int, int]]
     tail: bytes
     raw_payload: bytes
 
 
-def _split_body(payload: bytes) -> Tuple[Optional[Tuple[int, int]], Optional[int], Optional[int], Optional[int], Optional[int], bytes]:
+def _split_body(
+    payload: bytes,
+) -> Tuple[
+    Optional[Tuple[int, int]],
+    Optional[int],
+    Optional[int],
+    Optional[int],
+    Optional[int],
+    bytes,
+]:
     """Return header fields and body bytes."""
 
     message_id = response_mode = weekday = hour = minute = None
@@ -71,8 +80,12 @@ def parse_light_status(payload: bytes) -> ParsedLightStatus:
     length = len(body_bytes)
     while i < length:
         remaining = length - i
-        # Sentinel like 00 02 HH MM appears to mark the controller's current clock.
-        if remaining >= 4 and body_bytes[i] == 0x00 and body_bytes[i + 1] == 0x02:
+        # 00 02 HH MM marks the controller's current clock.
+        if (
+            remaining >= 4
+            and body_bytes[i] == 0x00
+            and body_bytes[i + 1] == 0x02
+        ):
             time_markers.append((body_bytes[i + 2], body_bytes[i + 3]))
             i += 4
             continue
@@ -92,7 +105,7 @@ def parse_light_status(payload: bytes) -> ParsedLightStatus:
 
         total_minutes = hour * 60 + minute
         if last_time is not None and total_minutes < last_time:
-            # Remaining entries appear to be artifacts; stop parsing further keyframes.
+            # Later entries appear to be artifacts; stop parsing keyframes.
             break
 
         keyframes.append(LightKeyframe(hour=hour, minute=minute, value=value))

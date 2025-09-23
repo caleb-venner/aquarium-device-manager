@@ -4,6 +4,7 @@ import asyncio
 import logging
 from abc import ABC, ABCMeta
 from datetime import datetime
+from typing import cast
 
 import typer
 from bleak.backends.device import BLEDevice
@@ -33,9 +34,8 @@ BLEAK_BACKOFF_TIME = 0.25
 
 
 class _classproperty(property):
-    def __get__(self, owner_self: object, owner_cls: ABCMeta) -> str:  # type: ignore
-        ret: str = self.fget(owner_cls)  # type: ignore
-        return ret
+    def __get__(self, owner_self: object, owner_cls: ABCMeta) -> str:
+        return cast(str, self.fget(owner_cls))
 
 
 class BaseDevice(ABC):
@@ -48,7 +48,9 @@ class BaseDevice(ABC):
     _logger: logging.Logger
 
     def __init__(
-        self, ble_device: BLEDevice, advertisement_data: AdvertisementData | None = None
+        self,
+        ble_device: BLEDevice,
+        advertisement_data: AdvertisementData | None = None,
     ) -> None:
         """Create a new device."""
         self._ble_device = ble_device
@@ -235,26 +237,32 @@ class BaseDevice(ABC):
 
     async def reset_settings(self) -> None:
         """Remove all automation settings from the light."""
-        cmd = commands.create_reset_auto_settings_command(self.get_next_msg_id())
+        cmd = commands.create_reset_auto_settings_command(
+            self.get_next_msg_id()
+        )
         await self._send_command(cmd, 3)
 
     async def enable_auto_mode(self) -> None:
         """Enable auto mode of the light."""
-        switch_cmd = commands.create_switch_to_auto_mode_command(self.get_next_msg_id())
+        switch_cmd = commands.create_switch_to_auto_mode_command(
+            self.get_next_msg_id()
+        )
         time_cmd = commands.create_set_time_command(self.get_next_msg_id())
         await self._send_command(switch_cmd, 3)
         await self._send_command(time_cmd, 3)
 
     async def set_manual_mode(self) -> None:
         """Switch to manual mode by sending a manual mode command."""
-        # Set brightness to last known or default value for all colors (e.g., 100)
+        # Set each color to the stored or default brightness (for example 100).
         for color_name in self._colors:
             await self.set_color_brightness(100, color_name)
 
     # Bluetooth methods
 
     async def _send_command(
-        self, commands: list[bytes] | bytes | bytearray, retry: int | None = None
+        self,
+        commands: list[bytes] | bytes | bytearray,
+        retry: int | None = None,
     ) -> None:
         """Send command to device and read response."""
         await self._ensure_connected()
@@ -274,7 +282,7 @@ class BaseDevice(ABC):
         )
         if self._operation_lock.locked():
             self._logger.debug(
-                "%s: Operation already in progress, waiting for it to complete; RSSI: %s",
+                "%s: Operation already in progress; waiting. RSSI: %s",
                 self.name,
                 self.rssi,
             )
@@ -284,7 +292,7 @@ class BaseDevice(ABC):
                 return
             except BleakNotFoundError:
                 self._logger.error(
-                    "%s: device not found, no longer in range, or poor RSSI: %s",
+                    "%s: device missing or out of range. RSSI: %s",
                     self.name,
                     self.rssi,
                     exc_info=True,
@@ -292,7 +300,7 @@ class BaseDevice(ABC):
                 raise
             except CharacteristicMissingError as ex:
                 self._logger.debug(
-                    "%s: characteristic missing: %s; RSSI: %s",
+                    "%s: characteristic missing (%s). RSSI: %s",
                     self.name,
                     ex,
                     self.rssi,
@@ -300,7 +308,9 @@ class BaseDevice(ABC):
                 )
                 raise
             except BLEAK_EXCEPTIONS:
-                self._logger.debug("%s: communication failed", self.name, exc_info=True)
+                self._logger.debug(
+                    "%s: communication failed", self.name, exc_info=True
+                )
                 raise
 
         raise RuntimeError("Unreachable")
@@ -314,7 +324,7 @@ class BaseDevice(ABC):
             # Disconnect so we can reset state and try again
             await asyncio.sleep(BLEAK_BACKOFF_TIME)
             self._logger.debug(
-                "%s: RSSI: %s; Backing off %ss; Disconnecting due to error: %s",
+                "%s: RSSI: %s; backing off %.2fs due to error %s",
                 self.name,
                 self.rssi,
                 BLEAK_BACKOFF_TIME,
@@ -325,7 +335,10 @@ class BaseDevice(ABC):
         except BleakError as ex:
             # Disconnect so we can reset state and try again
             self._logger.debug(
-                "%s: RSSI: %s; Disconnecting due to error: %s", self.name, self.rssi, ex
+                "%s: RSSI: %s; disconnecting due to error %s",
+                self.name,
+                self.rssi,
+                ex,
             )
             await self._execute_disconnect()
             raise
@@ -338,7 +351,11 @@ class BaseDevice(ABC):
         if not self._write_char:
             raise CharacteristicMissingError("Write characteristic missing")
         for command in commands:
-            await self._client.write_gatt_char(self._write_char, command, False)
+            await self._client.write_gatt_char(
+                self._write_char,
+                command,
+                False,
+            )
 
     def _notification_handler(
         self, _sender: BleakGATTCharacteristic, data: bytearray
@@ -359,7 +376,9 @@ class BaseDevice(ABC):
             self.rssi,
         )
 
-    def _resolve_characteristics(self, services: BleakGATTServiceCollection) -> bool:
+    def _resolve_characteristics(
+        self, services: BleakGATTServiceCollection
+    ) -> bool:
         """Resolve characteristics."""
         for characteristic in [UART_TX_CHAR_UUID]:
             if char := services.get_characteristic(characteristic):
@@ -375,7 +394,7 @@ class BaseDevice(ABC):
         """Ensure connection to device is established."""
         if self._connect_lock.locked():
             self._logger.debug(
-                "%s: Connection already in progress, waiting for it to complete; RSSI: %s",
+                "%s: Connection already in progress; waiting. RSSI: %s",
                 self.name,
                 self.rssi,
             )
@@ -387,7 +406,11 @@ class BaseDevice(ABC):
             if self._client and self._client.is_connected:
                 self._reset_disconnect_timer()
                 return
-            self._logger.debug("%s: Connecting; RSSI: %s", self.name, self.rssi)
+            self._logger.debug(
+                "%s: Connecting; RSSI: %s",
+                self.name,
+                self.rssi,
+            )
             client = await establish_connection(
                 BleakClientWithServiceCache,
                 self._ble_device,
@@ -396,19 +419,30 @@ class BaseDevice(ABC):
                 use_services_cache=True,
                 ble_device_callback=lambda: self._ble_device,
             )
-            self._logger.debug("%s: Connected; RSSI: %s", self.name, self.rssi)
+            self._logger.debug(
+                "%s: Connected; RSSI: %s",
+                self.name,
+                self.rssi,
+            )
             resolved = self._resolve_characteristics(client.services)
             if not resolved:
                 # Try to handle services failing to load
-                resolved = self._resolve_characteristics(await client.get_services())
+                resolved = self._resolve_characteristics(
+                    await client.get_services()
+                )
 
             self._client = client
             self._reset_disconnect_timer()
 
             self._logger.debug(
-                "%s: Subscribe to notifications; RSSI: %s", self.name, self.rssi
+                "%s: Subscribe to notifications. RSSI: %s",
+                self.name,
+                self.rssi,
             )
-            await client.start_notify(self._read_char, self._notification_handler)  # type: ignore
+            await client.start_notify(
+                self._read_char,
+                self._notification_handler,  # type: ignore[arg-type]
+            )
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
@@ -439,7 +473,9 @@ class BaseDevice(ABC):
                         await client.stop_notify(read_char)
                     except BleakError:
                         self._logger.debug(
-                            "%s: Failed to stop notifications", self.name, exc_info=True
+                            "%s: Failed to stop notifications",
+                            self.name,
+                            exc_info=True,
                         )
                 await client.disconnect()
 

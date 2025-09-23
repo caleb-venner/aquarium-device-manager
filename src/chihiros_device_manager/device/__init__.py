@@ -10,13 +10,13 @@ from bleak.backends.device import BLEDevice
 from ..exception import DeviceNotFound
 from .a2 import AII
 from .base_device import BaseDevice
-from .light_device import LightDevice, LightStatus
 from .c2 import CII
 from .c2rgb import CIIRGB
 from .commander1 import Commander1
 from .commander4 import Commander4
 from .doser import Doser
 from .fallback import Fallback
+from .light_device import LightDevice, LightStatus
 from .tiny_terrarium_egg import TinyTerrariumEgg
 from .universal_wrgb import UniversalWRGB
 from .wrgb2 import WRGBII
@@ -31,7 +31,9 @@ for name, obj in inspect.getmembers(sys.modules[__name__]):
             CODE2MODEL[model_code] = obj
 
 
-def get_model_class_from_name(device_name: str) -> Callable[[BLEDevice], BaseDevice]:
+def get_model_class_from_name(
+    device_name: str,
+) -> Callable[[BLEDevice], BaseDevice]:
     """Get device class name from device name."""
     return CODE2MODEL.get(device_name[:-12], Fallback)
 

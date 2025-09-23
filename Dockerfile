@@ -8,8 +8,8 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR ${APP_HOME}
 
 # Install system dependencies required for BLE (bluez provides bluetooth tooling)
-RUN apt-get update \ 
-    && apt-get install -y --no-install-recommends bluez \ 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bluez \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python requirements
@@ -17,7 +17,7 @@ COPY pyproject.toml setup.cfg README.md ./
 COPY src ./src
 COPY tools ./tools
 
-RUN pip install --upgrade pip \ 
+RUN pip install --upgrade pip \
     && pip install --no-cache-dir .
 
 EXPOSE 8000

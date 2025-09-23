@@ -14,7 +14,6 @@ from .device import get_device_from_address, get_model_class_from_name
 from .device.base_device import BaseDevice
 from .device.doser import Doser, DoserStatus
 
-
 SupportedDeviceInfo = Tuple[BLEDevice, Type[BaseDevice]]
 
 
@@ -30,7 +29,7 @@ def filter_supported_devices(
             continue
         model_class = get_model_class_from_name(name)
         # type: ignore[attr-defined]
-        codes = getattr(model_class, "model_codes", [])  
+        codes = getattr(model_class, "model_codes", [])
         if not codes:
             continue
         supported.append((device, model_class))
@@ -77,9 +76,9 @@ async def set_doser_daily_schedule(
     hour: int,
     minute: int,
     *,
-    weekdays: doser_commands.Weekday
-    | Sequence[doser_commands.Weekday]
-    | None = None,
+    weekdays: (
+        doser_commands.Weekday | Sequence[doser_commands.Weekday] | None
+    ) = None,
     confirm: bool = False,
     wait_seconds: float = 1.5,
 ) -> DoserStatus | None:
@@ -99,8 +98,9 @@ async def set_doser_daily_schedule(
         )
 
 
-async def set_light_brightness(address: str, brightness: int, 
-                               color: str | int = 0) -> None:
+async def set_light_brightness(
+    address: str, brightness: int, color: str | int = 0
+) -> None:
     """Set brightness for a specific color channel on a light."""
 
     async with device_session(address) as device:

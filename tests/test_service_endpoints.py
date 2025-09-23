@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -96,10 +95,16 @@ def test_service_set_light_brightness_coerces_numeric_color(
 
     cached = _cached("light")
 
-    monkeypatch.setattr(service, "_ensure_light", AsyncMock(return_value=fake_light))
-    monkeypatch.setattr(service, "_refresh_light_status", AsyncMock(return_value=cached))
+    monkeypatch.setattr(
+        service, "_ensure_light", AsyncMock(return_value=fake_light)
+    )
+    monkeypatch.setattr(
+        service, "_refresh_light_status", AsyncMock(return_value=cached)
+    )
 
-    result = asyncio.run(service.set_light_brightness("AA:BB", brightness=80, color="2"))
+    result = asyncio.run(
+        service.set_light_brightness("AA:BB", brightness=80, color="2")
+    )
 
     fake_light.set_color_brightness.assert_awaited_once_with(80, 2)
     assert result is cached

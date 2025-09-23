@@ -6,8 +6,8 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -19,11 +19,17 @@ from pydantic import BaseModel, Field, ValidationError, validator
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
 except ImportError:  # pragma: no cover - fallback if library changes
+
     class BleakNotFoundError(Exception):
-        ...
+        """Placeholder when bleak_retry_connector is unavailable."""
+
+        pass
 
     class BleakConnectionError(Exception):
-        ...
+        """Placeholder when bleak_retry_connector is unavailable."""
+
+        pass
+
 
 from . import api, doser_commands
 from .device import Doser, LightDevice, get_device_from_address
@@ -106,7 +112,9 @@ class BLEService:
             elif address == self._light_address and self._light:
                 target = "light"
             else:
-                raise HTTPException(status_code=404, detail="Device not connected")
+                raise HTTPException(
+                    status_code=404, detail="Device not connected"
+                )
 
         if target == "doser":
             return await self._refresh_doser_status()
@@ -145,9 +153,13 @@ class BLEService:
             try:
                 device = await get_device_from_address(address)
             except Exception as exc:
-                raise HTTPException(status_code=404, detail="Dosing pump not found") from exc
+                raise HTTPException(
+                    status_code=404, detail="Dosing pump not found"
+                ) from exc
             if not isinstance(device, Doser):
-                raise HTTPException(status_code=400, detail="Device is not a dosing pump")
+                raise HTTPException(
+                    status_code=400, detail="Device is not a dosing pump"
+                )
             self._doser = device
             self._doser_address = address
             return device
@@ -163,9 +175,13 @@ class BLEService:
             try:
                 device = await get_device_from_address(address)
             except Exception as exc:
-                raise HTTPException(status_code=404, detail="Light not found") from exc
+                raise HTTPException(
+                    status_code=404, detail="Light not found"
+                ) from exc
             if not isinstance(device, LightDevice):
-                raise HTTPException(status_code=400, detail="Device is not a supported light")
+                raise HTTPException(
+                    status_code=400, detail="Device is not a supported light"
+                )
             self._light = device
             self._light_address = address
             return device
@@ -196,7 +212,9 @@ class BLEService:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except (BleakNotFoundError, BleakConnectionError) as exc:
-            raise HTTPException(status_code=404, detail="Dosing pump not reachable") from exc
+            raise HTTPException(
+                status_code=404, detail="Dosing pump not reachable"
+            ) from exc
         return await self._refresh_doser_status()
 
     async def set_light_brightness(
@@ -215,7 +233,9 @@ class BLEService:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except (BleakNotFoundError, BleakConnectionError) as exc:
-            raise HTTPException(status_code=404, detail="Light not reachable") from exc
+            raise HTTPException(
+                status_code=404, detail="Light not reachable"
+            ) from exc
         return await self._refresh_light_status()
 
     async def turn_light_on(self, address: str) -> CachedStatus:
@@ -223,7 +243,9 @@ class BLEService:
         try:
             await device.turn_on()
         except (BleakNotFoundError, BleakConnectionError) as exc:
-            raise HTTPException(status_code=404, detail="Light not reachable") from exc
+            raise HTTPException(
+                status_code=404, detail="Light not reachable"
+            ) from exc
         return await self._refresh_light_status()
 
     async def turn_light_off(self, address: str) -> CachedStatus:
@@ -231,22 +253,32 @@ class BLEService:
         try:
             await device.turn_off()
         except (BleakNotFoundError, BleakConnectionError) as exc:
-            raise HTTPException(status_code=404, detail="Light not reachable") from exc
+            raise HTTPException(
+                status_code=404, detail="Light not reachable"
+            ) from exc
         return await self._refresh_light_status()
 
     async def _refresh_doser_status(self) -> CachedStatus:
         async with self._lock:
             if not self._doser or not self._doser_address:
-                raise HTTPException(status_code=400, detail="Doser not connected")
+                raise HTTPException(
+                    status_code=400, detail="Doser not connected"
+                )
             try:
                 await self._doser.request_status()
             except (BleakNotFoundError, BleakConnectionError) as exc:
-                raise HTTPException(status_code=404, detail="Dosing pump not reachable") from exc
+                raise HTTPException(
+                    status_code=404, detail="Dosing pump not reachable"
+                ) from exc
             await asyncio.sleep(1.5)
             status = self._doser.last_status
             if not status:
-                raise HTTPException(status_code=500, detail="No status received from doser")
-            parsed = _serialize_pump_status(parse_status_payload(status.raw_payload))
+                raise HTTPException(
+                    status_code=500, detail="No status received from doser"
+                )
+            parsed = _serialize_pump_status(
+                parse_status_payload(status.raw_payload)
+            )
             cached = CachedStatus(
                 address=self._doser_address,
                 device_type="doser",
@@ -261,16 +293,24 @@ class BLEService:
     async def _refresh_light_status(self) -> CachedStatus:
         async with self._lock:
             if not self._light or not self._light_address:
-                raise HTTPException(status_code=400, detail="Light not connected")
+                raise HTTPException(
+                    status_code=400, detail="Light not connected"
+                )
             try:
                 await self._light.request_status()
             except (BleakNotFoundError, BleakConnectionError) as exc:
-                raise HTTPException(status_code=404, detail="Light not reachable") from exc
+                raise HTTPException(
+                    status_code=404, detail="Light not reachable"
+                ) from exc
             await asyncio.sleep(1.5)
             status = self._light.last_status
             if not status:
-                raise HTTPException(status_code=500, detail="No status received from light")
-            parsed = _serialize_light_status(parse_light_status(status.raw_payload))
+                raise HTTPException(
+                    status_code=500, detail="No status received from light"
+                )
+            parsed = _serialize_light_status(
+                parse_light_status(status.raw_payload)
+            )
             cached = CachedStatus(
                 address=self._light_address,
                 device_type="light",
@@ -370,7 +410,9 @@ def _format_timestamp(value: float | None) -> str:
 
 service = BLEService()
 app = FastAPI(title="Chihiros BLE Service")
-templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+templates = Jinja2Templates(
+    directory=str(Path(__file__).resolve().parent / "templates")
+)
 
 
 class ConnectRequest(BaseModel):
@@ -414,8 +456,13 @@ class DoserScheduleRequest(BaseModel):
                         parsed.append(doser_commands.Weekday(item))
                         continue
                     except ValueError as exc:
-                        raise ValueError(f"Invalid weekday value '{item}'") from exc
-                raise ValueError("Weekday entries must be strings, integers, or Weekday enum values")
+                        raise ValueError(
+                            f"Invalid weekday value '{item}'"
+                        ) from exc
+                raise ValueError(
+                    "Weekday entries must be strings, integers, or "
+                    "Weekday enum values"
+                )
             return parsed
         raise ValueError("Weekdays must be provided as a sequence")
 
@@ -500,7 +547,9 @@ async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
 
 
 @app.post("/ui/doser/connect", response_class=HTMLResponse)
-async def ui_doser_connect(request: Request, address: str = Form(...)) -> HTMLResponse:
+async def ui_doser_connect(
+    request: Request, address: str = Form(...)
+) -> HTMLResponse:
     status_code = 200
     try:
         status = await service.connect_doser(address)
@@ -524,7 +573,9 @@ async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
 
 
 @app.post("/ui/light/connect", response_class=HTMLResponse)
-async def ui_light_connect(request: Request, address: str = Form(...)) -> HTMLResponse:
+async def ui_light_connect(
+    request: Request, address: str = Form(...)
+) -> HTMLResponse:
     status_code = 200
     try:
         status = await service.connect_light(address)
@@ -548,7 +599,9 @@ async def refresh_status(address: str) -> Dict[str, Any]:
 
 
 @app.post("/api/dosers/{address}/schedule")
-async def set_doser_schedule(address: str, payload: DoserScheduleRequest) -> Dict[str, Any]:
+async def set_doser_schedule(
+    address: str, payload: DoserScheduleRequest
+) -> Dict[str, Any]:
     status = await service.set_doser_schedule(
         address,
         head_index=payload.head_index,
@@ -589,7 +642,9 @@ async def turn_light_off(address: str) -> Dict[str, Any]:
 @app.post("/ui/doser/schedule", response_class=HTMLResponse)
 async def ui_doser_schedule(request: Request) -> HTMLResponse:
     form = await request.form()
-    address = (form.get("address") or "").strip() or service.current_doser_address()
+    address = (
+        form.get("address") or ""
+    ).strip() or service.current_doser_address()
     status_code = 200
     if not address:
         context = {
@@ -598,7 +653,9 @@ async def ui_doser_schedule(request: Request) -> HTMLResponse:
             "error": "No dosing pump connected.",
             "message": None,
         }
-        return templates.TemplateResponse("partials/doser_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/doser_status.html", context, status_code=400
+        )
 
     try:
         payload = DoserScheduleRequest(
@@ -617,7 +674,9 @@ async def ui_doser_schedule(request: Request) -> HTMLResponse:
             "error": str(exc),
             "message": None,
         }
-        return templates.TemplateResponse("partials/doser_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/doser_status.html", context, status_code=400
+        )
 
     try:
         status = await service.set_doser_schedule(
@@ -644,13 +703,17 @@ async def ui_doser_schedule(request: Request) -> HTMLResponse:
             "message": None,
         }
         status_code = exc.status_code
-    return templates.TemplateResponse("partials/doser_status.html", context, status_code=status_code)
+    return templates.TemplateResponse(
+        "partials/doser_status.html", context, status_code=status_code
+    )
 
 
 @app.post("/ui/light/brightness", response_class=HTMLResponse)
 async def ui_light_brightness(request: Request) -> HTMLResponse:
     form = await request.form()
-    address = (form.get("address") or "").strip() or service.current_light_address()
+    address = (
+        form.get("address") or ""
+    ).strip() or service.current_light_address()
     status_code = 200
     if not address:
         context = {
@@ -659,7 +722,9 @@ async def ui_light_brightness(request: Request) -> HTMLResponse:
             "error": "No light connected.",
             "message": None,
         }
-        return templates.TemplateResponse("partials/light_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/light_status.html", context, status_code=400
+        )
 
     try:
         payload = LightBrightnessRequest(
@@ -673,7 +738,9 @@ async def ui_light_brightness(request: Request) -> HTMLResponse:
             "error": str(exc),
             "message": None,
         }
-        return templates.TemplateResponse("partials/light_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/light_status.html", context, status_code=400
+        )
 
     try:
         status = await service.set_light_brightness(
@@ -695,13 +762,17 @@ async def ui_light_brightness(request: Request) -> HTMLResponse:
             "message": None,
         }
         status_code = exc.status_code
-    return templates.TemplateResponse("partials/light_status.html", context, status_code=status_code)
+    return templates.TemplateResponse(
+        "partials/light_status.html", context, status_code=status_code
+    )
 
 
 @app.post("/ui/light/on", response_class=HTMLResponse)
 async def ui_light_on(request: Request) -> HTMLResponse:
     form = await request.form()
-    address = (form.get("address") or "").strip() or service.current_light_address()
+    address = (
+        form.get("address") or ""
+    ).strip() or service.current_light_address()
     if not address:
         context = {
             "request": request,
@@ -709,7 +780,9 @@ async def ui_light_on(request: Request) -> HTMLResponse:
             "error": "No light connected.",
             "message": None,
         }
-        return templates.TemplateResponse("partials/light_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/light_status.html", context, status_code=400
+        )
 
     status_code = 200
     try:
@@ -728,13 +801,17 @@ async def ui_light_on(request: Request) -> HTMLResponse:
             "message": None,
         }
         status_code = exc.status_code
-    return templates.TemplateResponse("partials/light_status.html", context, status_code=status_code)
+    return templates.TemplateResponse(
+        "partials/light_status.html", context, status_code=status_code
+    )
 
 
 @app.post("/ui/light/off", response_class=HTMLResponse)
 async def ui_light_off(request: Request) -> HTMLResponse:
     form = await request.form()
-    address = (form.get("address") or "").strip() or service.current_light_address()
+    address = (
+        form.get("address") or ""
+    ).strip() or service.current_light_address()
     if not address:
         context = {
             "request": request,
@@ -742,7 +819,9 @@ async def ui_light_off(request: Request) -> HTMLResponse:
             "error": "No light connected.",
             "message": None,
         }
-        return templates.TemplateResponse("partials/light_status.html", context, status_code=400)
+        return templates.TemplateResponse(
+            "partials/light_status.html", context, status_code=400
+        )
 
     status_code = 200
     try:
@@ -761,7 +840,9 @@ async def ui_light_off(request: Request) -> HTMLResponse:
             "message": None,
         }
         status_code = exc.status_code
-    return templates.TemplateResponse("partials/light_status.html", context, status_code=status_code)
+    return templates.TemplateResponse(
+        "partials/light_status.html", context, status_code=status_code
+    )
 
 
 @app.post("/ui/doser/request", response_class=HTMLResponse)
@@ -769,8 +850,15 @@ async def ui_doser_request(request: Request) -> HTMLResponse:
     address = service.current_doser_address()
     status_code = 200
     if not address:
-        context = {"request": request, "status": None, "error": "No dosing pump connected.", "message": None}
-        return templates.TemplateResponse("partials/doser_status.html", context, status_code=status_code)
+        context = {
+            "request": request,
+            "status": None,
+            "error": "No dosing pump connected.",
+            "message": None,
+        }
+        return templates.TemplateResponse(
+            "partials/doser_status.html", context, status_code=status_code
+        )
     try:
         status = await service.request_status(address)
         context = {
@@ -791,8 +879,15 @@ async def ui_light_request(request: Request) -> HTMLResponse:
     address = service.current_light_address()
     status_code = 200
     if not address:
-        context = {"request": request, "status": None, "error": "No light connected.", "message": None}
-        return templates.TemplateResponse("partials/light_status.html", context, status_code=status_code)
+        context = {
+            "request": request,
+            "status": None,
+            "error": "No light connected.",
+            "message": None,
+        }
+        return templates.TemplateResponse(
+            "partials/light_status.html", context, status_code=status_code
+        )
     try:
         status = await service.request_status(address)
         context = {
@@ -818,22 +913,54 @@ async def disconnect_device(address: str) -> Dict[str, str]:
 async def ui_doser_disconnect(request: Request) -> HTMLResponse:
     address = service.current_doser_address()
     if not address:
-        context = {"request": request, "status": None, "error": "No dosing pump connected.", "message": None}
-        return templates.TemplateResponse("partials/doser_status.html", context)
+        context = {
+            "request": request,
+            "status": None,
+            "error": "No dosing pump connected.",
+            "message": None,
+        }
+        return templates.TemplateResponse(
+            "partials/doser_status.html",
+            context,
+        )
     await service.disconnect_device(address)
-    context = {"request": request, "status": None, "error": None, "message": "Disconnected."}
-    return templates.TemplateResponse("partials/doser_status.html", context)
+    context = {
+        "request": request,
+        "status": None,
+        "error": None,
+        "message": "Disconnected.",
+    }
+    return templates.TemplateResponse(
+        "partials/doser_status.html",
+        context,
+    )
 
 
 @app.post("/ui/light/disconnect", response_class=HTMLResponse)
 async def ui_light_disconnect(request: Request) -> HTMLResponse:
     address = service.current_light_address()
     if not address:
-        context = {"request": request, "status": None, "error": "No light connected.", "message": None}
-        return templates.TemplateResponse("partials/light_status.html", context)
+        context = {
+            "request": request,
+            "status": None,
+            "error": "No light connected.",
+            "message": None,
+        }
+        return templates.TemplateResponse(
+            "partials/light_status.html",
+            context,
+        )
     await service.disconnect_device(address)
-    context = {"request": request, "status": None, "error": None, "message": "Disconnected."}
-    return templates.TemplateResponse("partials/light_status.html", context)
+    context = {
+        "request": request,
+        "status": None,
+        "error": None,
+        "message": "Disconnected.",
+    }
+    return templates.TemplateResponse(
+        "partials/light_status.html",
+        context,
+    )
 
 
 @app.get("/ui/status", response_class=HTMLResponse)
@@ -841,13 +968,20 @@ async def ui_status(request: Request) -> HTMLResponse:
     snapshot = service.get_status_snapshot()
     return templates.TemplateResponse(
         "partials/status.html",
-        {"request": request, "snapshot": snapshot, "format_ts": _format_timestamp},
+        {
+            "request": request,
+            "snapshot": snapshot,
+            "format_ts": _format_timestamp,
+        },
     )
 
 
 @app.get("/debug", response_class=HTMLResponse)
 async def debug_page(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse("debug.html", {"request": request, "format_ts": _format_timestamp})
+    return templates.TemplateResponse(
+        "debug.html",
+        {"request": request, "format_ts": _format_timestamp},
+    )
 
 
 @app.get("/ui/debug/memory/raw", response_class=HTMLResponse)
@@ -863,7 +997,10 @@ async def debug_memory_raw(request: Request) -> HTMLResponse:
         "message": "Cached payloads",
         "format_ts": _format_timestamp,
     }
-    return templates.TemplateResponse("partials/debug_output.html", context)
+    return templates.TemplateResponse(
+        "partials/debug_output.html",
+        context,
+    )
 
 
 @app.post("/ui/debug/live/raw", response_class=HTMLResponse)
@@ -872,7 +1009,10 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
     errors = []
     addresses = [
         addr
-        for addr in [service.current_doser_address(), service.current_light_address()]
+        for addr in [
+            service.current_doser_address(),
+            service.current_light_address(),
+        ]
         if addr
     ]
     if not addresses:
@@ -883,7 +1023,10 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
             "message": None,
             "format_ts": _format_timestamp,
         }
-        return templates.TemplateResponse("partials/debug_output.html", context)
+        return templates.TemplateResponse(
+            "partials/debug_output.html",
+            context,
+        )
 
     for addr in addresses:
         try:
@@ -899,7 +1042,10 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
         "message": "Live payloads refreshed" if raw_entries else None,
         "format_ts": _format_timestamp,
     }
-    return templates.TemplateResponse("partials/debug_output.html", context)
+    return templates.TemplateResponse(
+        "partials/debug_output.html",
+        context,
+    )
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper

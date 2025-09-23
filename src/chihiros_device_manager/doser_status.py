@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 MODE_NAMES = {
     0x00: "daily",
     0x01: "24h",
@@ -94,7 +93,8 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
 
     heads: list[HeadSnapshot] = []
     for idx in range(0, min(len(head_bytes), 9 * 4), 9):
-        chunk = head_bytes[idx : idx + 9]
+        end_index = idx + 9
+        chunk = head_bytes[idx:end_index]
         if len(chunk) < 9:
             break
         heads.append(

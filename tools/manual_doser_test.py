@@ -1,20 +1,20 @@
 """Manual testing script for the Chihiros dosing pump."""
 
-import asyncio
 import argparse
+import asyncio
 import sys
 from pathlib import Path
 
 from bleak import BleakScanner
 
+from chihiros_device_manager.device.doser import Doser
+from chihiros_device_manager.doser_commands import Weekday
+from chihiros_device_manager.doser_status import parse_status_payload
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
-
-from chihiros_device_manager.device.doser import Doser
-from chihiros_device_manager.doser_commands import Weekday
-from chihiros_device_manager.doser_status import parse_status_payload
 
 
 async def _discover_device(
@@ -33,7 +33,9 @@ async def _discover_device(
     else:
         print(f"Scanning for devices (timeout {timeout}s)...")
 
-    devices = await BleakScanner.discover(timeout=timeout, scanning_mode="active")
+    devices = await BleakScanner.discover(
+        timeout=timeout, scanning_mode="active"
+    )
     if address:
         address_upper = address.upper()
         for dev in devices:
@@ -51,7 +53,9 @@ async def _discover_device(
             )
             return matches[0]
         if len(matches) > 1:
-            print("Multiple devices match name prefix; please specify address:")
+            print(
+                "Multiple devices match the name prefix; specify the address:"
+            )
             for dev in matches:
                 print(" -", dev.name, dev.address)
     if not devices:
@@ -73,14 +77,16 @@ async def main(
 ) -> None:
     device = await _discover_device(address, timeout, name_prefix)
     if device is None:
-        raise SystemExit(f"Could not find BLE device {address or name_prefix}")
+        message = f"Could not find BLE device {address or name_prefix}"
+        raise SystemExit(message)
 
     doser = Doser(device)
     doser.set_log_level("DEBUG")
 
-    weekday_mask = None
     if days:
-        day_tokens = [token.strip().lower() for token in days.split(",") if token.strip()]
+        day_tokens = [
+            token.strip().lower() for token in days.split(",") if token.strip()
+        ]
         mapping = {
             "mon": Weekday.monday,
             "tue": Weekday.tuesday,
@@ -95,7 +101,9 @@ async def main(
             for token in day_tokens:
                 weekday_selection |= mapping[token]
         except KeyError as err:
-            raise SystemExit(f"Unsupported weekday label: {err.args[0]}") from err
+            raise SystemExit(
+                f"Unsupported weekday label: {err.args[0]}"
+            ) from err
     else:
         weekday_selection = None
 
@@ -114,10 +122,13 @@ async def main(
             if parsed.weekday is not None:
                 header_info.append(f"weekday={parsed.weekday}")
             if parsed.hour is not None and parsed.minute is not None:
-                header_info.append(f"time={parsed.hour:02d}:{parsed.minute:02d}")
+                header_info.append(
+                    f"time={parsed.hour:02d}:{parsed.minute:02d}"
+                )
             if parsed.message_id is not None:
                 header_info.append(
-                    f"msg_id={parsed.message_id[0]:02X}:{parsed.message_id[1]:02X}"
+                    f"msg_id={parsed.message_id[0]:02X}:{
+                        parsed.message_id[1]:02X}"
                 )
             if parsed.response_mode is not None:
                 header_info.append(f"mode=0x{parsed.response_mode:02X}")
@@ -145,10 +156,11 @@ async def main(
         print("Skipping update (--read-only enabled)")
     else:
         weekday_repr = days or "every day"
-        print(
-            f"Setting daily dose head={head} volume={volume} tenths ml"
-            f" time={hour:02d}:{minute:02d} weekdays={weekday_repr}"
+        summary = (
+            f"Setting daily dose head={head} volume={volume} tenths ml "
+            f"time={hour:02d}:{minute:02d} weekdays={weekday_repr}"
         )
+        print(summary)
         await doser.set_daily_dose(
             head,
             volume,
@@ -167,10 +179,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "address",
         nargs="?",
-        help="BLE MAC/UUID of the dosing pump (optional if --name-prefix works)",
+        help=(
+            "BLE MAC/UUID of the dosing pump (optional if --name-prefix works)"
+        ),
     )
     parser.add_argument("head", type=int, help="Head index 0-3")
-    parser.add_argument("volume", type=int, help="Tenths of ml (e.g. 51 for 5.1ml)")
+    parser.add_argument(
+        "volume", type=int, help="Tenths of ml (e.g. 51 for 5.1ml)"
+    )
     parser.add_argument("hour", type=int, help="Hour (0-23)")
     parser.add_argument("minute", type=int, help="Minute (0-59)")
     parser.add_argument(
@@ -186,7 +202,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--days",
-        help="Comma separated weekday codes mon,tue,wed,thu,fri,sat,sun (default every day)",
+        help=(
+            "Comma separated weekday codes mon,tue,wed,thu,fri,sat,sun "
+            "(default every day)"
+        ),
     )
     parser.add_argument(
         "--read-only",
