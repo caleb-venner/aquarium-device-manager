@@ -40,7 +40,30 @@ where = [
 
 [tool.setuptools_scm]
 
-
 [project.scripts]
 chihirosctl = "chihiros_device_manager.chihirosctl:app"
 chihiros-service = "chihiros_device_manager.service:main"
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = [
+    "D101",
+    "D102",
+    "D103",
+    "D107",
+    "D202",
+    "E203",
+]
+per-file-ignores = [
+    "src/chihiros_device_manager/chihirosctl.py:F401,F841",
+]
+
+[tool.doc8]
+max-line-length = 100
