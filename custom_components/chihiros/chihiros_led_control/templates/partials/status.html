@@ -1,0 +1,22 @@
+{% if snapshot %}
+<table>
+  <thead>
+    <tr>
+      <th>Address</th>
+      <th>Type</th>
+      <th>Updated</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for address, status in snapshot.items() %}
+    <tr>
+      <td>{{ address }}</td>
+      <td>{{ status.device_type }}</td>
+      <td>{{ format_ts(status.updated_at) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No cached status.</p>
+{% endif %}

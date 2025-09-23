@@ -1,0 +1,40 @@
+{% if error %}
+<article class="secondary">{{ error }}</article>
+{% endif %}
+{% if message %}
+<article>{{ message }}</article>
+{% endif %}
+{% if status %}
+<article>
+  <header>
+    <h4>Light Status</h4>
+  </header>
+  {% set parsed = status.parsed %}
+  {% if parsed %}
+    {% if parsed.weekday is not none and parsed.current_hour is not none %}
+      <p>Weekday {{ parsed.weekday }} Time {{ '%02d:%02d'|format(parsed.current_hour, parsed.current_minute or 0) }}</p>
+    {% endif %}
+    {% if parsed.keyframes %}
+    <table>
+      <thead>
+        <tr><th>Time</th><th>Level</th></tr>
+      </thead>
+      <tbody>
+        {% for frame in parsed.keyframes %}
+        <tr><td>{{ '%02d:%02d'|format(frame.hour, frame.minute) }}</td><td>{{ frame.value }}%</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+      <p>No keyframes.</p>
+    {% endif %}
+    {% if parsed.time_markers %}
+      <p>Markers: {% for h, m in parsed.time_markers %}{{ '%02d:%02d'|format(h, m) }}{% if not loop.last %}, {% endif %}{% endfor %}</p>
+    {% endif %}
+  {% else %}
+    <p>No parsed data.</p>
+  {% endif %}
+</article>
+{% else %}
+<p>No status available.</p>
+{% endif %}

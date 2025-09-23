@@ -1,0 +1,42 @@
+{% if devices %}
+<table>
+  <thead>
+    <tr>
+      <th>Address</th>
+      <th>Name</th>
+      <th>Product</th>
+      <th>Type</th>
+      <th>Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for device in devices %}
+    <tr>
+      <td>{{ device.address }}</td>
+      <td>{{ device.name }}</td>
+      <td>{{ device.product }}</td>
+      <td>{{ device.device_type }}</td>
+      <td>
+        {% if device.device_type == 'doser' %}
+        <button type="button"
+                hx-post="/ui/doser/connect"
+                hx-target="#doser-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ device.address }}"}'>Connect</button>
+        {% elif device.device_type == 'light' %}
+        <button type="button"
+                hx-post="/ui/light/connect"
+                hx-target="#light-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ device.address }}"}'>Connect</button>
+        {% else %}
+        <em>N/A</em>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No devices found.</p>
+{% endif %}

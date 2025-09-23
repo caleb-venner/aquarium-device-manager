@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section>
+    <h2>Dosing Pump</h2>
+    <p>Connect and manage the dosing pump.</p>
+    <div class="grid">
+        <button type="button"
+                hx-post="/ui/doser/request"
+                hx-target="#doser-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ doser_address or "" }}"}'
+                {% if not doser_address %}disabled{% endif %}>
+            Refresh Status
+        </button>
+        <button type="button"
+                hx-post="/ui/doser/disconnect"
+                hx-target="#doser-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ doser_address or "" }}"}'
+                class="secondary"
+                {% if not doser_address %}disabled{% endif %}>
+            Disconnect
+        </button>
+    </div>
+    <div id="doser-status">
+        {% set status = doser_status %}
+        {% set error = doser_error %}
+        {% set message = doser_message %}
+        {% include "partials/doser_status.html" %}
+    </div>
+    <article>
+        <h3>Program Daily Dose</h3>
+        <form hx-post="/ui/doser/schedule"
+              hx-target="#doser-status"
+              hx-swap="innerHTML">
+            <input type="hidden" name="address" value="{{ doser_address or '' }}">
+            <fieldset {% if not doser_address %}disabled{% endif %}>
+                <div class="grid">
+                    <label for="head-index">Head
+                        <select id="head-index" name="head_index">
+                            {% for idx in range(4) %}
+                            <option value="{{ idx }}">{{ idx + 1 }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label for="dose-volume">Volume (0-255 tenths mL)
+                        <input id="dose-volume" type="number" name="volume_tenths_ml" min="0" max="255" value="10">
+                    </label>
+                    <label for="dose-hour">Hour
+                        <input id="dose-hour" type="number" name="hour" min="0" max="23" value="12">
+                    </label>
+                    <label for="dose-minute">Minute
+                        <input id="dose-minute" type="number" name="minute" min="0" max="59" value="0">
+                    </label>
+                </div>
+                <details>
+                    <summary>Select Weekdays</summary>
+                    <div class="grid">
+                        {% for day in [
+                            ('monday', 'Monday'),
+                            ('tuesday', 'Tuesday'),
+                            ('wednesday', 'Wednesday'),
+                            ('thursday', 'Thursday'),
+                            ('friday', 'Friday'),
+                            ('saturday', 'Saturday'),
+                            ('sunday', 'Sunday')
+                        ] %}
+                        <label>
+                            <input type="checkbox" name="weekdays" value="{{ day[0] }}"> {{ day[1] }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </details>
+                <label>
+                    <input type="checkbox" name="confirm" value="1"> Refresh status after saving
+                </label>
+                <button type="submit" class="outline">Save Schedule</button>
+            </fieldset>
+        </form>
+    </article>
+</section>
+
+<section>
+    <h2>Light</h2>
+    <p>Connect and inspect the WRGB light.</p>
+    <div class="grid">
+        <button type="button"
+                hx-post="/ui/light/request"
+                hx-target="#light-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ light_address or "" }}"}'
+                {% if not light_address %}disabled{% endif %}>
+            Refresh Status
+        </button>
+        <button type="button"
+                hx-post="/ui/light/disconnect"
+                hx-target="#light-status"
+                hx-swap="innerHTML"
+                hx-vals='{"address": "{{ light_address or "" }}"}'
+                class="secondary"
+                {% if not light_address %}disabled{% endif %}>
+            Disconnect
+        </button>
+    </div>
+    <div id="light-status">
+        {% set status = light_status %}
+        {% set error = light_error %}
+        {% set message = light_message %}
+        {% include "partials/light_status.html" %}
+    </div>
+    <article>
+        <h3>Adjust Brightness</h3>
+        <form hx-post="/ui/light/brightness"
+              hx-target="#light-status"
+              hx-swap="innerHTML">
+            <input type="hidden" name="address" value="{{ light_address or '' }}">
+            <fieldset {% if not light_address %}disabled{% endif %}>
+                <label for="light-brightness">Brightness (0-100%)
+                    <input id="light-brightness" type="range" name="brightness" min="0" max="100" value="50">
+                </label>
+                <label for="light-color">Channel or color name
+                    <input id="light-color" type="text" name="color" value="0" placeholder="e.g. white or 0">
+                </label>
+                <button type="submit" class="outline">Apply Brightness</button>
+            </fieldset>
+        </form>
+    </article>
+    <div class="grid">
+        <form hx-post="/ui/light/on"
+              hx-target="#light-status"
+              hx-swap="innerHTML">
+            <input type="hidden" name="address" value="{{ light_address or '' }}">
+            <button type="submit" {% if not light_address %}disabled{% endif %}>Turn On</button>
+        </form>
+        <form hx-post="/ui/light/off"
+              hx-target="#light-status"
+              hx-swap="innerHTML">
+            <input type="hidden" name="address" value="{{ light_address or '' }}">
+            <button type="submit" class="secondary" {% if not light_address %}disabled{% endif %}>Turn Off</button>
+        </form>
+    </div>
+</section>
+
+<section>
+    <h2>Cached State</h2>
+    <button hx-get="/ui/status" hx-target="#cache" hx-swap="innerHTML">Refresh Cached Status</button>
+    <div id="cache">
+        {% include "partials/status.html" %}
+    </div>
+</section>
+
+<section>
+    <h2>Add New Device</h2>
+    <p>Scan for nearby hardware and connect with a single click.</p>
+    <form hx-get="/ui/scan" hx-trigger="submit" hx-target="#scan-results" hx-swap="innerHTML" method="post">
+        <button type="submit" class="outline">Scan for Devices</button>
+    </form>
+    <div id="scan-results"></div>
+</section>
+{% endblock %}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Chihiros Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <script src="https://unpkg.com/htmx.org@1.9.12" crossorigin="anonymous"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        if (!window.htmx) {
+          console.warn('HTMX failed to load; falling back to full page submissions.');
+        }
+      });
+    </script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>Chihiros BLE Control</h1>
+            <nav>
+                <ul>
+                    <li><a href="/ui">Dashboard</a></li>
+                    <li><a href="/debug">Debug</a></li>
+                </ul>
+            </nav>
+        </header>
+
+        {% if message %}
+        <article class="secondary">{{ message }}</article>
+        {% endif %}
+
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

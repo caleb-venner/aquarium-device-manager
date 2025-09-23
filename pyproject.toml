@@ -1,0 +1,45 @@
+[build-system]
+requires = [
+    "setuptools==76.0.0",
+    "setuptools_scm[toml]==8.2.0",
+    "wheel==0.45.1",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chihiros-device-manager"
+dynamic = ["version", "dependencies"]
+description = "BLE control service for Chihiros hardware"
+readme = "README.md"
+authors = [
+    {name = "Caleb Venner"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+keywords = ["chihiros", "bluetooth", "ble", "service"]
+
+requires-python = ">=3.13"
+
+[project.urls]
+"Source Code" = "https://github.com/calebvenner/chihiros-device-manager"
+"Bug Reports" = "https://github.com/calebvenner/chihiros-device-manager/issues"
+"Original Project" = "https://github.com/TheMicDiet/chihiros-led-control"
+
+[tool.setuptools]
+platforms = ["any"]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = [
+  "custom_components*",
+]
+
+[tool.setuptools_scm]
+
+
+[project.scripts]
+chihirosctl = "custom_components.chihiros.chihiros_led_control.chihirosctl:app"
+chihiros-service = "custom_components.chihiros.chihiros_led_control.service:main"
