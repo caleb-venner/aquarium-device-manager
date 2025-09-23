@@ -1,1 +1,1 @@
-"""Chihiros led control root module."""
+"""Runtime package for Chihiros Device Manager."""
