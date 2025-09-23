@@ -47,7 +47,6 @@ def _parse_weekday_options(
 
 def _render_status_payload(payload: bytes) -> None:
     """Print a human friendly breakdown of a status notification."""
-
     try:
         parsed = parse_status_payload(payload)
     except ValueError as exc:
@@ -104,7 +103,6 @@ def _render_status_payload(payload: bytes) -> None:
 
 async def _prompt(text: str) -> str:
     """Prompt the user for input without blocking the event loop."""
-
     try:
         return (await asyncio.to_thread(input, text)).strip()
     except EOFError as exc:  # pragma: no cover - interactive guard

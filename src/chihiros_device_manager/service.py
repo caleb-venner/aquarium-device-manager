@@ -55,6 +55,7 @@ class BLEService:
     """Manages BLE devices, status cache, and persistence."""
 
     def __init__(self) -> None:
+        """Instantiate caches, locks, and connection state."""
         self._lock = asyncio.Lock()
         self._doser: Optional[Doser] = None
         self._doser_address: Optional[str] = None
@@ -64,11 +65,13 @@ class BLEService:
         self._auto_reconnect = bool(int(os.getenv(AUTO_RECONNECT_ENV, "1")))
 
     async def start(self) -> None:
+        """Initialise the service and reconnect if configured."""
         await self._load_state()
         if self._auto_reconnect:
             await self._attempt_reconnect()
 
     async def stop(self) -> None:
+        """Persist cached state and disconnect devices."""
         await self._save_state()
         async with self._lock:
             if self._doser:
@@ -77,14 +80,17 @@ class BLEService:
                 await self._light.disconnect()
 
     async def connect_doser(self, address: str) -> CachedStatus:
+        """Connect to a dosing pump and return its latest status."""
         await self._ensure_doser(address)
         return await self._refresh_doser_status()
 
     async def connect_light(self, address: str) -> CachedStatus:
+        """Connect to a light and return its latest status."""
         await self._ensure_light(address)
         return await self._refresh_light_status()
 
     async def scan_devices(self, timeout: float = 5.0) -> list[Dict[str, Any]]:
+        """Discover nearby supported devices within ``timeout`` seconds."""
         supported = await api.discover_supported_devices(timeout=timeout)
         result: list[Dict[str, Any]] = []
         for device, model_class in supported:
@@ -105,6 +111,7 @@ class BLEService:
         return result
 
     async def request_status(self, address: str) -> CachedStatus:
+        """Refresh cached status for the connected device at ``address``."""
         target: Optional[str] = None
         async with self._lock:
             if address == self._doser_address and self._doser:
@@ -123,6 +130,7 @@ class BLEService:
         raise HTTPException(status_code=404, detail="Device not connected")
 
     async def disconnect_device(self, address: str) -> None:
+        """Disconnect the device currently registered at ``address``."""
         async with self._lock:
             if address == self._doser_address and self._doser:
                 await self._doser.disconnect()
@@ -134,15 +142,19 @@ class BLEService:
                 self._light_address = None
 
     def get_status_snapshot(self) -> Dict[str, CachedStatus]:
+        """Return a shallow copy of the cached device status map."""
         return self._cache.copy()
 
     def current_doser_address(self) -> Optional[str]:
+        """Return the currently connected doser address, if any."""
         return self._doser_address
 
     def current_light_address(self) -> Optional[str]:
+        """Return the currently connected light address, if any."""
         return self._light_address
 
     async def _ensure_doser(self, address: str) -> Doser:
+        """Ensure a doser is connected for ``address`` and return it."""
         async with self._lock:
             if self._doser and self._doser_address == address:
                 return self._doser
@@ -165,6 +177,7 @@ class BLEService:
             return device
 
     async def _ensure_light(self, address: str) -> LightDevice:
+        """Ensure a light is connected for ``address`` and return it."""
         async with self._lock:
             if self._light and self._light_address == address:
                 return self._light
@@ -198,6 +211,7 @@ class BLEService:
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> CachedStatus:
+        """Apply a dosing schedule and return the refreshed cached status."""
         device = await self._ensure_doser(address)
         try:
             await device.set_daily_dose(
@@ -220,6 +234,7 @@ class BLEService:
     async def set_light_brightness(
         self, address: str, *, brightness: int, color: str | int = 0
     ) -> CachedStatus:
+        """Set brightness for ``address`` and return the cached status."""
         device = await self._ensure_light(address)
         try:
             target_color: str | int = color
@@ -239,6 +254,7 @@ class BLEService:
         return await self._refresh_light_status()
 
     async def turn_light_on(self, address: str) -> CachedStatus:
+        """Switch the light on and refresh cached status."""
         device = await self._ensure_light(address)
         try:
             await device.turn_on()
@@ -249,6 +265,7 @@ class BLEService:
         return await self._refresh_light_status()
 
     async def turn_light_off(self, address: str) -> CachedStatus:
+        """Switch the light off and refresh cached status."""
         device = await self._ensure_light(address)
         try:
             await device.turn_off()
@@ -259,6 +276,7 @@ class BLEService:
         return await self._refresh_light_status()
 
     async def _refresh_doser_status(self) -> CachedStatus:
+        """Request and cache the latest doser status."""
         async with self._lock:
             if not self._doser or not self._doser_address:
                 raise HTTPException(
@@ -291,6 +309,7 @@ class BLEService:
         return cached
 
     async def _refresh_light_status(self) -> CachedStatus:
+        """Request and cache the latest light status."""
         async with self._lock:
             if not self._light or not self._light_address:
                 raise HTTPException(
@@ -323,6 +342,7 @@ class BLEService:
         return cached
 
     async def _load_state(self) -> None:
+        """Load cached state from ``STATE_PATH`` if present."""
         if not STATE_PATH.exists():
             return
         try:
@@ -342,6 +362,7 @@ class BLEService:
         self._cache = cache
 
     async def _save_state(self) -> None:
+        """Write the current cache to ``STATE_PATH``."""
         data = {
             "devices": {
                 address: {
@@ -356,6 +377,7 @@ class BLEService:
         STATE_PATH.write_text(json.dumps(data, indent=2, sort_keys=True))
 
     async def _attempt_reconnect(self) -> None:
+        """Reconnect to previously cached devices when auto reconnect is on."""
         if self._cache:
             for address, status in self._cache.items():
                 try:

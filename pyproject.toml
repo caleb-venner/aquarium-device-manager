@@ -54,11 +54,6 @@ line_length = 80
 [flake8]
 max-line-length = 80
 extend-ignore = [
-    "D101",
-    "D102",
-    "D103",
-    "D107",
-    "D202",
     "E203",
 ]
 per-file-ignores = [

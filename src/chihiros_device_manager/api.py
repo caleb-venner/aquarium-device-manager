@@ -21,7 +21,6 @@ def filter_supported_devices(
     devices: Iterable[BLEDevice],
 ) -> list[SupportedDeviceInfo]:
     """Return BLE devices that map to a known Chihiros model."""
-
     supported: list[SupportedDeviceInfo] = []
     for device in devices:
         name = device.name
@@ -40,7 +39,6 @@ async def discover_supported_devices(
     timeout: float = 5.0,
 ) -> list[SupportedDeviceInfo]:
     """Discover BLE devices and return the supported Chihiros models."""
-
     discovered = await BleakScanner.discover(timeout=timeout)
     return filter_supported_devices(discovered)
 
@@ -48,7 +46,6 @@ async def discover_supported_devices(
 @asynccontextmanager
 async def device_session(address: str) -> AsyncIterator[BaseDevice]:
     """Connect to a device and ensure it is disconnected afterwards."""
-
     device = await get_device_from_address(address)
     try:
         yield device
@@ -60,7 +57,6 @@ async def request_doser_status(
     address: str, wait_seconds: float = 2.0
 ) -> DoserStatus | None:
     """Request the latest status frame from a dosing pump."""
-
     async with device_session(address) as device:
         if not isinstance(device, Doser):
             raise TypeError("Connected device is not a dosing pump")
@@ -83,7 +79,6 @@ async def set_doser_daily_schedule(
     wait_seconds: float = 1.5,
 ) -> DoserStatus | None:
     """Configure a dosing schedule for a pump head."""
-
     async with device_session(address) as device:
         if not isinstance(device, Doser):
             raise TypeError("Connected device is not a dosing pump")
@@ -102,20 +97,17 @@ async def set_light_brightness(
     address: str, brightness: int, color: str | int = 0
 ) -> None:
     """Set brightness for a specific color channel on a light."""
-
     async with device_session(address) as device:
         await device.set_color_brightness(brightness, color)
 
 
 async def turn_light_on(address: str) -> None:
     """Turn on a light device (all channels to 100%)."""
-
     async with device_session(address) as device:
         await device.turn_on()
 
 
 async def turn_light_off(address: str) -> None:
     """Turn off a light device (all channels to 0%)."""
-
     async with device_session(address) as device:
         await device.turn_off()
