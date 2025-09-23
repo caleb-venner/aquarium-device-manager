@@ -911,7 +911,7 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
     port = int(os.getenv("CHIHIROS_SERVICE_PORT", "8000"))
 
     uvicorn.run(
-        "custom_components.chihiros.chihiros_led_control.service:app",
+        "chihiros_device_manager.service:app",
         host=host,
         port=port,
     )

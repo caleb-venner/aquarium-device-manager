@@ -10,7 +10,7 @@ summary so we can spot patterns while reverse engineering the protocol.
 Usage (from the project root)::
 
     python tools/analyze_doser_log.py \
-        "custom_components/chihiros/chihiros_led_control/Bluetooth packet logs/doser_bt_2_RAW.txt"
+        "src/chihiros_device_manager/doser packet logs/doser_bt_2_RAW.txt"
 
 The output groups commands (writes) and notifications (indications from the
 device) in chronological order.
@@ -26,12 +26,11 @@ from pathlib import Path
 from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-from custom_components.chihiros.chihiros_led_control.doser_status import (
-    parse_status_payload,
-)
+from chihiros_device_manager.doser_status import parse_status_payload
 
 
 LINE_RE = re.compile(

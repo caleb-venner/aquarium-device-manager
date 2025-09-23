@@ -8,14 +8,13 @@ from pathlib import Path
 from bleak import BleakScanner
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-from custom_components.chihiros.chihiros_led_control.device.doser import Doser
-from custom_components.chihiros.chihiros_led_control.doser_commands import Weekday
-from custom_components.chihiros.chihiros_led_control.doser_status import (
-    parse_status_payload,
-)
+from chihiros_device_manager.device.doser import Doser
+from chihiros_device_manager.doser_commands import Weekday
+from chihiros_device_manager.doser_status import parse_status_payload
 
 
 async def _discover_device(

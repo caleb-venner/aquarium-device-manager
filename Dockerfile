@@ -14,7 +14,7 @@ RUN apt-get update \
 
 # Install python requirements
 COPY pyproject.toml setup.cfg README.md ./
-COPY custom_components ./custom_components
+COPY src ./src
 COPY tools ./tools
 
 RUN pip install --upgrade pip \ 
@@ -22,4 +22,4 @@ RUN pip install --upgrade pip \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "custom_components.chihiros.chihiros_led_control.service:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "chihiros_device_manager.service:app", "--host", "0.0.0.0", "--port", "8000"]

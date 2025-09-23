@@ -9,12 +9,8 @@ import asyncio
 import pytest
 from fastapi.testclient import TestClient
 
-from custom_components.chihiros.chihiros_led_control import doser_commands
-from custom_components.chihiros.chihiros_led_control.service import (
-    CachedStatus,
-    app,
-    service,
-)
+from chihiros_device_manager import doser_commands
+from chihiros_device_manager.service import CachedStatus, app, service
 
 
 def _cached(device_type: str = "doser") -> CachedStatus:
