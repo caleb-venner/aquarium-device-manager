@@ -21,7 +21,7 @@ classifiers = [
 ]
 keywords = ["chihiros", "bluetooth", "ble", "service"]
 
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 
 [project.urls]
 "Source Code" = "https://github.com/calebvenner/chihiros-device-manager"

@@ -16,7 +16,7 @@ Chihiros Device Manager currently contains the historically shipped python **CLI
 
 ## Requirements
 - a device with bluetooth LE support for sending the commands to the LED
-- [Python 3](https://www.python.org/downloads/) with pip
+- [Python 3.10+](https://www.python.org/downloads/) with pip
 
 ## Using the CLI
 ```bash
