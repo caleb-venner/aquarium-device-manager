@@ -15,6 +15,7 @@ class LightKeyframe:
     value: int
 
     def as_time(self) -> str:
+        """Return readable time value."""
         return f"{self.hour:02d}:{self.minute:02d}"
 
 
@@ -44,7 +45,6 @@ def _split_body(
     bytes,
 ]:
     """Return header fields and body bytes."""
-
     message_id = response_mode = weekday = hour = minute = None
     body = payload
     if payload and payload[0] == 0x5B and len(payload) >= 9:
@@ -59,7 +59,6 @@ def _split_body(
 
 def parse_light_status(payload: bytes) -> ParsedLightStatus:
     """Decode a WRGB status payload into keyframes and markers."""
-
     (
         message_id,
         response_mode,

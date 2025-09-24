@@ -154,5 +154,4 @@ def create_switch_to_auto_mode_command(msg_id: tuple[int, int]) -> bytearray:
 
 def create_status_request_command(msg_id: tuple[int, int]) -> bytearray:
     """Request a status notification from the device."""
-
     return _create_command_encoding(0x5A, 0x04, msg_id, [0x01])

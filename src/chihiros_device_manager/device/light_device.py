@@ -25,7 +25,6 @@ class LightDevice(BaseDevice):
 
     async def request_status(self) -> None:
         """Trigger a status report from the light via the UART handshake."""
-
         cmd = commands.create_status_request_command(self.get_next_msg_id())
         await self._send_command(cmd, 3)
 
@@ -33,7 +32,6 @@ class LightDevice(BaseDevice):
         self, _sender: BleakGATTCharacteristic, data: bytearray
     ) -> None:
         """Handle notifications from the light, capturing status payloads."""
-
         payload = bytes(data)
         if not payload:
             return
@@ -59,5 +57,4 @@ class LightDevice(BaseDevice):
     @property
     def last_status(self) -> Optional[LightStatus]:
         """Return the most recent status payload captured from the light."""
-
         return self._last_status

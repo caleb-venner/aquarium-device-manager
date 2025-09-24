@@ -10,7 +10,6 @@ def _encode_uart_command(
     cmd_id: int, mode: int, msg_id: tuple[int, int], params: Iterable[int]
 ) -> bytearray:
     """Return a UART frame compatible with the pump protocol."""
-
     msg_hi, msg_lo = msg_id
     payload = list(params)
     sanitized = [(value if value != 0x5A else 0x59) for value in payload]
@@ -32,13 +31,11 @@ def _encode_uart_command(
 
 def create_handshake_command(msg_id: tuple[int, int]) -> bytearray:
     """Build the initial status request (0x5A / mode 0x04)."""
-
     return _encode_uart_command(0x5A, 0x04, msg_id, [0x01])
 
 
 def create_prepare_command(msg_id: tuple[int, int], stage: int) -> bytearray:
     """Return the 0xA5 / mode 0x04 command used before configuration writes."""
-
     if stage not in (0x04, 0x05):
         raise ValueError("stage must be 0x04 or 0x05")
     return _encode_uart_command(0xA5, 0x04, msg_id, [stage])
@@ -52,7 +49,6 @@ def create_head_select_command(
     flag2: int = 0x01,
 ) -> bytearray:
     """Select the dosing head that will be modified next (mode 0x20)."""
-
     if not 0 <= head_index <= 0x03:
         raise ValueError("head_index must be between 0 and 3")
     return _encode_uart_command(0xA5, 0x20, msg_id, [head_index, flag1, flag2])
@@ -83,7 +79,6 @@ WEEKDAY_ALL = (
 
 def encode_weekdays(weekdays: Sequence[Weekday] | Weekday | None) -> int:
     """Convert a collection of weekdays into the pump bitmask."""
-
     if weekdays is None:
         return int(WEEKDAY_ALL)
     if isinstance(weekdays, Weekday):
@@ -105,7 +100,6 @@ def create_head_dose_command(
     reserved: int = 0x00,
 ) -> bytearray:
     """Create the mode 0x1B command that sets weekday mask and daily dose."""
-
     if not 0 <= volume_tenths_ml <= 0xFF:
         raise ValueError("volume_tenths_ml must fit in one byte")
     if not 0 <= weekday_mask <= 0x7F:
@@ -135,7 +129,6 @@ def create_head_schedule_command(
     reserve2: int = 0x00,
 ) -> bytearray:
     """Create the mode 0x15 command that sets the daily schedule time."""
-
     if not 0 <= hour <= 23:
         raise ValueError("hour must be 0-23")
     if not 0 <= minute <= 59:

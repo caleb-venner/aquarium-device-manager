@@ -30,7 +30,6 @@ class Doser(BaseDevice):
 
     async def request_status(self) -> None:
         """Send a handshake to ask the pump for its latest status."""
-
         cmd = doser_commands.create_handshake_command(self.get_next_msg_id())
         await self._send_command(cmd, 3)
 
@@ -63,7 +62,6 @@ class Doser(BaseDevice):
         wait_seconds: float = 1.5,
     ) -> DoserStatus | None:
         """Update daily schedule and optionally refresh status."""
-
         weekday_mask = doser_commands.encode_weekdays(weekdays)
         command_batch = [
             doser_commands.create_prepare_command(

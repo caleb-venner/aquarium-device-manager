@@ -348,8 +348,7 @@ async def _interactive_doser_menu(timeout: int) -> None:
                     light = model_class(ble_device)
                     current_light = light
                     print(
-                        f"Connected to {light.name} at {
-                          ble_device.address}."
+                        f"Connected to {light.name} at" "{ble_device.address}."
                     )
                     await _request_light_status(light)
                 else:
@@ -762,7 +761,6 @@ def set_daily_dose(
     ] = 2.0,
 ) -> None:
     """Configure a daily dosing schedule for a pump head."""
-
     resolved_weekdays = _parse_weekday_options(weekdays)
 
     async def _async_func() -> None:
@@ -790,7 +788,6 @@ def set_daily_dose(
 @app.command()
 def doser_menu(timeout: Annotated[int, typer.Option()] = 5) -> None:
     """Launch an interactive dosing pump control menu."""
-
     asyncio.run(_interactive_doser_menu(timeout))
 
 

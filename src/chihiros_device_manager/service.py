@@ -438,10 +438,14 @@ templates = Jinja2Templates(
 
 
 class ConnectRequest(BaseModel):
+    """Request model for devices."""
+
     address: str
 
 
 class DoserScheduleRequest(BaseModel):
+    """Request model for doser schedule."""
+
     head_index: int = Field(..., ge=0, le=3)
     volume_tenths_ml: int = Field(..., ge=0, le=0xFF)
     hour: int = Field(..., ge=0, le=23)
@@ -452,6 +456,7 @@ class DoserScheduleRequest(BaseModel):
 
     @validator("weekdays", pre=True)
     def _normalize_weekdays(cls, value: Any) -> Any:
+        """Normalize weekday values to Weekday enum list."""
         if value is None or value == []:
             return None
         if isinstance(value, doser_commands.Weekday):
@@ -490,22 +495,27 @@ class DoserScheduleRequest(BaseModel):
 
 
 class LightBrightnessRequest(BaseModel):
+    """Request model for light brightness."""
+
     brightness: int = Field(..., ge=0, le=100)
     color: str | int = 0
 
 
 @app.on_event("startup")
 async def on_startup() -> None:
+    """Fast-API startup event handler."""
     await service.start()
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
+    """Fast-API shutdown event handler."""
     await service.stop()
 
 
 @app.get("/api/status")
 async def get_status() -> Dict[str, Any]:
+    """Return status for all connected devices."""
     return {
         address: {
             "device_type": status.device_type,
@@ -519,11 +529,13 @@ async def get_status() -> Dict[str, Any]:
 
 @app.get("/api/scan")
 async def scan_devices(timeout: float = 5.0) -> list[Dict[str, Any]]:
+    """Scan for supported BLE devices."""
     return await service.scan_devices(timeout=timeout)
 
 
 @app.get("/ui", response_class=HTMLResponse)
 async def ui_dashboard(request: Request) -> HTMLResponse:
+    """Render the main dashboard UI."""
     snapshot = service.get_status_snapshot()
     doser_address = service.current_doser_address()
     light_address = service.current_light_address()
@@ -555,6 +567,7 @@ async def ui_dashboard(request: Request) -> HTMLResponse:
 
 @app.get("/ui/scan", response_class=HTMLResponse)
 async def ui_scan(request: Request, timeout: float = 5.0) -> HTMLResponse:
+    """Render scan results UI partial."""
     devices = await service.scan_devices(timeout=timeout)
     return templates.TemplateResponse(
         "partials/scan_results.html",
@@ -564,6 +577,7 @@ async def ui_scan(request: Request, timeout: float = 5.0) -> HTMLResponse:
 
 @app.post("/api/dosers/connect")
 async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
+    """Connect to a doser via API."""
     status = await service.connect_doser(request.address)
     return _cached_status_to_dict(status)
 
@@ -572,6 +586,7 @@ async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
 async def ui_doser_connect(
     request: Request, address: str = Form(...)
 ) -> HTMLResponse:
+    """Connect to a doser via UI form."""
     status_code = 200
     try:
         status = await service.connect_doser(address)
@@ -590,6 +605,7 @@ async def ui_doser_connect(
 
 @app.post("/api/lights/connect")
 async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
+    """Connect to a light via API."""
     status = await service.connect_light(request.address)
     return _cached_status_to_dict(status)
 
@@ -598,6 +614,7 @@ async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
 async def ui_light_connect(
     request: Request, address: str = Form(...)
 ) -> HTMLResponse:
+    """Connect to a light via UI form."""
     status_code = 200
     try:
         status = await service.connect_light(address)
@@ -616,6 +633,7 @@ async def ui_light_connect(
 
 @app.post("/api/devices/{address}/status")
 async def refresh_status(address: str) -> Dict[str, Any]:
+    """Refresh and return status for a device."""
     status = await service.request_status(address)
     return _cached_status_to_dict(status)
 
@@ -624,6 +642,7 @@ async def refresh_status(address: str) -> Dict[str, Any]:
 async def set_doser_schedule(
     address: str, payload: DoserScheduleRequest
 ) -> Dict[str, Any]:
+    """Set doser schedule via API."""
     status = await service.set_doser_schedule(
         address,
         head_index=payload.head_index,
@@ -641,6 +660,7 @@ async def set_doser_schedule(
 async def set_light_brightness(
     address: str, payload: LightBrightnessRequest
 ) -> Dict[str, Any]:
+    """Set light brightness via API."""
     status = await service.set_light_brightness(
         address,
         brightness=payload.brightness,
@@ -651,18 +671,21 @@ async def set_light_brightness(
 
 @app.post("/api/lights/{address}/on")
 async def turn_light_on(address: str) -> Dict[str, Any]:
+    """Turn light on via API."""
     status = await service.turn_light_on(address)
     return _cached_status_to_dict(status)
 
 
 @app.post("/api/lights/{address}/off")
 async def turn_light_off(address: str) -> Dict[str, Any]:
+    """Turn light off via API."""
     status = await service.turn_light_off(address)
     return _cached_status_to_dict(status)
 
 
 @app.post("/ui/doser/schedule", response_class=HTMLResponse)
 async def ui_doser_schedule(request: Request) -> HTMLResponse:
+    """Set doser schedule via UI form."""
     form = await request.form()
     address = (
         form.get("address") or ""
@@ -732,6 +755,7 @@ async def ui_doser_schedule(request: Request) -> HTMLResponse:
 
 @app.post("/ui/light/brightness", response_class=HTMLResponse)
 async def ui_light_brightness(request: Request) -> HTMLResponse:
+    """Set light brightness via UI form."""
     form = await request.form()
     address = (
         form.get("address") or ""
@@ -791,6 +815,7 @@ async def ui_light_brightness(request: Request) -> HTMLResponse:
 
 @app.post("/ui/light/on", response_class=HTMLResponse)
 async def ui_light_on(request: Request) -> HTMLResponse:
+    """Turn light on via UI form."""
     form = await request.form()
     address = (
         form.get("address") or ""
@@ -830,6 +855,7 @@ async def ui_light_on(request: Request) -> HTMLResponse:
 
 @app.post("/ui/light/off", response_class=HTMLResponse)
 async def ui_light_off(request: Request) -> HTMLResponse:
+    """Turn light off via UI form."""
     form = await request.form()
     address = (
         form.get("address") or ""
@@ -869,6 +895,7 @@ async def ui_light_off(request: Request) -> HTMLResponse:
 
 @app.post("/ui/doser/request", response_class=HTMLResponse)
 async def ui_doser_request(request: Request) -> HTMLResponse:
+    """Refresh doser status via UI."""
     address = service.current_doser_address()
     status_code = 200
     if not address:
@@ -898,6 +925,7 @@ async def ui_doser_request(request: Request) -> HTMLResponse:
 
 @app.post("/ui/light/request", response_class=HTMLResponse)
 async def ui_light_request(request: Request) -> HTMLResponse:
+    """Refresh light status via UI."""
     address = service.current_light_address()
     status_code = 200
     if not address:
@@ -927,12 +955,14 @@ async def ui_light_request(request: Request) -> HTMLResponse:
 
 @app.post("/api/devices/{address}/disconnect")
 async def disconnect_device(address: str) -> Dict[str, str]:
+    """Disconnect a device via API."""
     await service.disconnect_device(address)
     return {"detail": "disconnected"}
 
 
 @app.post("/ui/doser/disconnect", response_class=HTMLResponse)
 async def ui_doser_disconnect(request: Request) -> HTMLResponse:
+    """Disconnect doser via UI."""
     address = service.current_doser_address()
     if not address:
         context = {
@@ -960,6 +990,7 @@ async def ui_doser_disconnect(request: Request) -> HTMLResponse:
 
 @app.post("/ui/light/disconnect", response_class=HTMLResponse)
 async def ui_light_disconnect(request: Request) -> HTMLResponse:
+    """Disconnect light via UI."""
     address = service.current_light_address()
     if not address:
         context = {
@@ -987,6 +1018,7 @@ async def ui_light_disconnect(request: Request) -> HTMLResponse:
 
 @app.get("/ui/status", response_class=HTMLResponse)
 async def ui_status(request: Request) -> HTMLResponse:
+    """Render status UI partial."""
     snapshot = service.get_status_snapshot()
     return templates.TemplateResponse(
         "partials/status.html",
@@ -1000,6 +1032,7 @@ async def ui_status(request: Request) -> HTMLResponse:
 
 @app.get("/debug", response_class=HTMLResponse)
 async def debug_page(request: Request) -> HTMLResponse:
+    """Render debug page."""
     return templates.TemplateResponse(
         "debug.html",
         {"request": request, "format_ts": _format_timestamp},
@@ -1008,6 +1041,7 @@ async def debug_page(request: Request) -> HTMLResponse:
 
 @app.get("/ui/debug/memory/raw", response_class=HTMLResponse)
 async def debug_memory_raw(request: Request) -> HTMLResponse:
+    """Show cached device payloads in debug UI."""
     snapshot = service.get_status_snapshot()
     raw_entries = [
         _cached_status_to_dict(status) for status in snapshot.values()
@@ -1027,6 +1061,7 @@ async def debug_memory_raw(request: Request) -> HTMLResponse:
 
 @app.post("/ui/debug/live/raw", response_class=HTMLResponse)
 async def debug_live_raw(request: Request) -> HTMLResponse:
+    """Show live device payloads in debug UI."""
     raw_entries = []
     errors = []
     addresses = [
@@ -1072,7 +1107,6 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper
     """Run the FastAPI service under Uvicorn."""
-
     import uvicorn
 
     host = os.getenv("CHIHIROS_SERVICE_HOST", "0.0.0.0")

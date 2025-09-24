@@ -26,12 +26,10 @@ class HeadSnapshot:
 
     def mode_label(self) -> str:
         """Return a human friendly mode name if known."""
-
         return MODE_NAMES.get(self.mode, f"0x{self.mode:02X}")
 
     def dosed_ml(self) -> float:
         """Return the ml already dispensed today."""
-
         return self.dosed_tenths_ml / 10
 
 
@@ -57,7 +55,6 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
     The function accepts either the full UART frame (starting with 0x5B) or
     the trimmed body (legacy behaviour).
     """
-
     if not payload:
         raise ValueError("payload too short")
 
