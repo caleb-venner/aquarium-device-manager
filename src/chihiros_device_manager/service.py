@@ -7,7 +7,8 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass
-from datetime import datetime
+
+# from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -15,7 +16,9 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, validator
+
+# from pydantic import BaseModel, Field, ValidationError, validator
 
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
@@ -35,10 +38,10 @@ except ImportError:  # pragma: no cover - fallback if library changes
 if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
     # ``uvicorn service:app`` imports this module as a script, meaning the
     # relative imports below do not have a known parent package.  When that
-    # happens we manually place the project ``src`` directory on ``sys.path`` so
-    # that imports can resolve using the absolute package name.  This keeps the
-    # module usable both when the project is installed (the normal case) and
-    # when it is executed directly from a source checkout.
+    # happens we manually place the project ``src`` directory on ``sys.path``
+    # so that imports can resolve using the absolute package name.  This keeps
+    # the module usable both when the project is installed (the normal case)
+    # and when it is executed directly from a source checkout.
     import importlib
     import sys
 
@@ -52,10 +55,16 @@ if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
         sys.modules.setdefault(f"{_PKG_NAME}.service", _current_module)
 
     api = importlib.import_module(f"{_PKG_NAME}.api")  # noqa: E402
-    doser_commands = importlib.import_module(f"{_PKG_NAME}.doser_commands")  # noqa: E402
+    doser_commands = importlib.import_module(
+        f"{_PKG_NAME}.doser_commands"
+    )  # noqa: E402
     _device = importlib.import_module(f"{_PKG_NAME}.device")  # noqa: E402
-    _doser_status = importlib.import_module(f"{_PKG_NAME}.doser_status")  # noqa: E402
-    _light_status = importlib.import_module(f"{_PKG_NAME}.light_status")  # noqa: E402
+    _doser_status = importlib.import_module(
+        f"{_PKG_NAME}.doser_status"
+    )  # noqa: E402
+    _light_status = importlib.import_module(
+        f"{_PKG_NAME}.light_status"
+    )  # noqa: E402
 
     Doser = _device.Doser
     LightDevice = _device.LightDevice
@@ -631,6 +640,8 @@ async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a dosing pump and return its status payload."""
     status = await service.connect_doser(request.address)
     return _cached_status_to_dict(status)
+
+
 @app.post("/api/lights/connect")
 async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a light fixture and return its cached status."""
@@ -763,7 +774,6 @@ async def serve_spa_assets(spa_path: str) -> Response:
 
 async def _proxy_dev_server(path: str) -> Response | None:
     """Attempt to fetch ``path`` from the Vite dev server if available."""
-
     if not DEV_SERVER_CANDIDATES:
         return None
 

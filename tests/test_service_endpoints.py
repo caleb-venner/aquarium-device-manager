@@ -218,7 +218,6 @@ def test_spa_asset_route_404_for_missing_files(
 
 def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serve the SPA from the dev server when no build artifacts exist."""
-
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
@@ -237,7 +236,6 @@ def test_spa_asset_route_proxies_dev_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Proxy SPA asset requests to the Vite dev server when available."""
-
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
