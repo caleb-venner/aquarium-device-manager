@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, ValidationError, validator
@@ -1166,6 +1166,37 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
         "partials/debug_output.html",
         context,
     )
+
+
+@app.get("/{spa_path:path}", include_in_schema=False)
+async def serve_spa_assets(spa_path: str):
+    """Serve built SPA assets or fallback to the index for client routes."""
+    if not SPA_DIST_AVAILABLE:
+        raise HTTPException(status_code=404, detail="SPA bundle unavailable")
+
+    if not spa_path:
+        raise HTTPException(status_code=404)
+
+    first_segment = spa_path.split("/", 1)[0]
+    if first_segment in {"api", "ui", "debug"} or spa_path in {
+        "docs",
+        "redoc",
+        "openapi.json",
+    }:
+        raise HTTPException(status_code=404)
+
+    asset_path = FRONTEND_DIST / spa_path
+    if asset_path.is_file():
+        return FileResponse(asset_path)
+
+    if "." in spa_path:
+        raise HTTPException(status_code=404)
+
+    index_path = FRONTEND_DIST / "index.html"
+    if index_path.exists():
+        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+
+    raise HTTPException(status_code=404)
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper

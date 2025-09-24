@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import HTTPException
 
 from chihiros_device_manager import doser_commands
 from chihiros_device_manager.service import (
@@ -14,6 +15,7 @@ from chihiros_device_manager.service import (
     DoserScheduleRequest,
     LightBrightnessRequest,
     serve_spa,
+    serve_spa_assets,
     service,
     set_doser_schedule,
     set_light_brightness,
@@ -149,3 +151,56 @@ def test_root_serves_spa_when_dist_present(
     response = asyncio.run(serve_spa())
     assert response.status_code == 200
     assert "spa" in response.body.decode()
+
+
+def test_spa_asset_route_serves_static_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Return static assets from the compiled SPA directory."""
+    asset = tmp_path / "vite.svg"
+    asset.write_text("svg", encoding="utf-8")
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+    )
+
+    response = asyncio.run(serve_spa_assets("vite.svg"))
+    assert response.status_code == 200
+    assert getattr(response, "path", None) == asset
+
+
+def test_spa_asset_route_returns_index_for_client_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Serve the SPA index for non-file client-side routes."""
+    index_file = tmp_path / "index.html"
+    index_file.write_text("<html><body>spa</body></html>", encoding="utf-8")
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+    )
+
+    response = asyncio.run(serve_spa_assets("dashboard"))
+    assert response.status_code == 200
+    assert "spa" in response.body.decode()
+
+
+def test_spa_asset_route_404_for_missing_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Missing assets should not fall back to the SPA index."""
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+    )
+
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(serve_spa_assets("app.js"))
+
+    assert excinfo.value.status_code == 404
