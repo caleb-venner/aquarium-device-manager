@@ -35,7 +35,6 @@ async def _noop() -> None:
     """Asynchronous placeholder used when patching service lifecycle."""
     return None
 
-
 @pytest.fixture(autouse=True)
 def patch_service_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
     """Avoid touching real BLE hardware during tests."""
