@@ -85,7 +85,6 @@ def _extract_uart_bytes(raw_field: str) -> bytes:
     ellipsis character.  When this happens the second token contains the full
     frame prefixed by the ATT header (11 bytes) which we strip away.
     """
-
     chunks = [
         part.strip() for part in raw_field.strip().split("  ") if part.strip()
     ]
@@ -102,6 +101,7 @@ def _extract_uart_bytes(raw_field: str) -> bytes:
 
 
 def _decode_uart_frame(data: bytes) -> Record:
+    """Translate raw UART bytes into a structured Record instance."""
     if len(data) < 7:
         raise ValueError(f"UART frame too short: {data.hex()}")
     return Record(
@@ -119,6 +119,7 @@ def _decode_uart_frame(data: bytes) -> Record:
 
 
 def parse_log(path: Path) -> Iterable[Record]:
+    """Yield decoded records from a PacketLogger RAW export."""
     for line in path.read_text().splitlines():
         match = LINE_RE.match(line)
         if not match:
@@ -131,6 +132,7 @@ def parse_log(path: Path) -> Iterable[Record]:
 
 
 def main() -> None:
+    """Entry point for the CLI decoder utility."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "log", type=Path, help="Path to RAW PacketLogger export"

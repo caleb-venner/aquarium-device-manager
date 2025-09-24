@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
 async def _discover_device(
     address: str | None, timeout: float, name_prefix: str | None
 ):
+    """Attempt to locate a BLE device by address or name prefix."""
     if address:
         print(f"Searching for {address} (timeout {timeout}s)...")
         device = await BleakScanner.find_device_by_address(
@@ -75,6 +76,7 @@ async def main(
     days: str | None,
     read_only: bool,
 ) -> None:
+    """Interactively inspect and optionally program a dosing pump."""
     device = await _discover_device(address, timeout, name_prefix)
     if device is None:
         message = f"Could not find BLE device {address or name_prefix}"
@@ -127,8 +129,8 @@ async def main(
                 )
             if parsed.message_id is not None:
                 header_info.append(
-                    f"msg_id={parsed.message_id[0]:02X}:{
-                        parsed.message_id[1]:02X}"
+                    "msg_id="
+                    f"{parsed.message_id[0]:02X}:{parsed.message_id[1]:02X}"
                 )
             if parsed.response_mode is not None:
                 header_info.append(f"mode=0x{parsed.response_mode:02X}")

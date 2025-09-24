@@ -31,6 +31,7 @@ for _key, _member in list(_WEEKDAY_NAME_MAP.items()):
 def _parse_weekday_options(
     weekday_names: list[str] | None,
 ) -> list[doser_commands.Weekday] | None:
+    """Convert CLI weekday tokens into Weekday members."""
     if not weekday_names:
         return None
     resolved: list[doser_commands.Weekday] = []
@@ -112,6 +113,7 @@ async def _prompt(text: str) -> str:
 def _print_discovered_devices(
     devices: list[api.SupportedDeviceInfo],
 ) -> list[BLEDevice]:
+    """Render a table of scan results and return the raw devices."""
     if not devices:
         print("No supported Chihiros devices found.")
         return []
@@ -126,6 +128,7 @@ def _print_discovered_devices(
 async def _select_doser_device(
     devices: list[BLEDevice],
 ) -> tuple[Doser | None, str | None]:
+    """Prompt the user to choose a dosing pump from recent scans."""
     selection = await _prompt(
         "Enter device index from last scan or full address (blank to cancel): "
     )
@@ -153,6 +156,7 @@ async def _select_doser_device(
 async def _select_light_device(
     devices: list[BLEDevice],
 ) -> tuple[LightDevice | None, str | None]:
+    """Prompt the user to choose a light from recent scans."""
     selection = await _prompt(
         "Enter device index from last scan or full address (blank to cancel): "
     )
@@ -178,10 +182,12 @@ async def _select_light_device(
 
 
 def _format_command_bytes(command: bytes | bytearray) -> str:
+    """Return a human readable representation of command bytes."""
     return " ".join(f"{byte:02X}" for byte in command)
 
 
 def _render_light_status(parsed: ParsedLightStatus) -> None:
+    """Print parsed light keyframes and markers to the console."""
     print("Light status:")
     if (
         parsed.weekday is not None
@@ -202,6 +208,7 @@ def _render_light_status(parsed: ParsedLightStatus) -> None:
 
 
 async def _prompt_weekdays() -> list[doser_commands.Weekday] | None:
+    """Interactively collect a weekday mask from the operator."""
     prompt = (
         "Weekdays (comma or space separated names like 'mon tue', "
         "leave blank for all): "
@@ -218,6 +225,7 @@ async def _prompt_weekdays() -> list[doser_commands.Weekday] | None:
 
 
 async def _interactive_doser_menu(timeout: int) -> None:
+    """Run the interactive REPL for testing doser commands."""
     discovered_devices: list[BLEDevice] = []
     supported_devices: list[api.SupportedDeviceInfo] = []
     current_device: Doser | None = None
@@ -571,6 +579,7 @@ async def _interactive_doser_menu(timeout: int) -> None:
 
 
 def _run_device_func(device_address: str, **kwargs: Any) -> None:
+    """Resolve a device by address and call a coroutine method on it."""
     command_name = inspect.stack()[1][3]
 
     async def _async_func() -> None:

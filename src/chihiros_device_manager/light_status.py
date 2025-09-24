@@ -15,7 +15,7 @@ class LightKeyframe:
     value: int
 
     def as_time(self) -> str:
-        """Return readable time value."""
+        """Return the keyframe timestamp formatted as HH:MM."""
         return f"{self.hour:02d}:{self.minute:02d}"
 
 

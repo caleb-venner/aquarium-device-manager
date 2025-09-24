@@ -3,16 +3,25 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
-from fastapi.testclient import TestClient
 
 from chihiros_device_manager import doser_commands
-from chihiros_device_manager.service import CachedStatus, app, service
+from chihiros_device_manager.service import (
+    CachedStatus,
+    DoserScheduleRequest,
+    LightBrightnessRequest,
+    serve_spa,
+    service,
+    set_doser_schedule,
+    set_light_brightness,
+)
 
 
 def _cached(device_type: str = "doser") -> CachedStatus:
+    """Return a populated CachedStatus for use in tests."""
     return CachedStatus(
         address="AA:BB:CC:DD:EE:FF",
         device_type=device_type,
@@ -22,39 +31,39 @@ def _cached(device_type: str = "doser") -> CachedStatus:
     )
 
 
-@pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    async def _noop() -> None:
-        return None
+async def _noop() -> None:
+    """Asynchronous placeholder used when patching service lifecycle."""
+    return None
 
+@pytest.fixture(autouse=True)
+def patch_service_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Avoid touching real BLE hardware during tests."""
     monkeypatch.setattr(service, "start", _noop)
     monkeypatch.setattr(service, "stop", _noop)
 
-    with TestClient(app) as test_client:
-        yield test_client
-
 
 def test_api_doser_schedule_normalizes_weekdays(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Ensure schedule endpoint coerces weekday payloads correctly."""
     mocked = AsyncMock(return_value=_cached("doser"))
     monkeypatch.setattr(service, "set_doser_schedule", mocked)
 
-    response = client.post(
-        "/api/dosers/AA:AA:AA:AA:AA:AA/schedule",
-        json={
-            "head_index": 1,
-            "volume_tenths_ml": 25,
-            "hour": 6,
-            "minute": 30,
-            "weekdays": ["monday", "wednesday"],
-            "confirm": True,
-            "wait_seconds": 2.0,
-        },
+    payload = DoserScheduleRequest(
+        head_index=1,
+        volume_tenths_ml=25,
+        hour=6,
+        minute=30,
+        weekdays=["monday", "wednesday"],
+        confirm=True,
+        wait_seconds=2.0,
     )
 
-    assert response.status_code == 200
-    assert response.json()["device_type"] == "doser"
+    result = asyncio.run(
+        set_doser_schedule("AA:AA:AA:AA:AA:AA", payload=payload)
+    )
+
+    assert result["device_type"] == "doser"
     mocked.assert_awaited_once()
     call_kwargs = mocked.await_args.kwargs
     assert call_kwargs["head_index"] == 1
@@ -70,17 +79,18 @@ def test_api_doser_schedule_normalizes_weekdays(
 
 
 def test_api_light_brightness_passes_payload(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Verify light brightness endpoint forwards arguments as provided."""
     mocked = AsyncMock(return_value=_cached("light"))
     monkeypatch.setattr(service, "set_light_brightness", mocked)
 
-    response = client.post(
-        "/api/lights/11:22:33:44:55:66/brightness",
-        json={"brightness": 75, "color": "1"},
+    payload = LightBrightnessRequest(brightness=75, color="1")
+    result = asyncio.run(
+        set_light_brightness("11:22:33:44:55:66", payload=payload)
     )
 
-    assert response.status_code == 200
+    assert result["device_type"] == "light"
     mocked.assert_awaited_once()
     call_kwargs = mocked.await_args.kwargs
     assert call_kwargs["brightness"] == 75
@@ -90,6 +100,7 @@ def test_api_light_brightness_passes_payload(
 def test_service_set_light_brightness_coerces_numeric_color(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Convert numeric colour strings to integers before forwarding."""
     fake_light = type("FakeLight", (), {})()
     fake_light.set_color_brightness = AsyncMock()
 
@@ -108,3 +119,32 @@ def test_service_set_light_brightness_coerces_numeric_color(
 
     fake_light.set_color_brightness.assert_awaited_once_with(80, 2)
     assert result is cached
+
+
+def test_root_redirects_when_spa_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redirect to the legacy dashboard when the SPA bundle is absent."""
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+    )
+    response = asyncio.run(serve_spa())
+    assert response.status_code == 307
+    assert response.headers["location"] == "/ui"
+
+
+def test_root_serves_spa_when_dist_present(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Return the compiled SPA index when the build directory exists."""
+    index_file = tmp_path / "index.html"
+    index_file.write_text("<html><body>spa</body></html>", encoding="utf-8")
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+    )
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+    )
+    response = asyncio.run(serve_spa())
+    assert response.status_code == 200
+    assert "spa" in response.body.decode()
