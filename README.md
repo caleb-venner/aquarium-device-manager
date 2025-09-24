@@ -82,9 +82,10 @@ chihiros-service
 
 Environment variables `CHIHIROS_SERVICE_HOST` and `CHIHIROS_SERVICE_PORT`
 override the default listen address (`0.0.0.0:8000`). Once running, visit
-`http://localhost:8000/` for the new TypeScript dashboard (if built) or
-`http://localhost:8000/ui` to keep using the legacy HTMX interface. All
-capabilities remain exposed under the `/api/*` endpoints.
+`http://localhost:8000/` for the TypeScript dashboard. If the SPA has not yet
+been built (or a Vite dev server is not running), the root route will return a
+503 with instructions on how to start the frontend build. All capabilities
+remain exposed under the `/api/*` endpoints.
 
 ## Frontend development (TypeScript SPA)
 
@@ -104,8 +105,12 @@ npm run dev
 With the development server running, visiting `http://localhost:8000/` will
 transparently proxy requests to Vite (listening on port 5173 by default).
 Point `CHIHIROS_FRONTEND_DEV_SERVER` at a different origin if the dev server is
-hosted elsewhere, or set it to `0` to disable the proxy and continue using the
-legacy HTMX dashboard when no compiled bundle exists.
+hosted elsewhere, or set it to `0` to disable the proxy. When both the proxy
+and compiled assets are unavailable the backend now returns a `503` response
+reminding you to start the SPA build.
+
+The old HTMX templates have now been archived from the service. Requests to
+`/ui` or `/debug` will return `410 Gone`; use the SPA or REST API instead.
 
 Create a production build before packaging or running inside Docker:
 

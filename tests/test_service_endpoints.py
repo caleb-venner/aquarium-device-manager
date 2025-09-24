@@ -12,9 +12,13 @@ from fastapi.responses import HTMLResponse
 
 from chihiros_device_manager import doser_commands
 from chihiros_device_manager.service import (
+    ARCHIVED_TEMPLATE_MESSAGE,
+    SPA_UNAVAILABLE_MESSAGE,
     CachedStatus,
     DoserScheduleRequest,
     LightBrightnessRequest,
+    legacy_debug_archived,
+    legacy_ui_archived,
     serve_spa,
     serve_spa_assets,
     service,
@@ -125,10 +129,10 @@ def test_service_set_light_brightness_coerces_numeric_color(
     assert result is cached
 
 
-def test_root_redirects_when_spa_missing(
+def test_root_reports_missing_spa(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Redirect to the legacy dashboard when the SPA bundle is absent."""
+    """Expose a helpful 503 when neither SPA bundle nor dev server exist."""
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
@@ -138,8 +142,8 @@ def test_root_redirects_when_spa_missing(
     )
 
     response = asyncio.run(serve_spa())
-    assert response.status_code == 307
-    assert response.headers["location"] == "/ui"
+    assert response.status_code == 503
+    assert SPA_UNAVAILABLE_MESSAGE in response.body.decode()
 
 
 def test_root_serves_spa_when_dist_present(
@@ -246,3 +250,17 @@ def test_spa_asset_route_proxies_dev_server(
     response = asyncio.run(serve_spa_assets("src/main.ts"))
     assert response is proxied
     helper.assert_awaited_once_with("/src/main.ts")
+
+
+def test_legacy_ui_routes_return_410() -> None:
+    """The retired HTMX endpoints should respond with 410 Gone."""
+    response = asyncio.run(legacy_ui_archived())
+    assert response.status_code == 410
+    assert ARCHIVED_TEMPLATE_MESSAGE in response.body.decode()
+
+
+def test_legacy_debug_routes_return_410() -> None:
+    """Debug template routes are also archived alongside HTMX."""
+    response = asyncio.run(legacy_debug_archived("/live/raw"))
+    assert response.status_code == 410
+    assert ARCHIVED_TEMPLATE_MESSAGE in response.body.decode()

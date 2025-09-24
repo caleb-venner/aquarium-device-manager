@@ -12,15 +12,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
 import httpx
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import (
-    FileResponse,
-    HTMLResponse,
-    RedirectResponse,
-    Response,
-)
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, ValidationError, validator
 
 try:
@@ -464,21 +458,8 @@ def _cached_status_to_dict(status: CachedStatus) -> Dict[str, Any]:
     }
 
 
-def _format_timestamp(value: float | None) -> str:
-    """Format a UNIX timestamp for display in the debug templates."""
-    if not value:
-        return "—"
-    try:
-        return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return str(value)
-
-
 service = BLEService()
 app = FastAPI(title="Chihiros BLE Service")
-templates = Jinja2Templates(
-    directory=str(Path(__file__).resolve().parent / "templates")
-)
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
@@ -486,6 +467,17 @@ FRONTEND_DIST = Path(
     os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
 )
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
+
+SPA_UNAVAILABLE_MESSAGE = (
+    "The TypeScript dashboard is unavailable. "
+    "Build the SPA (npm run build) or start the dev server (npm run dev) "
+    "before visiting '/' again."
+)
+
+ARCHIVED_TEMPLATE_MESSAGE = (
+    "The legacy HTMX dashboard has been retired. Switch to the SPA at '/' "
+    "or use the REST API under /api/*."
+)
 
 _DEV_SERVER_ENV = os.getenv("CHIHIROS_FRONTEND_DEV_SERVER", "").strip()
 if _DEV_SERVER_ENV == "0":
@@ -586,7 +578,7 @@ class LightBrightnessRequest(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_spa() -> Response:
-    """Serve the SPA entry point or fall back to the legacy dashboard."""
+    """Serve the SPA entry point or emit guidance when it is unavailable."""
     if SPA_DIST_AVAILABLE:
         index_path = FRONTEND_DIST / "index.html"
         if index_path.exists():
@@ -594,7 +586,12 @@ async def serve_spa() -> Response:
     proxied = await _proxy_dev_server("/")
     if proxied is not None:
         return proxied
-    return RedirectResponse(url="/ui")
+    return Response(
+        SPA_UNAVAILABLE_MESSAGE,
+        status_code=503,
+        media_type="text/plain",
+        headers={"cache-control": "no-store"},
+    )
 
 
 @app.on_event("startup")
@@ -629,102 +626,16 @@ async def scan_devices(timeout: float = 5.0) -> list[Dict[str, Any]]:
     return await service.scan_devices(timeout=timeout)
 
 
-@app.get("/ui", response_class=HTMLResponse)
-async def ui_dashboard(request: Request) -> HTMLResponse:
-    """Render the HTML dashboard with cached device state."""
-    snapshot = service.get_status_snapshot()
-    doser_address = service.current_doser_address()
-    light_address = service.current_light_address()
-    doser_status = (
-        _cached_status_to_dict(snapshot[doser_address])
-        if doser_address and doser_address in snapshot
-        else None
-    )
-    light_status = (
-        _cached_status_to_dict(snapshot[light_address])
-        if light_address and light_address in snapshot
-        else None
-    )
-    context = {
-        "request": request,
-        "snapshot": snapshot,
-        "doser_status": doser_status,
-        "light_status": light_status,
-        "doser_error": None,
-        "light_error": None,
-        "doser_message": None,
-        "light_message": None,
-        "doser_address": doser_address,
-        "light_address": light_address,
-        "format_ts": _format_timestamp,
-    }
-    return templates.TemplateResponse("dashboard.html", context)
-
-
-@app.get("/ui/scan", response_class=HTMLResponse)
-async def ui_scan(request: Request, timeout: float = 5.0) -> HTMLResponse:
-    """Render partial HTML showing nearby devices discovered over BLE."""
-    devices = await service.scan_devices(timeout=timeout)
-    return templates.TemplateResponse(
-        "partials/scan_results.html",
-        {"request": request, "devices": devices},
-    )
-
-
 @app.post("/api/dosers/connect")
 async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a dosing pump and return its status payload."""
     status = await service.connect_doser(request.address)
     return _cached_status_to_dict(status)
-
-
-@app.post("/ui/doser/connect", response_class=HTMLResponse)
-async def ui_doser_connect(
-    request: Request, address: str = Form(...)
-) -> HTMLResponse:
-    """Handle the HTMX form for connecting a dosing pump."""
-    status_code = 200
-    try:
-        status = await service.connect_doser(address)
-        context = {
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": f"Connected to {address}",
-        }
-    except HTTPException as exc:
-        context = {"status": None, "error": exc.detail, "message": None}
-    context["request"] = request
-    return templates.TemplateResponse(
-        "partials/doser_status.html", context, status_code=status_code
-    )
-
-
 @app.post("/api/lights/connect")
 async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a light fixture and return its cached status."""
     status = await service.connect_light(request.address)
     return _cached_status_to_dict(status)
-
-
-@app.post("/ui/light/connect", response_class=HTMLResponse)
-async def ui_light_connect(
-    request: Request, address: str = Form(...)
-) -> HTMLResponse:
-    """Handle the HTMX form submission for light connections."""
-    status_code = 200
-    try:
-        status = await service.connect_light(address)
-        context = {
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": f"Connected to {address}",
-        }
-    except HTTPException as exc:
-        context = {"status": None, "error": exc.detail, "message": None}
-    context["request"] = request
-    return templates.TemplateResponse(
-        "partials/light_status.html", context, status_code=status_code
-    )
 
 
 @app.post("/api/devices/{address}/status")
@@ -779,276 +690,6 @@ async def turn_light_off(address: str) -> Dict[str, Any]:
     return _cached_status_to_dict(status)
 
 
-@app.post("/ui/doser/schedule", response_class=HTMLResponse)
-async def ui_doser_schedule(request: Request) -> HTMLResponse:
-    """Handle schedule updates from the HTMX dashboard."""
-    form = await request.form()
-    address = (
-        form.get("address") or ""
-    ).strip() or service.current_doser_address()
-    status_code = 200
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No dosing pump connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/doser_status.html", context, status_code=400
-        )
-
-    try:
-        payload = DoserScheduleRequest(
-            head_index=int(form.get("head_index", 0)),
-            volume_tenths_ml=int(form.get("volume_tenths_ml", 0)),
-            hour=int(form.get("hour", 0)),
-            minute=int(form.get("minute", 0)),
-            weekdays=form.getlist("weekdays") or None,
-            confirm=bool(form.get("confirm")),
-            wait_seconds=1.5,
-        )
-    except (ValueError, ValidationError) as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": str(exc),
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/doser_status.html", context, status_code=400
-        )
-
-    try:
-        status = await service.set_doser_schedule(
-            address,
-            head_index=payload.head_index,
-            volume_tenths_ml=payload.volume_tenths_ml,
-            hour=payload.hour,
-            minute=payload.minute,
-            weekdays=payload.weekdays,
-            confirm=payload.confirm,
-            wait_seconds=payload.wait_seconds,
-        )
-        context = {
-            "request": request,
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Schedule updated.",
-        }
-    except HTTPException as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": exc.detail,
-            "message": None,
-        }
-        status_code = exc.status_code
-    return templates.TemplateResponse(
-        "partials/doser_status.html", context, status_code=status_code
-    )
-
-
-@app.post("/ui/light/brightness", response_class=HTMLResponse)
-async def ui_light_brightness(request: Request) -> HTMLResponse:
-    """Handle HTMX requests to adjust light brightness."""
-    form = await request.form()
-    address = (
-        form.get("address") or ""
-    ).strip() or service.current_light_address()
-    status_code = 200
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No light connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html", context, status_code=400
-        )
-
-    try:
-        payload = LightBrightnessRequest(
-            brightness=int(form.get("brightness", 0)),
-            color=form.get("color", 0),
-        )
-    except (ValueError, ValidationError) as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": str(exc),
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html", context, status_code=400
-        )
-
-    try:
-        status = await service.set_light_brightness(
-            address,
-            brightness=payload.brightness,
-            color=payload.color,
-        )
-        context = {
-            "request": request,
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Brightness updated.",
-        }
-    except HTTPException as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": exc.detail,
-            "message": None,
-        }
-        status_code = exc.status_code
-    return templates.TemplateResponse(
-        "partials/light_status.html", context, status_code=status_code
-    )
-
-
-@app.post("/ui/light/on", response_class=HTMLResponse)
-async def ui_light_on(request: Request) -> HTMLResponse:
-    """Handle HTMX submissions that power on the light."""
-    form = await request.form()
-    address = (
-        form.get("address") or ""
-    ).strip() or service.current_light_address()
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No light connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html", context, status_code=400
-        )
-
-    status_code = 200
-    try:
-        status = await service.turn_light_on(address)
-        context = {
-            "request": request,
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Light turned on.",
-        }
-    except HTTPException as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": exc.detail,
-            "message": None,
-        }
-        status_code = exc.status_code
-    return templates.TemplateResponse(
-        "partials/light_status.html", context, status_code=status_code
-    )
-
-
-@app.post("/ui/light/off", response_class=HTMLResponse)
-async def ui_light_off(request: Request) -> HTMLResponse:
-    """Handle HTMX submissions that power off the light."""
-    form = await request.form()
-    address = (
-        form.get("address") or ""
-    ).strip() or service.current_light_address()
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No light connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html", context, status_code=400
-        )
-
-    status_code = 200
-    try:
-        status = await service.turn_light_off(address)
-        context = {
-            "request": request,
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Light turned off.",
-        }
-    except HTTPException as exc:
-        context = {
-            "request": request,
-            "status": None,
-            "error": exc.detail,
-            "message": None,
-        }
-        status_code = exc.status_code
-    return templates.TemplateResponse(
-        "partials/light_status.html", context, status_code=status_code
-    )
-
-
-@app.post("/ui/doser/request", response_class=HTMLResponse)
-async def ui_doser_request(request: Request) -> HTMLResponse:
-    """Refresh the connected dosing pump status via the dashboard."""
-    address = service.current_doser_address()
-    status_code = 200
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No dosing pump connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/doser_status.html", context, status_code=status_code
-        )
-    try:
-        status = await service.request_status(address)
-        context = {
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Status refreshed.",
-        }
-    except HTTPException as exc:
-        context = {"status": None, "error": exc.detail, "message": None}
-    context["request"] = request
-    return templates.TemplateResponse(
-        "partials/doser_status.html", context, status_code=status_code
-    )
-
-
-@app.post("/ui/light/request", response_class=HTMLResponse)
-async def ui_light_request(request: Request) -> HTMLResponse:
-    """Refresh the connected light status via the dashboard."""
-    address = service.current_light_address()
-    status_code = 200
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No light connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html", context, status_code=status_code
-        )
-    try:
-        status = await service.request_status(address)
-        context = {
-            "status": _cached_status_to_dict(status),
-            "error": None,
-            "message": "Status refreshed.",
-        }
-    except HTTPException as exc:
-        context = {"status": None, "error": exc.detail, "message": None}
-    context["request"] = request
-    return templates.TemplateResponse(
-        "partials/light_status.html", context, status_code=status_code
-    )
-
-
 @app.post("/api/devices/{address}/disconnect")
 async def disconnect_device(address: str) -> Dict[str, str]:
     """Disconnect whichever device is currently registered at ``address``."""
@@ -1056,148 +697,33 @@ async def disconnect_device(address: str) -> Dict[str, str]:
     return {"detail": "disconnected"}
 
 
-@app.post("/ui/doser/disconnect", response_class=HTMLResponse)
-async def ui_doser_disconnect(request: Request) -> HTMLResponse:
-    """Disconnect the dosing pump from the dashboard."""
-    address = service.current_doser_address()
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No dosing pump connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/doser_status.html",
-            context,
-        )
-    await service.disconnect_device(address)
-    context = {
-        "request": request,
-        "status": None,
-        "error": None,
-        "message": "Disconnected.",
-    }
-    return templates.TemplateResponse(
-        "partials/doser_status.html",
-        context,
+@app.api_route(
+    "/ui{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    include_in_schema=False,
+)
+async def legacy_ui_archived(path: str = "") -> Response:
+    """Return a 410 response for retired HTMX routes."""
+    return Response(
+        ARCHIVED_TEMPLATE_MESSAGE,
+        status_code=410,
+        media_type="text/plain",
+        headers={"cache-control": "no-store"},
     )
 
 
-@app.post("/ui/light/disconnect", response_class=HTMLResponse)
-async def ui_light_disconnect(request: Request) -> HTMLResponse:
-    """Disconnect the light from the dashboard."""
-    address = service.current_light_address()
-    if not address:
-        context = {
-            "request": request,
-            "status": None,
-            "error": "No light connected.",
-            "message": None,
-        }
-        return templates.TemplateResponse(
-            "partials/light_status.html",
-            context,
-        )
-    await service.disconnect_device(address)
-    context = {
-        "request": request,
-        "status": None,
-        "error": None,
-        "message": "Disconnected.",
-    }
-    return templates.TemplateResponse(
-        "partials/light_status.html",
-        context,
-    )
-
-
-@app.get("/ui/status", response_class=HTMLResponse)
-async def ui_status(request: Request) -> HTMLResponse:
-    """Render the combined status snapshot for the dashboard sidebar."""
-    snapshot = service.get_status_snapshot()
-    return templates.TemplateResponse(
-        "partials/status.html",
-        {
-            "request": request,
-            "snapshot": snapshot,
-            "format_ts": _format_timestamp,
-        },
-    )
-
-
-@app.get("/debug", response_class=HTMLResponse)
-async def debug_page(request: Request) -> HTMLResponse:
-    """Render the debug landing page with helper links."""
-    return templates.TemplateResponse(
-        "debug.html",
-        {"request": request, "format_ts": _format_timestamp},
-    )
-
-
-@app.get("/ui/debug/memory/raw", response_class=HTMLResponse)
-async def debug_memory_raw(request: Request) -> HTMLResponse:
-    """Render cached payloads stored in memory for inspection."""
-    snapshot = service.get_status_snapshot()
-    raw_entries = [
-        _cached_status_to_dict(status) for status in snapshot.values()
-    ]
-    context = {
-        "request": request,
-        "raw_entries": raw_entries,
-        "error": None,
-        "message": "Cached payloads",
-        "format_ts": _format_timestamp,
-    }
-    return templates.TemplateResponse(
-        "partials/debug_output.html",
-        context,
-    )
-
-
-@app.post("/ui/debug/live/raw", response_class=HTMLResponse)
-async def debug_live_raw(request: Request) -> HTMLResponse:
-    """Request live status frames and display the raw payloads."""
-    raw_entries = []
-    errors = []
-    addresses = [
-        addr
-        for addr in [
-            service.current_doser_address(),
-            service.current_light_address(),
-        ]
-        if addr
-    ]
-    if not addresses:
-        context = {
-            "request": request,
-            "raw_entries": [],
-            "error": "No devices connected.",
-            "message": None,
-            "format_ts": _format_timestamp,
-        }
-        return templates.TemplateResponse(
-            "partials/debug_output.html",
-            context,
-        )
-
-    for addr in addresses:
-        try:
-            status = await service.request_status(addr)
-            raw_entries.append(_cached_status_to_dict(status))
-        except HTTPException as exc:
-            errors.append(f"{addr}: {exc.detail}")
-
-    context = {
-        "request": request,
-        "raw_entries": raw_entries,
-        "error": ", ".join(errors) if errors else None,
-        "message": "Live payloads refreshed" if raw_entries else None,
-        "format_ts": _format_timestamp,
-    }
-    return templates.TemplateResponse(
-        "partials/debug_output.html",
-        context,
+@app.api_route(
+    "/debug{path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    include_in_schema=False,
+)
+async def legacy_debug_archived(path: str = "") -> Response:
+    """Indicate that debug template routes are no longer served."""
+    return Response(
+        ARCHIVED_TEMPLATE_MESSAGE,
+        status_code=410,
+        media_type="text/plain",
+        headers={"cache-control": "no-store"},
     )
 
 
