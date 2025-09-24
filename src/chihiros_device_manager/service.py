@@ -7,17 +7,16 @@ import json
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 # from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
-import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator
+from fastapi.responses import HTMLResponse, Response
+
+# Pydantic models have been moved to schemas.py; no direct import here.
 
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
@@ -64,17 +63,55 @@ if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
     _light_status = importlib.import_module(
         f"{_PKG_NAME}.light_status"
     )  # noqa: E402
+    _serializers = importlib.import_module(
+        f"{_PKG_NAME}.serializers"
+    )  # noqa: E402
+    _schemas = importlib.import_module(f"{_PKG_NAME}.schemas")  # noqa: E402
+    _routes_devices = importlib.import_module(
+        f"{_PKG_NAME}.api.routes_devices"
+    )  # noqa: E402
+    _routes_dosers = importlib.import_module(
+        f"{_PKG_NAME}.api.routes_dosers"
+    )  # noqa: E402
+    _routes_lights = importlib.import_module(
+        f"{_PKG_NAME}.api.routes_lights"
+    )  # noqa: E402
+    _spa = importlib.import_module(f"{_PKG_NAME}.spa")  # noqa: E402
 
     Doser = _device.Doser
     LightDevice = _device.LightDevice
     get_device_from_address = _device.get_device_from_address
     PumpStatus = _doser_status.PumpStatus
     ParsedLightStatus = _light_status.ParsedLightStatus
+    _serialize_pump_status = _serializers._serialize_pump_status
+    _serialize_light_status = _serializers._serialize_light_status
+    cached_status_to_dict = _serializers.cached_status_to_dict
+    # Re-export request models for backwards compatibility in tests
+    ConnectRequest = _schemas.ConnectRequest
+    DoserScheduleRequest = _schemas.DoserScheduleRequest
+    LightBrightnessRequest = _schemas.LightBrightnessRequest
+    devices_router = _routes_devices.router
+    dosers_router = _routes_dosers.router
+    lights_router = _routes_lights.router
+    spa = _spa
 else:
-    from . import api, doser_commands
+    from . import api, doser_commands, spa
+    from .api.routes_devices import router as devices_router
+    from .api.routes_dosers import router as dosers_router
+    from .api.routes_lights import router as lights_router
     from .device import Doser, LightDevice, get_device_from_address
-    from .doser_status import PumpStatus
-    from .light_status import ParsedLightStatus
+
+    # Re-export request models for backwards compatibility in tests
+    from .schemas import (
+        ConnectRequest,
+        DoserScheduleRequest,
+        LightBrightnessRequest,
+    )
+    from .serializers import (
+        _serialize_light_status,
+        _serialize_pump_status,
+        cached_status_to_dict,
+    )
 
 STATE_PATH = Path.home() / ".chihiros_state.json"
 AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
@@ -583,200 +620,36 @@ class BLEService:
                     continue
 
 
-def _serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
-    """Convert a pump status dataclass into JSON-safe primitives."""
-    data = asdict(status)
-    # raw_payload and tail_raw are bytes; convert them to hex strings for JSON.
-    data["raw_payload"] = (
-        status.raw_payload.hex()
-        if getattr(status, "raw_payload", None)
-        else None
-    )
-    data["tail_raw"] = status.tail_raw.hex()
-    for head in data["heads"]:
-        head["extra"] = bytes(head["extra"]).hex()
-    return data
-
-
-def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
-    """Convert a light status snapshot to a serializable dictionary."""
-    data = {
-        "message_id": status.message_id,
-        "response_mode": status.response_mode,
-        "weekday": status.weekday,
-        "current_hour": status.current_hour,
-        "current_minute": status.current_minute,
-        # Include both the raw value (0..255) and a pre-computed percentage so the
-        # frontend doesn't need to perform the conversion. Keep the original
-        # fields for backward compatibility.
-        "keyframes": [
-            # Some firmware variants encode brightness as 0..255 (8-bit) while
-            # others use a 0..100 scale.  If the value is <= 100 we assume it's
-            # already a percentage and preserve it; otherwise scale from 0..255
-            # into 0..100 for convenience in the frontend.
-            {
-                **asdict(frame),
-                "percent": (
-                    int(round(frame.value))
-                    if frame.value is not None and frame.value <= 100
-                    else int(round((frame.value / 255) * 100))
-                ),
-            }
-            for frame in status.keyframes
-        ],
-        "time_markers": status.time_markers,
-        "tail": status.tail.hex(),
-        # Preserve the original raw payload bytes for parity with pump
-        # serialization. The frontend or diagnostic tooling may rely on
-        # this to show the raw frame that produced the parsed view.
-        "raw_payload": status.raw_payload.hex(),
-    }
-    return data
-
-
-def _cached_status_to_dict(status: CachedStatus) -> Dict[str, Any]:
-    """Transform a cached status into the API response structure."""
-    # Determine whether the service currently holds a live connection for this
-    # cached address.  This enables the frontend to show a connected/disconnected
-    # indicator and offer a reconnect action.
-    connected = False
-    if status.device_type == "doser":
-        connected = service.current_doser_address() == status.address
-    elif status.device_type == "light":
-        connected = service.current_light_address() == status.address
-
-    return {
-        "address": status.address,
-        "device_type": status.device_type,
-        "raw_payload": status.raw_payload,
-        "parsed": status.parsed,
-        "updated_at": status.updated_at,
-        "model_name": status.model_name,
-        "connected": connected,
-    }
+# Serializers were moved to `serializers.py` and used by API routers.
 
 
 service = BLEService()
 app = FastAPI(title="Chihiros BLE Service")
-
-PACKAGE_ROOT = Path(__file__).resolve().parent
-DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
-FRONTEND_DIST = Path(
-    os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
-)
-SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
-
-SPA_UNAVAILABLE_MESSAGE = (
-    "The TypeScript dashboard is unavailable. "
-    "Build the SPA (npm run build) or start the dev server (npm run dev) "
-    "before visiting '/' again."
-)
+# Expose service to routers via application state
+app.state.service = service
 
 ARCHIVED_TEMPLATE_MESSAGE = (
     "The legacy HTMX dashboard has been retired. Switch to the SPA at '/' "
     "or use the REST API under /api/*."
 )
-
-_DEV_SERVER_ENV = os.getenv("CHIHIROS_FRONTEND_DEV_SERVER", "").strip()
-if _DEV_SERVER_ENV == "0":
-    DEV_SERVER_CANDIDATES: tuple[httpx.URL, ...] = ()
-elif _DEV_SERVER_ENV:
-    DEV_SERVER_CANDIDATES = (httpx.URL(_DEV_SERVER_ENV.rstrip("/")),)
-else:
-    DEV_SERVER_CANDIDATES = (
-        httpx.URL("http://127.0.0.1:5173"),
-        httpx.URL("http://localhost:5173"),
-    )
-
-DEV_SERVER_TIMEOUT = httpx.Timeout(connect=1.0, read=5.0, write=5.0, pool=1.0)
-_HOP_HEADERS = {
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailers",
-    "transfer-encoding",
-    "upgrade",
-    "content-length",
-}
-
-if SPA_DIST_AVAILABLE:
-    assets_dir = FRONTEND_DIST / "assets"
-    if assets_dir.exists():
-        app.mount(
-            "/assets",
-            StaticFiles(directory=str(assets_dir)),
-            name="spa-assets",
-        )
+# Back-compat constants and helpers for tests
+SPA_UNAVAILABLE_MESSAGE = getattr(spa, "SPA_UNAVAILABLE_MESSAGE")
+SPA_DIST_AVAILABLE = getattr(spa, "SPA_DIST_AVAILABLE")
+FRONTEND_DIST = getattr(spa, "FRONTEND_DIST")
 
 
-class ConnectRequest(BaseModel):
-    """Payload for connecting a device to the service."""
-
-    address: str
+async def _proxy_dev_server(path: str) -> Response | None:
+    return await spa._proxy_dev_server(path)
 
 
-class DoserScheduleRequest(BaseModel):
-    """Request model for updating or creating a dosing schedule."""
-
-    head_index: int = Field(..., ge=0, le=3)
-    volume_tenths_ml: int = Field(..., ge=0, le=0xFF)
-    hour: int = Field(..., ge=0, le=23)
-    minute: int = Field(..., ge=0, le=59)
-    weekdays: list[doser_commands.Weekday] | None = None
-    confirm: bool = False
-    wait_seconds: float = Field(1.5, ge=0.0, le=30.0)
-
-    @validator("weekdays", pre=True)
-    def _normalize_weekdays(cls, value: Any) -> Any:
-        if value is None or value == []:
-            return None
-        if isinstance(value, doser_commands.Weekday):
-            return [value]
-        if isinstance(value, (str, int)):
-            value = [value]
-        if isinstance(value, (set, tuple)):
-            value = list(value)
-        if isinstance(value, list):
-            parsed: list[doser_commands.Weekday] = []
-            for item in value:
-                if isinstance(item, doser_commands.Weekday):
-                    parsed.append(item)
-                    continue
-                if isinstance(item, str):
-                    name = item.strip().lower()
-                    try:
-                        parsed.append(getattr(doser_commands.Weekday, name))
-                        continue
-                    except AttributeError as exc:
-                        raise ValueError(f"Unknown weekday '{item}'") from exc
-                if isinstance(item, int):
-                    try:
-                        parsed.append(doser_commands.Weekday(item))
-                        continue
-                    except ValueError as exc:
-                        raise ValueError(
-                            f"Invalid weekday value '{item}'"
-                        ) from exc
-                raise ValueError(
-                    "Weekday entries must be strings, integers, or "
-                    "Weekday enum values"
-                )
-            return parsed
-        raise ValueError("Weekdays must be provided as a sequence")
-
-
-class LightBrightnessRequest(BaseModel):
-    """Request model for setting light brightness or colour."""
-
-    brightness: int = Field(..., ge=0, le=100)
-    color: str | int = 0
+"""Mount SPA assets via helper module."""
+spa.mount_assets(app)
 
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_spa() -> Response:
-    """Serve the SPA entry point or emit guidance when it is unavailable."""
+    """Serve SPA index or proxy to dev server; mirrors legacy behavior for tests."""
+    # Use local constants to support monkeypatching in tests
     if SPA_DIST_AVAILABLE:
         index_path = FRONTEND_DIST / "index.html"
         if index_path.exists():
@@ -804,136 +677,10 @@ async def on_shutdown() -> None:
     await service.stop()
 
 
-@app.get("/api/status")
-async def get_status() -> Dict[str, Any]:
-    """Return cached status for all devices, without connecting or refreshing."""
-    snapshot = service.get_status_snapshot()
-    results = {}
-    for address, cached in snapshot.items():
-        results[address] = _cached_status_to_dict(cached)
-    return results
-
-
-@app.post("/api/debug/live-status")
-async def debug_live_status() -> Dict[str, Any]:
-    """Expose live payloads without updating the persisted cache."""
-    statuses, errors = await service.get_live_statuses()
-    return {
-        "statuses": [_cached_status_to_dict(status) for status in statuses],
-        "errors": errors,
-    }
-
-
-@app.get("/api/scan")
-async def scan_devices(timeout: float = 5.0) -> list[Dict[str, Any]]:
-    """Discover nearby supported devices and expose metadata."""
-    return await service.scan_devices(timeout=timeout)
-
-
-@app.post("/api/dosers/connect")
-async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
-    """Connect to a dosing pump and return its status payload."""
-    status = await service.connect_doser(request.address)
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/lights/connect")
-async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
-    """Connect to a light fixture and return its cached status."""
-    status = await service.connect_light(request.address)
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/devices/{address}/status")
-async def refresh_status(address: str) -> Dict[str, Any]:
-    """Request a fresh status frame for the connected device."""
-    status = await service.request_status(address)
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/devices/{address}/connect")
-async def reconnect_device(address: str) -> Dict[str, Any]:
-    """Attempt to (re)connect to a device and return its cached status.
-
-    The endpoint will attempt to use the cache to determine the device type; if the
-    address is not in the cache it will attempt discovery and connect accordingly.
-    """
-    # Try to use cached device_type first
-    cached = service.get_status_snapshot().get(address)
-    if cached:
-        if cached.device_type == "doser":
-            status = await service.connect_doser(address)
-            return _cached_status_to_dict(status)
-        if cached.device_type == "light":
-            status = await service.connect_light(address)
-            return _cached_status_to_dict(status)
-
-    # Fall back to discovery-based connect
-    try:
-        device = await get_device_from_address(address)
-    except Exception as exc:
-        raise HTTPException(status_code=404, detail="Device not found") from exc
-
-    if isinstance(device, Doser):
-        status = await service.connect_doser(address)
-        return _cached_status_to_dict(status)
-    if isinstance(device, LightDevice):
-        status = await service.connect_light(address)
-        return _cached_status_to_dict(status)
-
-    raise HTTPException(status_code=400, detail="Unsupported device type")
-
-
-@app.post("/api/dosers/{address}/schedule")
-async def set_doser_schedule(
-    address: str, payload: DoserScheduleRequest
-) -> Dict[str, Any]:
-    """Apply a schedule update via the REST API and return the cache."""
-    status = await service.set_doser_schedule(
-        address,
-        head_index=payload.head_index,
-        volume_tenths_ml=payload.volume_tenths_ml,
-        hour=payload.hour,
-        minute=payload.minute,
-        weekdays=payload.weekdays,
-        confirm=payload.confirm,
-        wait_seconds=payload.wait_seconds,
-    )
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/lights/{address}/brightness")
-async def set_light_brightness(
-    address: str, payload: LightBrightnessRequest
-) -> Dict[str, Any]:
-    """Set light brightness via the REST API and return cached state."""
-    status = await service.set_light_brightness(
-        address,
-        brightness=payload.brightness,
-        color=payload.color,
-    )
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/lights/{address}/on")
-async def turn_light_on(address: str) -> Dict[str, Any]:
-    """Turn on a connected light through the REST interface."""
-    status = await service.turn_light_on(address)
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/lights/{address}/off")
-async def turn_light_off(address: str) -> Dict[str, Any]:
-    """Turn off a connected light through the REST interface."""
-    status = await service.turn_light_off(address)
-    return _cached_status_to_dict(status)
-
-
-@app.post("/api/devices/{address}/disconnect")
-async def disconnect_device(address: str) -> Dict[str, str]:
-    """Disconnect whichever device is currently registered at ``address``."""
-    await service.disconnect_device(address)
-    return {"detail": "disconnected"}
+"""Include API routers for devices, dosers, and lights."""
+app.include_router(devices_router)
+app.include_router(dosers_router)
+app.include_router(lights_router)
 
 
 @app.api_route(
@@ -968,10 +715,9 @@ async def legacy_debug_archived(path: str = "") -> Response:
 
 @app.get("/{spa_path:path}", include_in_schema=False)
 async def serve_spa_assets(spa_path: str) -> Response:
-    """Serve built SPA assets or fallback to the index for client routes."""
+    """Serve SPA assets or proxy; mirrors legacy behavior for tests."""
     if not spa_path:
         raise HTTPException(status_code=404)
-
     first_segment = spa_path.split("/", 1)[0]
     if first_segment in {"api", "ui", "debug"} or spa_path in {
         "docs",
@@ -979,55 +725,64 @@ async def serve_spa_assets(spa_path: str) -> Response:
         "openapi.json",
     }:
         raise HTTPException(status_code=404)
-
     if not SPA_DIST_AVAILABLE:
         proxied = await _proxy_dev_server(f"/{spa_path}")
         if proxied is not None:
             return proxied
         raise HTTPException(status_code=404, detail="SPA bundle unavailable")
-
     asset_path = FRONTEND_DIST / spa_path
     if asset_path.is_file():
-        return FileResponse(asset_path)
+        # FileResponse takes a path; FastAPI will set .path attribute for tests
+        from fastapi.responses import FileResponse as _FileResponse
 
+        return _FileResponse(asset_path)
     if "." in spa_path:
         raise HTTPException(status_code=404)
-
     index_path = FRONTEND_DIST / "index.html"
     if index_path.exists():
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
-
     raise HTTPException(status_code=404)
 
 
-async def _proxy_dev_server(path: str) -> Response | None:
-    """Attempt to fetch ``path`` from the Vite dev server if available."""
-    if not DEV_SERVER_CANDIDATES:
-        return None
+async def debug_live_status() -> Dict[str, Any]:
+    """Expose live payloads without updating persisted cache (test helper)."""
+    statuses, errors = await service.get_live_statuses()
+    return {
+        "statuses": [cached_status_to_dict(service, s) for s in statuses],
+        "errors": errors,
+    }
 
-    normalized = path if path.startswith("/") else f"/{path}"
 
-    for base_url in DEV_SERVER_CANDIDATES:
-        try:
-            async with httpx.AsyncClient(
-                base_url=str(base_url), timeout=DEV_SERVER_TIMEOUT
-            ) as client:
-                response = await client.get(normalized, follow_redirects=True)
-        except httpx.HTTPError:
-            continue
+async def set_doser_schedule(
+    address: str, payload: "DoserScheduleRequest"
+) -> Dict[str, Any]:
+    """Back-compat endpoint wrapper used by tests."""
+    status = await service.set_doser_schedule(
+        address,
+        head_index=payload.head_index,
+        volume_tenths_ml=payload.volume_tenths_ml,
+        hour=payload.hour,
+        minute=payload.minute,
+        weekdays=payload.weekdays,
+        confirm=payload.confirm,
+        wait_seconds=payload.wait_seconds,
+    )
+    return cached_status_to_dict(service, status)
 
-        headers = {
-            key: value
-            for key, value in response.headers.items()
-            if key.lower() not in _HOP_HEADERS
-        }
-        return Response(
-            content=response.content,
-            status_code=response.status_code,
-            headers=headers,
-        )
 
-    return None
+async def set_light_brightness(
+    address: str, payload: "LightBrightnessRequest"
+) -> Dict[str, Any]:
+    """Back-compat endpoint wrapper used by tests."""
+    status = await service.set_light_brightness(
+        address,
+        brightness=payload.brightness,
+        color=payload.color,
+    )
+    return cached_status_to_dict(service, status)
+
+
+"""Proxy logic moved to spa helper module."""
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper

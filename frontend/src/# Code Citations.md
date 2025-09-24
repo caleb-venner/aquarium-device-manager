@@ -168,7 +168,7 @@ https://github.com/mnutt/limecast/blob/6a00b0c9d94c49689ba0d201e9629eb912092dcd/
 
 ```
 function escapeHtml(value: string): string {
- 
+
 ```
 
 
@@ -177,7 +177,7 @@ https://github.com/gamelayers/pmog-chat/blob/ea97521a83116e18276509c738872b03157
 
 ```
 function escapeHtml(value: string): string {
- 
+
 ```
 
 
@@ -186,7 +186,7 @@ https://github.com/wyatt-herkamp/nitro_repo/blob/f05834ad329efd887b68921510627a5
 
 ```
 function escapeHtml(value: string): string {
- 
+
 ```
 
 
@@ -280,7 +280,7 @@ https://github.com/mnutt/limecast/blob/6a00b0c9d94c49689ba0d201e9629eb912092dcd/
 ```
 function escapeHtml(value: string): string {
   return value
-   
+
 ```
 
 
@@ -290,7 +290,7 @@ https://github.com/gamelayers/pmog-chat/blob/ea97521a83116e18276509c738872b03157
 ```
 function escapeHtml(value: string): string {
   return value
-   
+
 ```
 
 
@@ -300,7 +300,7 @@ https://github.com/wyatt-herkamp/nitro_repo/blob/f05834ad329efd887b68921510627a5
 ```
 function escapeHtml(value: string): string {
   return value
-   
+
 ```
 
 
@@ -675,7 +675,7 @@ https://github.com/mnutt/limecast/blob/6a00b0c9d94c49689ba0d201e9629eb912092dcd/
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
-   
+
 ```
 
 
@@ -686,7 +686,7 @@ https://github.com/gamelayers/pmog-chat/blob/ea97521a83116e18276509c738872b03157
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
-   
+
 ```
 
 
@@ -697,7 +697,7 @@ https://github.com/tokuhirom/64p.org-orig-orig/blob/0119328d9e8af599726fbaf973ca
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
-   
+
 ```
 
 
@@ -708,7 +708,7 @@ https://github.com/wyatt-herkamp/nitro_repo/blob/f05834ad329efd887b68921510627a5
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
-   
+
 ```
 
 
@@ -1164,7 +1164,7 @@ function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-   
+
 ```
 
 
@@ -1176,7 +1176,7 @@ function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-   
+
 ```
 
 
@@ -1188,7 +1188,7 @@ function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-   
+
 ```
 
 
@@ -1200,7 +1200,7 @@ function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-   
+
 ```
 
 
@@ -1697,7 +1697,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-   
+
 ```
 
 
@@ -1710,7 +1710,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-   
+
 ```
 
 
@@ -1723,7 +1723,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-   
+
 ```
 
 
@@ -1736,7 +1736,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-   
+
 ```
 
 
@@ -2274,7 +2274,7 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-   
+
 ```
 
 
@@ -2288,7 +2288,7 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-   
+
 ```
 
 
@@ -2302,7 +2302,7 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-   
+
 ```
 
 
@@ -2316,7 +2316,7 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-   
+
 ```
 
 
@@ -2878,4 +2878,3 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
 ```
-
