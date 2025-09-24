@@ -14,9 +14,6 @@ Chihiros Device Manager currently contains the historically shipped python **CLI
 - other LED models might work as well but are not tested
 
 
-## Archived Home Assistant integration
-The original Home Assistant integration (including manifests, translations, and setup flow) has been moved to `archive/home_assistant/` for reference. It is no longer maintained or packaged with the active application.
-
 ## Requirements
 - a device with bluetooth LE support for sending the commands to the LED
 - [Python 3](https://www.python.org/downloads/) with pip
@@ -85,8 +82,34 @@ chihiros-service
 
 Environment variables `CHIHIROS_SERVICE_HOST` and `CHIHIROS_SERVICE_PORT`
 override the default listen address (`0.0.0.0:8000`). Once running, visit
-`http://localhost:8000/ui` for the HTMX dashboard or use the `/api/*`
-endpoints directly.
+`http://localhost:8000/` for the new TypeScript dashboard (if built) or
+`http://localhost:8000/ui` to keep using the legacy HTMX interface. All
+capabilities remain exposed under the `/api/*` endpoints.
+
+## Frontend development (TypeScript SPA)
+
+The project now ships with an experimental SPA scaffold under the
+`frontend/` directory. It consumes the same REST endpoints exposed by the
+FastAPI service and will ultimately replace the HTMX templates.
+
+Install dependencies and launch the Vite dev server (proxying API requests to
+the Python backend running on port 8000):
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Create a production build before packaging or running inside Docker:
+
+```bash
+npm run build
+```
+
+By default the FastAPI app serves the compiled bundle from
+`frontend/dist`. If the assets live elsewhere, point the service at the
+correct directory via the `CHIHIROS_FRONTEND_DIST` environment variable.
 
 ## Docker usage
 

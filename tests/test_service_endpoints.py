@@ -13,7 +13,6 @@ from chihiros_device_manager.service import CachedStatus, app, service
 
 
 def _cached(device_type: str = "doser") -> CachedStatus:
-    """Return a dummy CachedStatus for testing."""
     return CachedStatus(
         address="AA:BB:CC:DD:EE:FF",
         device_type=device_type,
@@ -25,8 +24,6 @@ def _cached(device_type: str = "doser") -> CachedStatus:
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """Fixture for FastAPI test client with service monkeypatches."""
-
     async def _noop() -> None:
         return None
 
@@ -40,7 +37,6 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 def test_api_doser_schedule_normalizes_weekdays(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test doser schedule endpoint normalizes weekday strings."""
     mocked = AsyncMock(return_value=_cached("doser"))
     monkeypatch.setattr(service, "set_doser_schedule", mocked)
 
@@ -76,7 +72,6 @@ def test_api_doser_schedule_normalizes_weekdays(
 def test_api_light_brightness_passes_payload(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test light brightness endpoint passes payload correctly."""
     mocked = AsyncMock(return_value=_cached("light"))
     monkeypatch.setattr(service, "set_light_brightness", mocked)
 
@@ -95,7 +90,6 @@ def test_api_light_brightness_passes_payload(
 def test_service_set_light_brightness_coerces_numeric_color(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test service coerces color to int for light brightness."""
     fake_light = type("FakeLight", (), {})()
     fake_light.set_color_brightness = AsyncMock()
 

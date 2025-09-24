@@ -1,0 +1,1032 @@
+diff --git a/.gitignore b/.gitignore
+index 98fd9f005983a482e628d5a7e37c65b4485f8e6b..f33f9028b2802097684ba2a3a01cdc2b007cafb1 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -1,27 +1,33 @@
+ .DS_Store
+
++# Node / frontend builds
++node_modules/
++frontend/node_modules/
++frontend/dist/
++frontend/.vite/
++
+ # Byte-compiled / optimized / DLL files
+ __pycache__/
+ *.py[cod]
+ *$py.class
+
+ # C extensions
+ *.so
+
+ # Distribution / packaging
+ .Python
+ build/
+ develop-eggs/
+ dist/
+ downloads/
+ eggs/
+ .eggs/
+ lib/
+ lib64/
+ parts/
+ sdist/
+ var/
+ wheels/
+ share/python-wheels/
+ *.egg-info/
+ .installed.cfg
+diff --git a/Dockerfile b/Dockerfile
+index 96789a9cf0e99b54b19ce72a875a866fb28b0b8e..472d7ea01848e7eac7971bfcd80eb066a972043c 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -1,25 +1,36 @@
+ # syntax=docker/dockerfile:1.7
++FROM node:20-alpine AS frontend-build
++
++WORKDIR /app
++COPY frontend/package*.json ./
++RUN npm install
++COPY frontend/ ./
++RUN npm run build
++
+ FROM python:3.12-slim AS base
+
+ ENV PYTHONUNBUFFERED=1 \
+     PIP_NO_CACHE_DIR=1 \
+     APP_HOME=/app
+
+ WORKDIR ${APP_HOME}
+
+ # Install system dependencies required for BLE (bluez provides bluetooth tooling)
+ RUN apt-get update \
+     && apt-get install -y --no-install-recommends bluez \
+     && rm -rf /var/lib/apt/lists/*
+
+ # Install python requirements
+ COPY pyproject.toml setup.cfg README.md ./
+ COPY src ./src
+ COPY tools ./tools
++COPY --from=frontend-build /app/dist ./frontend/dist
+
+ RUN pip install --upgrade pip \
+     && pip install --no-cache-dir .
+
++ENV CHIHIROS_FRONTEND_DIST="/app/frontend/dist"
++
+ EXPOSE 8000
+
+ CMD ["uvicorn", "chihiros_device_manager.service:app", "--host", "0.0.0.0", "--port", "8000"]
+diff --git a/README.md b/README.md
+index f496788360cd0fbda8d5d4e5d16e7cf5b3483c59..84b994ec6a9c2f02caa277ea40cdbd417fea00fb 100644
+--- a/README.md
++++ b/README.md
+@@ -1,44 +1,41 @@
+ # Chihiros Device Manager
+
+ Maintained by **Caleb Venner**. This project builds on the open-source work published as [Chihiros LED Control](https://github.com/TheMicDiet/chihiros-led-control) by Michael Dietrich. The original project is licensed under MIT; all redistributions of this codebase continue to honour that license and retain the upstream attribution.
+
+ Chihiros Device Manager currently contains the historically shipped python **CLI** tooling alongside a new FastAPI-based BLE service for managing Chihiros Bluetooth devices. The near-term roadmap focuses on a standalone service and accompanying Docker packaging.
+
+ ## Supported Devices
+ - [Chihiros LED A2](https://www.chihirosaquaticstudio.com/products/chihiros-a-ii-built-in-bluetooth)
+ - [Chihiros WRGB II](https://www.chihirosaquaticstudio.com/products/chihiros-wrgb-ii-led-built-in-bluetooth) (Regular, Pro, Slim)
+ - Chihiros Tiny Terrarium Egg
+ - Chihiros C II (RGB, White)
+ - Chihiros Universal WRGB
+ - Chihiros Z Light TINY
+ - other LED models might work as well but are not tested
+
+
+-## Archived Home Assistant integration
+-The original Home Assistant integration (including manifests, translations, and setup flow) has been moved to `archive/home_assistant/` for reference. It is no longer maintained or packaged with the active application.
+-
+ ## Requirements
+ - a device with bluetooth LE support for sending the commands to the LED
+ - [Python 3](https://www.python.org/downloads/) with pip
+
+ ## Using the CLI
+ ```bash
+ # setup the environment
+ python -m venv venv
+ source venv/bin/activate
+ pip install -e .
+
+ # show help
+ chihirosctl --help
+
+ # discover devices and their address
+ chihirosctl list-devices
+
+ # turn on the device
+ chihirosctl turn-on <device-address>
+
+ # turn off the device
+ chihirosctl turn-off <device-address>
+
+ # manually set the brightness to 100
+ chihirosctl set-brightness <device-address> 100
+@@ -63,52 +60,78 @@ chihirosctl add-rgb-setting <device-address> 9:00 18:00 --weekdays monday --week
+ # enable auto mode to activate the created timed settings
+ chihirosctl enable-auto-mode <device-address>
+
+ # delete a created setting
+ chihirosctl delete-setting <device-address> 8:00 18:00
+
+ # reset all created settings
+ chihirosctl reset-settings <device-address>
+
+ ```
+
+ ## Running the BLE web service
+
+ Install the package and launch the bundled FastAPI/Uvicorn entrypoint:
+
+ ```bash
+ python -m venv venv
+ source venv/bin/activate
+ pip install -e .
+
+ chihiros-service
+ ```
+
+ Environment variables `CHIHIROS_SERVICE_HOST` and `CHIHIROS_SERVICE_PORT`
+ override the default listen address (`0.0.0.0:8000`). Once running, visit
+-`http://localhost:8000/ui` for the HTMX dashboard or use the `/api/*`
+-endpoints directly.
++`http://localhost:8000/` for the new TypeScript dashboard (if built) or
++`http://localhost:8000/ui` to keep using the legacy HTMX interface. All
++capabilities remain exposed under the `/api/*` endpoints.
++
++## Frontend development (TypeScript SPA)
++
++The project now ships with an experimental SPA scaffold under the
++`frontend/` directory. It consumes the same REST endpoints exposed by the
++FastAPI service and will ultimately replace the HTMX templates.
++
++Install dependencies and launch the Vite dev server (proxying API requests to
++the Python backend running on port 8000):
++
++```bash
++cd frontend
++npm install
++npm run dev
++```
++
++Create a production build before packaging or running inside Docker:
++
++```bash
++npm run build
++```
++
++By default the FastAPI app serves the compiled bundle from
++`frontend/dist`. If the assets live elsewhere, point the service at the
++correct directory via the `CHIHIROS_FRONTEND_DIST` environment variable.
+
+ ## Docker usage
+
+ Build and run the service inside a container:
+
+ ```bash
+ docker build -t chihiros-service .
+
+ docker run \
+   --rm \
+   --name chihiros-service \
+   --net=host \
+   --cap-add=NET_ADMIN \
+   --cap-add=SYS_ADMIN \
+   --device /dev/bus/usb \
+   chihiros-service
+ ```
+
+ Containerised BLE access often requires forwarding the host adapter or
+ running with elevated capabilities; adjust the `docker run` flags to suit
+ your environment.
+
+ ## Protocol
+ The vendor app uses Bluetooth LE to communicate with the LED. The LED advertises a UART service with the UUID `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`. This service contains a RX characteristic with the UUID `6E400002-B5A3-F393-E0A9-E50E24DCCA9E`. This characteristic can be used to send commands to the LED. The LED will respond to commands by sending a notification to the corresponding TX service with the UUID `6E400003-B5A3-F393-E0A9-E50E24DCCA9E`.
+
+diff --git a/frontend/index.html b/frontend/index.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..5bef3f34ef92eb539a8fff24a280343a9146256d
+--- /dev/null
++++ b/frontend/index.html
+@@ -0,0 +1,12 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="utf-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>Chihiros Device Manager</title>
++  </head>
++  <body>
++    <div id="app"></div>
++    <script type="module" src="/src/main.ts"></script>
++  </body>
++</html>
+diff --git a/frontend/package.json b/frontend/package.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..ed34481ed00a57a4ead73776b837a35b710f9112
+--- /dev/null
++++ b/frontend/package.json
+@@ -0,0 +1,19 @@
++{
++  "name": "chihiros-device-manager-frontend",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite",
++    "build": "vite build",
++    "preview": "vite preview"
++  },
++  "dependencies": {
++    "axios": "^1.6.7"
++  },
++  "devDependencies": {
++    "@types/node": "^20.11.20",
++    "typescript": "^5.4.2",
++    "vite": "^5.1.4"
++  }
++}
+diff --git a/frontend/src/main.ts b/frontend/src/main.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff145885deced0ca61f410ecd285f03e0374c61e
+--- /dev/null
++++ b/frontend/src/main.ts
+@@ -0,0 +1,117 @@
++import axios from "axios";
++import "./style.css";
++
++type DeviceStatus = {
++  device_type: string;
++  raw_payload: string | null;
++  parsed: Record<string, unknown> | null;
++  updated_at: number;
++};
++
++type StatusResponse = Record<string, DeviceStatus>;
++
++const app = document.querySelector<HTMLDivElement>("#app");
++
++function formatTimestamp(timestamp: number): string {
++  const date = new Date(timestamp * 1000);
++  return date.toLocaleString();
++}
++
++function renderStatus(data: StatusResponse): void {
++  if (!app) {
++    return;
++  }
++
++  const entries = Object.entries(data);
++  if (entries.length === 0) {
++    app.innerHTML = `
++      <main class="empty">
++        <h1>Chihiros Device Manager</h1>
++        <p>No devices are currently connected.</p>
++      </main>
++    `;
++    return;
++  }
++
++  const content = entries
++    .map(([address, status]) => {
++      const parsed = status.parsed
++        ? `<pre>${JSON.stringify(status.parsed, null, 2)}</pre>`
++        : "<em>No parsed payload</em>";
++
++      const raw = status.raw_payload
++        ? `<code>${status.raw_payload}</code>`
++        : "<em>No raw payload</em>";
++
++      return `
++        <section class="device">
++          <header>
++            <h2>${address}</h2>
++            <span class="badge">${status.device_type}</span>
++          </header>
++          <dl>
++            <div>
++              <dt>Last Update</dt>
++              <dd>${formatTimestamp(status.updated_at)}</dd>
++            </div>
++            <div>
++              <dt>Raw Payload</dt>
++              <dd>${raw}</dd>
++            </div>
++            <div>
++              <dt>Parsed</dt>
++              <dd>${parsed}</dd>
++            </div>
++          </dl>
++        </section>
++      `;
++    })
++    .join("\n");
++
++  app.innerHTML = `
++    <main>
++      <header class="page-header">
++        <h1>Chihiros Device Manager</h1>
++        <button id="refresh">Refresh</button>
++      </header>
++      <section class="device-grid">${content}</section>
++    </main>
++  `;
++
++  const refreshButton = document.querySelector<HTMLButtonElement>("#refresh");
++  if (refreshButton) {
++    refreshButton.addEventListener("click", loadStatus);
++  }
++}
++
++function renderError(error: unknown): void {
++  if (!app) {
++    return;
++  }
++
++  const message =
++    error instanceof Error ? error.message : "Unknown error fetching status";
++  app.innerHTML = `
++    <main class="error">
++      <h1>Chihiros Device Manager</h1>
++      <p>${message}</p>
++      <button id="retry">Retry</button>
++    </main>
++  `;
++
++  const retry = document.querySelector<HTMLButtonElement>("#retry");
++  if (retry) {
++    retry.addEventListener("click", loadStatus);
++  }
++}
++
++async function loadStatus(): Promise<void> {
++  try {
++    const response = await axios.get<StatusResponse>("/api/status");
++    renderStatus(response.data);
++  } catch (error) {
++    renderError(error);
++  }
++}
++
++loadStatus().catch(renderError);
+diff --git a/frontend/src/style.css b/frontend/src/style.css
+new file mode 100644
+index 0000000000000000000000000000000000000000..90166c03074ff5cd7c37c9a71819f2ec83cd5466
+--- /dev/null
++++ b/frontend/src/style.css
+@@ -0,0 +1,136 @@
++:root {
++  color-scheme: light dark;
++  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
++    sans-serif;
++  line-height: 1.5;
++  font-weight: 400;
++  background-color: #0f172a;
++  color: #e2e8f0;
++}
++
++body {
++  margin: 0;
++  min-height: 100vh;
++}
++
++main {
++  margin: 0 auto;
++  padding: 2rem;
++  max-width: 960px;
++  display: flex;
++  flex-direction: column;
++  gap: 2rem;
++}
++
++.page-header {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  gap: 1rem;
++}
++
++.page-header h1 {
++  margin: 0;
++  font-size: 2rem;
++}
++
++button {
++  background: #22d3ee;
++  color: #0f172a;
++  border: none;
++  border-radius: 999px;
++  padding: 0.5rem 1.5rem;
++  font-size: 1rem;
++  font-weight: 600;
++  cursor: pointer;
++  transition: transform 0.15s ease, box-shadow 0.15s ease;
++}
++
++button:hover {
++  transform: translateY(-1px);
++  box-shadow: 0 10px 30px rgba(34, 211, 238, 0.35);
++}
++
++.device-grid {
++  display: grid;
++  gap: 1.5rem;
++}
++
++.device {
++  background: rgba(15, 23, 42, 0.65);
++  border: 1px solid rgba(148, 163, 184, 0.2);
++  border-radius: 1rem;
++  padding: 1.5rem;
++  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
++}
++
++.device header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 1rem;
++}
++
++.device h2 {
++  margin: 0;
++  font-size: 1.25rem;
++}
++
++.badge {
++  background: rgba(34, 211, 238, 0.15);
++  color: #22d3ee;
++  padding: 0.25rem 0.75rem;
++  border-radius: 999px;
++  font-size: 0.875rem;
++  text-transform: uppercase;
++  letter-spacing: 0.08em;
++}
++
++dl {
++  margin: 1rem 0 0;
++  display: grid;
++  gap: 0.75rem;
++}
++
++dl div {
++  display: grid;
++  gap: 0.25rem;
++}
++
++dl dt {
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.08em;
++  font-size: 0.75rem;
++  color: rgba(226, 232, 240, 0.8);
++}
++
++dl dd {
++  margin: 0;
++  font-family: "JetBrains Mono", "Fira Code", "SFMono-Regular", monospace;
++  background: rgba(15, 23, 42, 0.85);
++  border-radius: 0.75rem;
++  padding: 0.75rem;
++  border: 1px solid rgba(148, 163, 184, 0.25);
++}
++
++pre {
++  margin: 0;
++  white-space: pre-wrap;
++}
++
++code {
++  word-break: break-all;
++}
++
++.empty,
++.error {
++  text-align: center;
++  gap: 1rem;
++}
++
++.empty h1,
++.error h1 {
++  margin: 0;
++  font-size: 2.5rem;
++}
+diff --git a/frontend/tsconfig.json b/frontend/tsconfig.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..b73918ebdc280c5a89f22da9caf162f783d8edb9
+--- /dev/null
++++ b/frontend/tsconfig.json
+@@ -0,0 +1,18 @@
++{
++  "compilerOptions": {
++    "target": "ESNext",
++    "useDefineForClassFields": true,
++    "module": "ESNext",
++    "moduleResolution": "Node",
++    "strict": true,
++    "allowJs": false,
++    "esModuleInterop": true,
++    "forceConsistentCasingInFileNames": true,
++    "isolatedModules": true,
++    "resolveJsonModule": true,
++    "lib": ["ESNext", "DOM", "DOM.Iterable"],
++    "types": ["vite/client"]
++  },
++  "include": ["src"],
++  "references": [{ "path": "./tsconfig.node.json" }]
++}
+diff --git a/frontend/tsconfig.node.json b/frontend/tsconfig.node.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..c17b816a22cdbd8f568ad6c18efbc14dd6c3aa77
+--- /dev/null
++++ b/frontend/tsconfig.node.json
+@@ -0,0 +1,10 @@
++{
++  "compilerOptions": {
++    "composite": true,
++    "module": "ESNext",
++    "moduleResolution": "Node",
++    "allowSyntheticDefaultImports": true,
++    "types": ["node"]
++  },
++  "include": ["vite.config.ts"]
++}
+diff --git a/frontend/vite.config.ts b/frontend/vite.config.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..7f37f8a7e3ddb55bc5298fd069aefbc49df69fc1
+--- /dev/null
++++ b/frontend/vite.config.ts
+@@ -0,0 +1,16 @@
++import { defineConfig } from "vite";
++
++export default defineConfig({
++  root: ".",
++  server: {
++    port: 5173,
++    host: "0.0.0.0",
++    proxy: {
++      "/api": "http://localhost:8000"
++    }
++  },
++  build: {
++    outDir: "dist",
++    sourcemap: true
++  }
++});
+diff --git a/setup.cfg b/setup.cfg
+index e0082a6b90a1c7448fd1c66b4c2f3cf812f3c0c1..6299825e80102bd163a8df009f999b95881199d0 100644
+--- a/setup.cfg
++++ b/setup.cfg
+@@ -1,17 +1,18 @@
+ # Setuptools v62.3 doesn't support editable installs with just 'pyproject.toml' (PEP 660).
+ # Keep this file until it does!
+
+ [metadata]
+ url = https://github.com/calebvenner/chihiros-device-manager
+
+ # https://github.com/renovatebot/renovate/issues/10187
+ [options]
+ install_requires =
+     bleak==0.22.3
+     bleak_retry_connector==3.9.0
+     typer[all]==0.15.2
+     rich==13.9.4
+     fastapi==0.115.0
+     uvicorn[standard]==0.30.5
+     jinja2==3.1.4
+     python-multipart==0.0.9
++    httpx==0.27.2
+diff --git a/src/chihiros_device_manager/service.py b/src/chihiros_device_manager/service.py
+index 5533be80afa2742e3f1a87db07a026b0e8bcd1d8..6e0d8b0ddfd32b754417ccdc3bce178678aa356c 100644
+--- a/src/chihiros_device_manager/service.py
++++ b/src/chihiros_device_manager/service.py
+@@ -1,40 +1,41 @@
+ """Background REST service for managing Chihiros BLE devices."""
+
+ from __future__ import annotations
+
+ import asyncio
+ import json
+ import os
+ import time
+ from dataclasses import asdict, dataclass
+ from datetime import datetime
+ from pathlib import Path
+ from typing import Any, Dict, Optional, Sequence
+
+ from fastapi import FastAPI, Form, HTTPException, Request
+-from fastapi.responses import HTMLResponse
++from fastapi.responses import HTMLResponse, RedirectResponse
++from fastapi.staticfiles import StaticFiles
+ from fastapi.templating import Jinja2Templates
+ from pydantic import BaseModel, Field, ValidationError, validator
+
+ try:
+     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
+ except ImportError:  # pragma: no cover - fallback if library changes
+
+     class BleakNotFoundError(Exception):
+         """Placeholder when bleak_retry_connector is unavailable."""
+
+         pass
+
+     class BleakConnectionError(Exception):
+         """Placeholder when bleak_retry_connector is unavailable."""
+
+         pass
+
+
+ from . import api, doser_commands
+ from .device import Doser, LightDevice, get_device_from_address
+ from .doser_status import PumpStatus, parse_status_payload
+ from .light_status import ParsedLightStatus, parse_light_status
+
+ STATE_PATH = Path.home() / ".chihiros_state.json"
+ AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
+@@ -414,108 +415,140 @@ def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
+ def _cached_status_to_dict(status: CachedStatus) -> Dict[str, Any]:
+     return {
+         "address": status.address,
+         "device_type": status.device_type,
+         "raw_payload": status.raw_payload,
+         "parsed": status.parsed,
+         "updated_at": status.updated_at,
+     }
+
+
+ def _format_timestamp(value: float | None) -> str:
+     if not value:
+         return "—"
+     try:
+         return datetime.fromtimestamp(value).strftime("%Y-%m-%d %H:%M:%S")
+     except Exception:
+         return str(value)
+
+
+ service = BLEService()
+ app = FastAPI(title="Chihiros BLE Service")
+ templates = Jinja2Templates(
+     directory=str(Path(__file__).resolve().parent / "templates")
+ )
+
++PACKAGE_ROOT = Path(__file__).resolve().parent
++DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
++FRONTEND_DIST = Path(
++    os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
++)
++SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
++
++if SPA_DIST_AVAILABLE:
++    assets_dir = FRONTEND_DIST / "assets"
++    if assets_dir.exists():
++        app.mount(
++            "/assets",
++            StaticFiles(directory=str(assets_dir)),
++            name="spa-assets",
++        )
++
+
+ class ConnectRequest(BaseModel):
++    """Payload for connecting a device to the service."""
++
+     address: str
+
+
+ class DoserScheduleRequest(BaseModel):
++    """Request model for updating or creating a dosing schedule."""
++
+     head_index: int = Field(..., ge=0, le=3)
+     volume_tenths_ml: int = Field(..., ge=0, le=0xFF)
+     hour: int = Field(..., ge=0, le=23)
+     minute: int = Field(..., ge=0, le=59)
+     weekdays: list[doser_commands.Weekday] | None = None
+     confirm: bool = False
+     wait_seconds: float = Field(1.5, ge=0.0, le=30.0)
+
+     @validator("weekdays", pre=True)
+     def _normalize_weekdays(cls, value: Any) -> Any:
+         if value is None or value == []:
+             return None
+         if isinstance(value, doser_commands.Weekday):
+             return [value]
+         if isinstance(value, (str, int)):
+             value = [value]
+         if isinstance(value, (set, tuple)):
+             value = list(value)
+         if isinstance(value, list):
+             parsed: list[doser_commands.Weekday] = []
+             for item in value:
+                 if isinstance(item, doser_commands.Weekday):
+                     parsed.append(item)
+                     continue
+                 if isinstance(item, str):
+                     name = item.strip().lower()
+                     try:
+                         parsed.append(getattr(doser_commands.Weekday, name))
+                         continue
+                     except AttributeError as exc:
+                         raise ValueError(f"Unknown weekday '{item}'") from exc
+                 if isinstance(item, int):
+                     try:
+                         parsed.append(doser_commands.Weekday(item))
+                         continue
+                     except ValueError as exc:
+                         raise ValueError(
+                             f"Invalid weekday value '{item}'"
+                         ) from exc
+                 raise ValueError(
+                     "Weekday entries must be strings, integers, or "
+                     "Weekday enum values"
+                 )
+             return parsed
+         raise ValueError("Weekdays must be provided as a sequence")
+
+
+ class LightBrightnessRequest(BaseModel):
++    """Request model for setting light brightness or colour."""
++
+     brightness: int = Field(..., ge=0, le=100)
+     color: str | int = 0
+
+
++@app.get("/", response_class=HTMLResponse)
++async def serve_spa() -> HTMLResponse:
++    """Serve the SPA entry point or fall back to the legacy dashboard."""
++    if SPA_DIST_AVAILABLE:
++        index_path = FRONTEND_DIST / "index.html"
++        if index_path.exists():
++            return HTMLResponse(index_path.read_text(encoding="utf-8"))
++    return RedirectResponse(url="/ui")
++
++
+ @app.on_event("startup")
+ async def on_startup() -> None:
+     await service.start()
+
+
+ @app.on_event("shutdown")
+ async def on_shutdown() -> None:
+     await service.stop()
+
+
+ @app.get("/api/status")
+ async def get_status() -> Dict[str, Any]:
+     return {
+         address: {
+             "device_type": status.device_type,
+             "raw_payload": status.raw_payload,
+             "parsed": status.parsed,
+             "updated_at": status.updated_at,
+         }
+         for address, status in service.get_status_snapshot().items()
+     }
+
+
+ @app.get("/api/scan")
+ async def scan_devices(timeout: float = 5.0) -> list[Dict[str, Any]]:
+diff --git a/tests/test_service_endpoints.py b/tests/test_service_endpoints.py
+index 1a2df1c5466a90bbb71828b0b21a67b095b431bc..f24764c68478bdc2b6b9081a72c5b3f89b0b2cd4 100644
+--- a/tests/test_service_endpoints.py
++++ b/tests/test_service_endpoints.py
+@@ -1,110 +1,150 @@
+ """Tests for the FastAPI endpoints and service helpers."""
+
+ from __future__ import annotations
+
+ import asyncio
++from pathlib import Path
+ from unittest.mock import AsyncMock
+
+ import pytest
+-from fastapi.testclient import TestClient
+
+ from chihiros_device_manager import doser_commands
+-from chihiros_device_manager.service import CachedStatus, app, service
++from chihiros_device_manager.service import (
++    CachedStatus,
++    DoserScheduleRequest,
++    LightBrightnessRequest,
++    serve_spa,
++    service,
++    set_doser_schedule,
++    set_light_brightness,
++)
+
+
+ def _cached(device_type: str = "doser") -> CachedStatus:
++    """Return a populated CachedStatus for use in tests."""
+     return CachedStatus(
+         address="AA:BB:CC:DD:EE:FF",
+         device_type=device_type,
+         raw_payload="deadbeef",
+         parsed={"example": True},
+         updated_at=123.456,
+     )
+
+
+-@pytest.fixture()
+-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+-    async def _noop() -> None:
+-        return None
++async def _noop() -> None:
++    """Asynchronous placeholder used when patching service lifecycle."""
+
++
++@pytest.fixture(autouse=True)
++def patch_service_lifecycle(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Avoid touching real BLE hardware during tests."""
+     monkeypatch.setattr(service, "start", _noop)
+     monkeypatch.setattr(service, "stop", _noop)
+
+-    with TestClient(app) as test_client:
+-        yield test_client
+-
+
+ def test_api_doser_schedule_normalizes_weekdays(
+-    client: TestClient, monkeypatch: pytest.MonkeyPatch
++    monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
++    """Ensure schedule endpoint coerces weekday payloads correctly."""
+     mocked = AsyncMock(return_value=_cached("doser"))
+     monkeypatch.setattr(service, "set_doser_schedule", mocked)
+
+-    response = client.post(
+-        "/api/dosers/AA:AA:AA:AA:AA:AA/schedule",
+-        json={
+-            "head_index": 1,
+-            "volume_tenths_ml": 25,
+-            "hour": 6,
+-            "minute": 30,
+-            "weekdays": ["monday", "wednesday"],
+-            "confirm": True,
+-            "wait_seconds": 2.0,
+-        },
++    payload = DoserScheduleRequest(
++        head_index=1,
++        volume_tenths_ml=25,
++        hour=6,
++        minute=30,
++        weekdays=["monday", "wednesday"],
++        confirm=True,
++        wait_seconds=2.0,
+     )
+
+-    assert response.status_code == 200
+-    assert response.json()["device_type"] == "doser"
++    result = asyncio.run(
++        set_doser_schedule("AA:AA:AA:AA:AA:AA", payload=payload)
++    )
++
++    assert result["device_type"] == "doser"
+     mocked.assert_awaited_once()
+     call_kwargs = mocked.await_args.kwargs
+     assert call_kwargs["head_index"] == 1
+     assert call_kwargs["volume_tenths_ml"] == 25
+     assert call_kwargs["hour"] == 6
+     assert call_kwargs["minute"] == 30
+     assert call_kwargs["wait_seconds"] == 2.0
+     assert call_kwargs["confirm"] is True
+     assert call_kwargs["weekdays"] == [
+         doser_commands.Weekday.monday,
+         doser_commands.Weekday.wednesday,
+     ]
+
+
+ def test_api_light_brightness_passes_payload(
+-    client: TestClient, monkeypatch: pytest.MonkeyPatch
++    monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
++    """Verify light brightness endpoint forwards arguments as provided."""
+     mocked = AsyncMock(return_value=_cached("light"))
+     monkeypatch.setattr(service, "set_light_brightness", mocked)
+
+-    response = client.post(
+-        "/api/lights/11:22:33:44:55:66/brightness",
+-        json={"brightness": 75, "color": "1"},
++    payload = LightBrightnessRequest(brightness=75, color="1")
++    result = asyncio.run(
++        set_light_brightness("11:22:33:44:55:66", payload=payload)
+     )
+
+-    assert response.status_code == 200
++    assert result["device_type"] == "light"
+     mocked.assert_awaited_once()
+     call_kwargs = mocked.await_args.kwargs
+     assert call_kwargs["brightness"] == 75
+     assert call_kwargs["color"] == "1"
+
+
+ def test_service_set_light_brightness_coerces_numeric_color(
+     monkeypatch: pytest.MonkeyPatch,
+ ) -> None:
++    """Convert numeric colour strings to integers before forwarding."""
+     fake_light = type("FakeLight", (), {})()
+     fake_light.set_color_brightness = AsyncMock()
+
+     cached = _cached("light")
+
+     monkeypatch.setattr(
+         service, "_ensure_light", AsyncMock(return_value=fake_light)
+     )
+     monkeypatch.setattr(
+         service, "_refresh_light_status", AsyncMock(return_value=cached)
+     )
+
+     result = asyncio.run(
+         service.set_light_brightness("AA:BB", brightness=80, color="2")
+     )
+
+     fake_light.set_color_brightness.assert_awaited_once_with(80, 2)
+     assert result is cached
++
++
++def test_root_redirects_when_spa_missing(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Redirect to the legacy dashboard when the SPA bundle is absent."""
++    monkeypatch.setattr(
++        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
++    )
++    response = asyncio.run(serve_spa())
++    assert response.status_code == 307
++    assert response.headers["location"] == "/ui"
++
++
++def test_root_serves_spa_when_dist_present(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """Return the compiled SPA index when the build directory exists."""
++    index_file = tmp_path / "index.html"
++    index_file.write_text("<html><body>spa</body></html>", encoding="utf-8")
++    monkeypatch.setattr(
++        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
++    )
++    monkeypatch.setattr(
++        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
++    )
++    response = asyncio.run(serve_spa())
++    assert response.status_code == 200
++    assert "spa" in response.body.decode()
+diff --git a/tools/manual_doser_test.py b/tools/manual_doser_test.py
+index cff344353bb6f3f9159e67bb447d6e3e4b1b97ab..2668ec56ff4a262d4d91b4f319dc77430987c62e 100755
+--- a/tools/manual_doser_test.py
++++ b/tools/manual_doser_test.py
+@@ -105,52 +105,52 @@ async def main(
+                 f"Unsupported weekday label: {err.args[0]}"
+             ) from err
+     else:
+         weekday_selection = None
+
+     print("Requesting status...")
+     await doser.request_status()
+     await asyncio.sleep(5)
+     if doser.last_status:
+         payload = doser.last_status.raw_payload
+         print("Received status:", payload.hex())
+         try:
+             parsed = parse_status_payload(payload)
+         except ValueError:
+             parsed = None
+         if parsed:
+             header_info = []
+             if parsed.weekday is not None:
+                 header_info.append(f"weekday={parsed.weekday}")
+             if parsed.hour is not None and parsed.minute is not None:
+                 header_info.append(
+                     f"time={parsed.hour:02d}:{parsed.minute:02d}"
+                 )
+             if parsed.message_id is not None:
+                 header_info.append(
+-                    f"msg_id={parsed.message_id[0]:02X}:{
+-                        parsed.message_id[1]:02X}"
++                    "msg_id="
++                    f"{parsed.message_id[0]:02X}:{parsed.message_id[1]:02X}"
+                 )
+             if parsed.response_mode is not None:
+                 header_info.append(f"mode=0x{parsed.response_mode:02X}")
+             if header_info:
+                 print("  header:", ", ".join(header_info))
+
+             for idx, head in enumerate(parsed.heads, start=1):
+                 print(
+                     f"  head {idx}: "
+                     f"mode={head.mode_label()} "
+                     f"time={head.hour:02d}:{head.minute:02d} "
+                     f"dosed={head.dosed_ml():.1f}ml "
+                     f"extra={head.extra.hex()}"
+                 )
+
+             if parsed.tail_targets:
+                 targets = ", ".join(f"{val}ml" for val in parsed.tail_targets)
+                 print(f"  targets: {targets}")
+             if parsed.tail_flag is not None:
+                 print(f"  tail flag: 0x{parsed.tail_flag:02X}")
+     else:
+         print("No status received yet")
+
+     if read_only:
+         print("Skipping update (--read-only enabled)")

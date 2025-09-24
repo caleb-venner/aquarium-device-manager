@@ -1,4 +1,12 @@
 # syntax=docker/dockerfile:1.7
+FROM node:20-alpine AS frontend-build
+
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,9 +24,12 @@ RUN apt-get update \
 COPY pyproject.toml setup.cfg README.md ./
 COPY src ./src
 COPY tools ./tools
+COPY --from=frontend-build /app/dist ./frontend/dist
 
 RUN pip install --upgrade pip \
     && pip install --no-cache-dir .
+
+ENV CHIHIROS_FRONTEND_DIST="/app/frontend/dist"
 
 EXPOSE 8000
 
