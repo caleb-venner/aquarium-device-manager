@@ -6,6 +6,8 @@ type DeviceStatus = {
   raw_payload: string | null;
   parsed: Record<string, unknown> | null;
   updated_at: number;
+  model_name?: string | null;
+  connected?: boolean;
 };
 
 type StatusResponse = Record<string, DeviceStatus>;
@@ -22,8 +24,24 @@ type LiveStatusResponse = {
   errors: string[];
 };
 
+// Narrow types for doser parsed JSON we care about
+type DoserHead = {
+  mode: number;
+  hour: number;
+  minute: number;
+  dosed_tenths_ml: number;
+};
+
+type DoserParsed = {
+  weekday: number | null;
+  hour: number | null;
+  minute: number | null;
+  heads: DoserHead[];
+};
+
 const app = document.querySelector<HTMLDivElement>("#app");
-let hasLoadedLive = false;
+
+// Auto-refresh disabled: loads happen only when tabs are activated
 
 function escapeHtml(value: string): string {
   return value
@@ -39,6 +57,33 @@ function formatTimestamp(timestamp: number): string {
   return date.toLocaleString();
 }
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function weekdayName(n: number | null | undefined): string {
+  // 1..7 -> Monday..Sunday (per backend comments)
+  const names = [
+    "",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+  ];
+  if (!n || n < 1 || n > 7) return "";
+  return names[n];
+}
+
+function formatDayTime(weekday: number | null | undefined, hour: number | null | undefined, minute: number | null | undefined): string {
+  if (weekday && hour != null && minute != null) {
+    return `${weekdayName(weekday)} ${pad2(hour)}:${pad2(minute)}`;
+  }
+  return "";
+}
+
 function renderNotice(
   message: string,
   variant: "info" | "warning" | "error" = "info"
@@ -48,15 +93,19 @@ function renderNotice(
 
 function renderParsedValue(value: unknown): string {
   if (value === null || value === undefined) {
-    return "<em>—</em>";
+    return "<em>None</em>";
   }
 
   if (Array.isArray(value) || typeof value === "object") {
-    return `<pre>${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+    return `<pre class="code-block">${escapeHtml(
+      JSON.stringify(value, null, 2)
+    )}</pre>`;
   }
 
   if (typeof value === "boolean") {
-    return `<span class="boolean">${value ? "True" : "False"}</span>`;
+    return `<span class="badge ${value ? "success" : "warning"}">${
+      value ? "true" : "false"
+    }</span>`;
   }
 
   return `<code>${escapeHtml(String(value))}</code>`;
@@ -64,12 +113,12 @@ function renderParsedValue(value: unknown): string {
 
 function renderParsedTable(parsed: Record<string, unknown> | null): string {
   if (!parsed) {
-    return "<em>No parsed payload</em>";
+    return "<em>No decoded payload</em>";
   }
 
   const entries = Object.entries(parsed);
   if (entries.length === 0) {
-    return "<em>No parsed payload</em>";
+    return "<em>No fields</em>";
   }
 
   const headerRow = entries
@@ -91,16 +140,27 @@ function renderParsedTable(parsed: Record<string, unknown> | null): string {
   `;
 }
 
+function renderParsedRaw(parsed: Record<string, unknown> | null): string {
+  if (!parsed) return "<em>No decoded payload</em>";
+  return `<pre class="code-block">${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`;
+}
+
 function renderDeviceCard({ address, status }: DeviceEntry): string {
   const raw = status.raw_payload
     ? `<code>${escapeHtml(status.raw_payload)}</code>`
     : "<em>No raw payload</em>";
+  const connectedBadge = status.connected
+    ? `<span class="badge success">connected</span>`
+    : `<span class="badge warning">disconnected</span>`;
 
   return `
     <article class="device">
       <header>
-        <h2>${escapeHtml(address)}</h2>
+        <h2>${escapeHtml(status.model_name || address)}</h2>
         <span class="badge">${escapeHtml(status.device_type)}</span>
+        ${connectedBadge}
+        <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
+        <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
       </header>
       <dl>
         <div>
@@ -113,10 +173,73 @@ function renderDeviceCard({ address, status }: DeviceEntry): string {
         </div>
         <div>
           <dt>Decoded Payload</dt>
-          <dd>${renderParsedTable(status.parsed)}</dd>
+          <dd>
+            <details class="payload-details">
+              <summary>Decoded Payload</summary>
+              <div class="payload-controls">
+                <button class="btn copy-payload" data-address="${escapeHtml(address)}" title="Copy JSON">
+                  <svg class="icon copy-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="btn-label">Copy</span>
+                </button>
+              </div>
+              ${renderParsedRaw(status.parsed)}
+            </details>
+          </dd>
         </div>
       </dl>
     </article>
+  `;
+}
+
+function renderDeviceCardCollapsed({ address, status }: DeviceEntry): string {
+  const raw = status.raw_payload
+    ? `<code>${escapeHtml(status.raw_payload)}</code>`
+    : "<em>No raw payload</em>";
+  const connectedBadge = status.connected
+    ? `<span class="badge success">connected</span>`
+    : `<span class="badge warning">disconnected</span>`;
+
+  return `
+    <details class="device device-details" data-address="${escapeHtml(address)}">
+      <summary>
+        <div class="device-summary-left">
+          <h2>${escapeHtml(status.model_name || address)}</h2>
+          <span class="badge">${escapeHtml(status.device_type)}</span>
+          ${connectedBadge}
+        </div>
+        <div class="device-summary-right">
+          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
+          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
+        </div>
+      </summary>
+      <div class="device-body">
+        <dl>
+          <div>
+            <dt>Last Update</dt>
+            <dd>${formatTimestamp(status.updated_at)}</dd>
+          </div>
+          <div>
+            <dt>Raw Payload</dt>
+            <dd>${raw}</dd>
+          </div>
+          <div>
+            <dt>Decoded Payload</dt>
+            <dd>
+              <details class="payload-details">
+                <summary>Decoded Payload</summary>
+                <div class="payload-controls">
+                  <button class="btn copy-payload" data-address="${escapeHtml(address)}" title="Copy JSON">
+                    <svg class="icon copy-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="btn-label">Copy</span>
+                  </button>
+                </div>
+                ${renderParsedRaw(status.parsed)}
+              </details>
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </details>
   `;
 }
 
@@ -125,12 +248,162 @@ function renderDeviceSection(
   emptyMessage: string
 ): string {
   if (entries.length === 0) {
-    return `<p class="muted">${escapeHtml(emptyMessage)}</p>`;
+    return renderNotice(emptyMessage, "info");
   }
 
+  // Overview should render collapsed device cards by default.
   return `<section class="device-grid">${entries
-    .map((entry) => renderDeviceCard(entry))
+    .map((entry) => renderDeviceCardCollapsed(entry))
     .join("")}</section>`;
+}
+
+function renderDoserDashboard(entries: DeviceEntry[]): string {
+  // Filter only dosers with parsed payload
+  const dosers = entries.filter(
+    (e) => e.status.device_type === "doser" && e.status.parsed
+  );
+  if (dosers.length === 0) {
+    return renderNotice("No dosers connected yet.", "info");
+  }
+
+  const sections = dosers.map(({ address, status }) => {
+    const parsed = status.parsed as unknown as DoserParsed;
+    const header = formatDayTime(parsed?.weekday ?? null, parsed?.hour ?? null, parsed?.minute ?? null);
+    const modelName = status.model_name || address;
+
+    const heads = Array.isArray(parsed?.heads) ? parsed.heads : [];
+    const rows = heads.slice(0, 4).map((h, idx) => {
+      const pump = idx + 1;
+      const mode = typeof h.mode === "number" ? h.mode : "";
+      const sched = (typeof h.hour === "number" && typeof h.minute === "number")
+        ? `${pad2(h.hour)}:${pad2(h.minute)}`
+        : "";
+      const dosed = typeof h.dosed_tenths_ml === "number"
+        ? `${(h.dosed_tenths_ml / 10).toFixed(1)} ml`
+        : "";
+      return `<tr>
+        <td>${pump}</td>
+        <td>${mode}</td>
+        <td>${sched}</td>
+        <td>${dosed}</td>
+      </tr>`;
+    }).join("");
+
+    return `
+      <article class="device">
+        <header>
+          <h2>${escapeHtml(modelName)}</h2>
+          <span class="badge">doser</span>
+          ${status.connected ? `<span class="badge ${status.connected ? 'success' : 'warning'}">${status.connected ? 'connected' : 'disconnected'}</span>` : ''}
+          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
+          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
+        </header>
+        <div class="row-top">${header ? escapeHtml(header) : ""}</div>
+        <table class="parsed-table">
+          <thead>
+            <tr>
+              <th scope="col">pump</th>
+              <th scope="col">mode</th>
+              <th scope="col">scheduled</th>
+              <th scope="col">dosed</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </article>
+    `;
+  });
+
+  return `<section class="device-grid">${sections.join("")}</section>`;
+}
+
+// Narrow types for light parsed JSON
+type LightKeyframe = { hour: number; minute: number; value: number; percent?: number };
+type LightParsed = {
+  weekday: number | null;
+  current_hour: number | null;
+  current_minute: number | null;
+  keyframes: LightKeyframe[];
+};
+
+function toHexByte(n: number): string {
+  const clamped = Math.max(0, Math.min(255, Math.floor(n)));
+  return `0x${clamped.toString(16).toUpperCase().padStart(2, "0")}`;
+}
+
+function valueToPercent(n: number): number {
+  // Backend value is 0..255; percent is approx n/255*100 rounded
+  const p = Math.round((n / 255) * 100);
+  return Math.max(0, Math.min(100, p));
+}
+
+function renderLightDashboard(entries: DeviceEntry[]): string {
+  const lights = entries.filter(
+    (e) => e.status.device_type === "light" && e.status.parsed
+  );
+  if (lights.length === 0) {
+    return renderNotice("No lights connected yet.", "info");
+  }
+
+  const sections = lights.map(({ address, status }) => {
+    const parsed = status.parsed as unknown as LightParsed;
+    const header = formatDayTime(
+      parsed?.weekday ?? null,
+      parsed?.current_hour ?? null,
+      parsed?.current_minute ?? null
+    );
+    const modelName = status.model_name || address;
+    const frames = Array.isArray(parsed?.keyframes) ? parsed.keyframes : [];
+    const rows = frames
+      .map((f) => {
+        const time =
+          typeof f.hour === "number" && typeof f.minute === "number"
+            ? `${pad2(f.hour)}:${pad2(f.minute)}`
+            : "";
+        // Prefer explicit percent provided by the backend. Fall back to
+        // converting the raw 0..255 value to percent if needed for
+        // compatibility with older backends.
+        const val =
+          typeof f.percent === "number"
+            ? f.percent
+            : typeof f.value === "number"
+            ? valueToPercent(f.value)
+            : 0;
+        return `<tr>
+        <td>${time}</td>
+        <td>${val}%</td>
+      </tr>`;
+      })
+      .join("");
+
+    return `
+      <article class="device">
+        <header>
+          <h2>${escapeHtml(modelName)}</h2>
+          <span class="badge">light</span>
+          ${status.connected ? `<span class="badge ${status.connected ? 'success' : 'warning'}">${status.connected ? 'connected' : 'disconnected'}</span>` : ''}
+          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
+          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
+        </header>
+        <div class="row-top">${header ? escapeHtml(header) : ""}</div>
+        <table class="parsed-table">
+          <thead>
+            <tr>
+              <th scope="col">time</th>
+              <th scope="col">brightness</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows}
+          </tbody>
+        </table>
+      </article>
+    `;
+  });
+
+  return `<section class="device-grid">${sections.join("")}</section>`;
 }
 
 function statusResponseToEntries(data: StatusResponse): DeviceEntry[] {
@@ -155,209 +428,280 @@ function debugStatusesToEntries(statuses: DebugStatus[]): DeviceEntry[] {
 }
 
 function renderLayout(): void {
-  if (!app) {
-    return;
-  }
+  if (!app) return;
 
   app.innerHTML = `
+    <header class="app-header">
+      <h1>Chihiros Device Manager</h1>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button class="tab active" role="tab" id="tab-dashboard" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
+      <button class="tab" role="tab" id="tab-overview" aria-selected="false" aria-controls="panel-overview">Overview</button>
+      <div class="spacer"></div>
+    </nav>
+
     <main>
-      <header class="page-header">
-        <h1>Chihiros Device Manager</h1>
-        <button id="refresh-overview" type="button">Refresh</button>
-      </header>
-      <nav class="tabs" role="tablist">
-        <button
-          class="tab-button active"
-          type="button"
-          role="tab"
-          aria-selected="true"
-          aria-controls="tab-overview"
-          data-tab="overview"
-        >
-          Overview
-        </button>
-        <button
-          class="tab-button"
-          type="button"
-          role="tab"
-          aria-selected="false"
-          aria-controls="tab-debug"
-          data-tab="debug"
-        >
-          Debug
-        </button>
-      </nav>
-      <section id="tab-overview" class="tab-panel active" role="tabpanel">
-        <div id="overview-content" class="tab-content">
-          <p class="muted">Loading status…</p>
-        </div>
+      <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+        <div id="dashboard-content">${renderNotice("Loading dashboard…")}</div>
       </section>
-      <section id="tab-debug" class="tab-panel" role="tabpanel" hidden>
-        <div class="debug-section">
-          <header class="debug-section__header">
-            <h2>Live Payloads</h2>
-            <button id="refresh-live" type="button">Request Live Payloads</button>
-          </header>
-          <p class="muted">
-            Fetch current payloads from connected devices without persisting them.
-          </p>
-          <div id="live-status-content" class="tab-content muted">
-            No live data requested yet.
-          </div>
-        </div>
-        <div class="debug-section">
-          <header class="debug-section__header">
-            <h2>Cached Snapshot</h2>
-          </header>
-          <p class="muted">Latest saved device state loaded from JSON storage.</p>
-          <div id="cached-status-content" class="tab-content">
-            <p class="muted">Loading snapshot…</p>
-          </div>
-        </div>
+      <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div id="overview-content">${renderNotice("Loading overview…")}</div>
       </section>
     </main>
   `;
 }
 
 function setupTabs(): void {
-  const buttons = document.querySelectorAll<HTMLButtonElement>(".tab-button");
-  const panels = document.querySelectorAll<HTMLElement>(".tab-panel");
+  const tabDashboard = document.getElementById("tab-dashboard") as HTMLButtonElement | null;
+  const tabOverview = document.getElementById("tab-overview") as HTMLButtonElement | null;
+  const panelDashboard = document.getElementById("panel-dashboard");
+  const panelOverview = document.getElementById("panel-overview");
+  if (!tabDashboard || !tabOverview || !panelDashboard || !panelOverview) return;
 
-  buttons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const tab = button.dataset.tab;
-      if (!tab || button.classList.contains("active")) {
-        return;
-      }
+  // Narrow to non-null for use inside nested functions
+  const tDashboard = tabDashboard as HTMLButtonElement;
+  const tOverview = tabOverview as HTMLButtonElement;
+  const pDashboard = panelDashboard as HTMLElement;
+  const pOverview = panelOverview as HTMLElement;
 
-      buttons.forEach((item) => {
-        const isActive = item === button;
-        item.classList.toggle("active", isActive);
-        item.setAttribute("aria-selected", isActive ? "true" : "false");
-      });
+  // No timers when switching tabs
 
-      panels.forEach((panel) => {
-        const isActive = panel.id === `tab-${tab}`;
-        panel.classList.toggle("active", isActive);
-        if (isActive) {
-          panel.removeAttribute("hidden");
-        } else {
-          panel.setAttribute("hidden", "true");
-        }
-      });
+  function setActive(tab: "dashboard" | "overview") {
+    const isDashboard = tab === "dashboard";
+    const isOverview = tab === "overview";
 
-      if (tab === "debug" && !hasLoadedLive) {
-        hasLoadedLive = true;
-        void loadLiveStatus();
-      }
-    });
-  });
+  tDashboard.classList.toggle("active", isDashboard);
+  tDashboard.setAttribute("aria-selected", isDashboard ? "true" : "false");
+  tOverview.classList.toggle("active", isOverview);
+  tOverview.setAttribute("aria-selected", isOverview ? "true" : "false");
+  pDashboard.toggleAttribute("hidden", !isDashboard);
+  pOverview.toggleAttribute("hidden", !isOverview);
+
+    if (isDashboard) {
+      void loadDashboard();
+    } else if (isOverview) {
+      void loadOverview();
+    }
+  }
+
+  tDashboard.addEventListener("click", () => setActive("dashboard"));
+  tOverview.addEventListener("click", () => setActive("overview"));
 }
 
 function setupInteractions(): void {
-  setupTabs();
+  // No refresh buttons for now
+}
 
-  const refreshOverview = document.querySelector<HTMLButtonElement>(
-    "#refresh-overview"
-  );
-  if (refreshOverview) {
-    refreshOverview.addEventListener("click", () => {
-      void loadOverview();
-    });
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
   }
+  return (await res.json()) as T;
+}
 
-  const refreshLive = document.querySelector<HTMLButtonElement>("#refresh-live");
-  if (refreshLive) {
-    refreshLive.addEventListener("click", () => {
-      void loadLiveStatus();
-    });
+async function postJson<T>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
   }
+  return (await res.json()) as T;
 }
 
 async function loadOverview(): Promise<void> {
-  const overviewContainer = document.querySelector<HTMLDivElement>(
-    "#overview-content"
-  );
-  const cachedContainer = document.querySelector<HTMLDivElement>(
-    "#cached-status-content"
-  );
-  if (!overviewContainer || !cachedContainer) {
-    return;
-  }
+  const container = document.getElementById("overview-content");
+  if (!container) return;
 
-  overviewContainer.innerHTML = "<p class=\"muted\">Loading status…</p>";
-  cachedContainer.innerHTML = "<p class=\"muted\">Loading snapshot…</p>";
-
+  container.innerHTML = renderNotice("Loading overview…");
   try {
-    const response = await axios.get<StatusResponse>("/api/status");
-    const entries = statusResponseToEntries(response.data);
-    overviewContainer.innerHTML = renderDeviceSection(
-      entries,
-      "No devices are currently connected."
+    const data = await fetchJson<StatusResponse>("/api/status");
+    const entries = statusResponseToEntries(data).sort((a, b) =>
+      a.address.localeCompare(b.address)
     );
-    cachedContainer.innerHTML = renderDeviceSection(
+    container.innerHTML = renderDeviceSection(
       entries,
-      "No cached device state is available."
+      "No devices connected yet."
     );
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unknown error fetching status";
-    const notice = renderNotice(message, "error");
-    overviewContainer.innerHTML = notice;
-    cachedContainer.innerHTML = notice;
+
+    // Wire up Update buttons
+    const buttons = container.querySelectorAll<HTMLButtonElement>(".update-btn");
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const address = btn.dataset.address;
+        if (!address) return;
+        const prev = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Updating…";
+        try {
+          await postJson(`/api/devices/${encodeURIComponent(address)}/status`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to update device.";
+          // Minimal inline feedback; could be improved later
+          alert(msg);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = prev || "Update";
+          // Re-render the overview to show fresh data
+          void loadOverview();
+        }
+      });
+    });
+    // Wire up Reconnect buttons
+    const reconnects = container.querySelectorAll<HTMLButtonElement>(".reconnect-btn");
+    reconnects.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const address = btn.dataset.address;
+        if (!address) return;
+        const prev = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Connecting…";
+        try {
+          await postJson(`/api/devices/${encodeURIComponent(address)}/connect`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to reconnect device.";
+          alert(msg);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = prev || "Reconnect";
+          void loadOverview();
+        }
+      });
+    });
+    // Wire up Copy JSON buttons inside payload details
+    const copyBtns = container.querySelectorAll<HTMLButtonElement>(".copy-payload");
+    copyBtns.forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const address = btn.dataset.address;
+        if (!address) return;
+        const label = btn.querySelector<HTMLSpanElement>(".btn-label");
+        const prev = label ? label.textContent : btn.textContent;
+        try {
+          const details = btn.closest(".device-details");
+          if (!details) return;
+          const pre = details.querySelector("pre.code-block");
+          if (!pre) return;
+          const text = pre.textContent || "";
+          await navigator.clipboard.writeText(text);
+          if (label) label.textContent = "Copied";
+        } catch (err) {
+          if (label) label.textContent = "Failed";
+        } finally {
+          setTimeout(() => {
+            if (label) label.textContent = prev || "Copy";
+          }, 1200);
+        }
+      });
+    });
+  } catch (err) {
+    container.innerHTML = renderNotice(
+      err instanceof Error ? err.message : "Failed to load overview.",
+      "error"
+    );
   }
 }
 
-async function loadLiveStatus(): Promise<void> {
-  const container = document.querySelector<HTMLDivElement>(
-    "#live-status-content"
-  );
-  if (!container) {
-    return;
-  }
+async function loadDashboard(): Promise<void> {
+  const container = document.getElementById("dashboard-content");
+  if (!container) return;
 
-  container.innerHTML = "<p class=\"muted\">Requesting live payloads…</p>";
-
+  container.innerHTML = renderNotice("Loading dashboard…");
   try {
-    const response = await axios.post<LiveStatusResponse>(
-      "/api/debug/live-status"
+    const data = await fetchJson<StatusResponse>("/api/status");
+    const entries = statusResponseToEntries(data).sort((a, b) =>
+      a.address.localeCompare(b.address)
     );
-    const { statuses, errors } = response.data;
-    const entries = debugStatusesToEntries(statuses);
-
-    const parts: string[] = [];
-    if (errors.length > 0) {
-      const errorHtml = errors
-        .map((message) => `<p>${escapeHtml(message)}</p>`)
-        .join("");
-      parts.push(`<div class="notice warning">${errorHtml}</div>`);
-    }
-
-    parts.push(
-      renderDeviceSection(entries, "No live payloads available for connected devices.")
+    const doserHtml = renderDoserDashboard(entries);
+    const lightHtml = renderLightDashboard(entries);
+    container.innerHTML = `${doserHtml}${lightHtml}`;
+      // Delegated wiring for reconnect/update inside dashboard
+      // Update buttons
+      const dashUpdateBtns = container.querySelectorAll<HTMLButtonElement>(".update-btn");
+      dashUpdateBtns.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const address = btn.dataset.address;
+          if (!address) return;
+          const prev = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = "Updating…";
+          try {
+            await postJson(`/api/devices/${encodeURIComponent(address)}/status`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to update device.";
+            alert(msg);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = prev || "Update";
+            void loadDashboard();
+          }
+        });
+      });
+      // Reconnect buttons
+      const dashReconnects = container.querySelectorAll<HTMLButtonElement>(".reconnect-btn");
+      dashReconnects.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const address = btn.dataset.address;
+          if (!address) return;
+          const prev = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = "Connecting…";
+          try {
+            await postJson(`/api/devices/${encodeURIComponent(address)}/connect`);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to reconnect device.";
+            alert(msg);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = prev || "Reconnect";
+            void loadDashboard();
+          }
+        });
+      });
+      // Copy JSON buttons in dashboard
+      const dashCopyBtns = container.querySelectorAll<HTMLButtonElement>(".copy-payload");
+      dashCopyBtns.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const label = btn.querySelector<HTMLSpanElement>(".btn-label");
+          const prev = label ? label.textContent : btn.textContent;
+          try {
+            const details = btn.closest(".device");
+            if (!details) return;
+            const pre = details.querySelector("pre.code-block");
+            if (!pre) return;
+            const text = pre.textContent || "";
+            await navigator.clipboard.writeText(text);
+            if (label) label.textContent = "Copied";
+          } catch (err) {
+            if (label) label.textContent = "Failed";
+          } finally {
+            setTimeout(() => {
+              if (label) label.textContent = prev || "Copy";
+            }, 1200);
+          }
+        });
+      });
+  } catch (err) {
+    container.innerHTML = renderNotice(
+      err instanceof Error ? err.message : "Failed to load dashboard.",
+      "error"
     );
-
-    container.classList.remove("muted");
-    container.innerHTML = parts.join("\n");
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Unable to fetch live payloads";
-    container.innerHTML = renderNotice(message, "error");
   }
 }
+
 
 function initialize(): void {
-  if (!app) {
-    return;
-  }
-
   renderLayout();
+  setupTabs();
   setupInteractions();
-  void loadOverview();
+  // Default to the new Dashboard tab
+  const tab = document.getElementById("tab-dashboard");
+  tab?.dispatchEvent(new Event("click"));
 }
 
 initialize();

@@ -9,6 +9,7 @@ from typing import Sequence
 from bleak.backends.service import BleakGATTCharacteristic
 
 from .. import doser_commands
+from ..doser_status import PumpStatus, parse_status_payload
 from .base_device import BaseDevice
 
 
@@ -26,7 +27,7 @@ class Doser(BaseDevice):
     _model_codes = ["DYDOSE"]
     _colors: dict[str, int] = {}
 
-    _last_status: DoserStatus | None = None
+    _last_status: PumpStatus | None = None
 
     async def request_status(self) -> None:
         """Send a handshake to ask the pump for its latest status."""
@@ -41,7 +42,18 @@ class Doser(BaseDevice):
 
     def handle_notification(self, payload: bytes) -> None:
         """Handle an incoming UART notification from the pump."""
-        self._last_status = DoserStatus(raw_payload=payload)
+        # Parse the incoming payload into a PumpStatus and keep only the
+        # canonical parsed status. Historically we retained a short history
+        # of fragments for the service to merge; after refactor the device
+        # provides the canonical parsed view and the service consumes that
+        # directly (similar to lights).
+        try:
+            parsed = parse_status_payload(payload)
+        except Exception:
+            # If parsing fails, keep no change to last_status rather than
+            # overwrite with invalid data.
+            return
+        self._last_status = parsed
 
     @property
     def last_status(self) -> DoserStatus | None:

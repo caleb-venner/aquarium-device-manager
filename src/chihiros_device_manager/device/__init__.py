@@ -8,6 +8,7 @@ from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
 
 from ..exception import DeviceNotFound
+from ..light_status import ParsedLightStatus
 from .a2 import AII
 from .base_device import BaseDevice
 from .c2 import CII
@@ -16,7 +17,7 @@ from .commander1 import Commander1
 from .commander4 import Commander4
 from .doser import Doser
 from .fallback import Fallback
-from .light_device import LightDevice, LightStatus
+from .light_device import LightDevice
 from .tiny_terrarium_egg import TinyTerrariumEgg
 from .universal_wrgb import UniversalWRGB
 from .wrgb2 import WRGBII
@@ -66,7 +67,7 @@ __all__ = [
     "FallBack",
     "BaseDevice",
     "LightDevice",
-    "LightStatus",
+    "ParsedLightStatus",
     "RGBMode",
     "CODE2MODEL",
     "get_device_from_address",

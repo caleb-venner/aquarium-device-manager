@@ -2,26 +2,19 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional
 
 from bleak.backends.service import BleakGATTCharacteristic
 
 from .. import commands
+from ..light_status import ParsedLightStatus, parse_light_status
 from .base_device import BaseDevice
-
-
-@dataclass(slots=True)
-class LightStatus:
-    """Container for the latest status payload emitted by a light."""
-
-    raw_payload: bytes
 
 
 class LightDevice(BaseDevice):
     """Base class for Chihiros lights that can request status updates."""
 
-    _last_status: Optional[LightStatus] = None
+    _last_status: Optional[ParsedLightStatus] = None
 
     async def request_status(self) -> None:
         """Trigger a status report from the light via the UART handshake."""
@@ -39,7 +32,24 @@ class LightDevice(BaseDevice):
         if payload[0] == 0x5B and len(payload) >= 6:
             mode = payload[5]
             if mode == 0xFE:
-                self._last_status = LightStatus(raw_payload=payload)
+                try:
+                    parsed = parse_light_status(payload)
+                except Exception:
+                    # Keep raw_payload available in the parsed-like structure
+                    # as a fallback so other parts of the code can still
+                    # access `raw_payload` even when parsing fails.
+                    parsed = ParsedLightStatus(
+                        message_id=None,
+                        response_mode=None,
+                        weekday=None,
+                        current_hour=None,
+                        current_minute=None,
+                        keyframes=[],
+                        time_markers=[],
+                        tail=b"",
+                        raw_payload=payload,
+                    )
+                self._last_status = parsed
                 self._logger.debug(
                     "%s: Status payload: %s", self.name, payload.hex()
                 )
@@ -55,6 +65,6 @@ class LightDevice(BaseDevice):
         )
 
     @property
-    def last_status(self) -> Optional[LightStatus]:
+    def last_status(self) -> Optional[ParsedLightStatus]:
         """Return the most recent status payload captured from the light."""
         return self._last_status

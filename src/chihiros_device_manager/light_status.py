@@ -71,6 +71,24 @@ def parse_light_status(payload: bytes) -> ParsedLightStatus:
     tail = body[-5:] if len(body) >= 5 else b""
     body_bytes = body[:-5] if len(body) >= 5 else body
 
+    # Some firmware variants repeat the header's weekday/hour/minute in the
+    # body before the sequence of 3-byte keyframes. If that repeated trio
+    # appears near the start of the body we can safely skip it so the loop
+    # sees only hour/minute/value triples.
+    if (
+        weekday is not None
+        and current_hour is not None
+        and current_minute is not None
+        and len(body_bytes) >= 3
+    ):
+        pattern = bytes((weekday, current_hour, current_minute))
+        idx = body_bytes.find(pattern)
+        # allow the repeated header to appear a little further into the body for
+        # some firmware variants
+        if idx != -1 and idx <= 16:
+            # remove everything up through the repeated header
+            body_bytes = body_bytes[idx + 3 :]
+
     keyframes: list[LightKeyframe] = []
     time_markers: list[tuple[int, int]] = []
 

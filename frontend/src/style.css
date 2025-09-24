@@ -127,6 +127,91 @@ button:hover {
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
 }
 
+/* Collapsible device card used in the Overview */
+.device-details {
+  padding: 0;
+  overflow: hidden;
+}
+.device-details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: rgba(15, 23, 42, 0.65);
+  border-radius: 1rem;
+}
+.device-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.device-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.device-body {
+  padding: 1rem 1.5rem 1.5rem 1.5rem;
+}
+
+/* Nested details for decoded payload inside devices */
+.payload-details {
+  margin-top: 0.5rem;
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+}
+.payload-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+/* Controls inside the payload details */
+.payload-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.copy-payload {
+  background: transparent;
+  color: #e2e8f0;
+  border: 1px solid rgba(226, 232, 240, 0.06);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.copy-payload .icon {
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
+  vertical-align: text-bottom;
+}
+.copy-payload .btn-label {
+  display: inline-block;
+}
+
+/* Animated caret for details summary */
+.device-details > summary {
+  position: relative;
+}
+.device-details > summary::after {
+  content: '\25BE'; /* down-pointing small triangle */
+  display: inline-block;
+  margin-left: 0.75rem;
+  transform-origin: center;
+  transition: transform 200ms ease;
+}
+.device-details[open] > summary::after {
+  transform: rotate(-180deg);
+}
+
 .device header {
   display: flex;
   align-items: center;
@@ -147,6 +232,27 @@ button:hover {
   font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.badge.success {
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.badge.warning {
+  background: rgba(250, 204, 21, 0.08);
+  color: #f59e0b;
+}
+
+.reconnect-btn {
+  background: transparent;
+  color: #e2e8f0;
+  border: 1px solid rgba(226, 232, 240, 0.06);
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 0.5rem;
 }
 
 dl {

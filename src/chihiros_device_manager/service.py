@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from dataclasses import asdict, dataclass
@@ -68,17 +69,32 @@ if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
     LightDevice = _device.LightDevice
     get_device_from_address = _device.get_device_from_address
     PumpStatus = _doser_status.PumpStatus
-    parse_status_payload = _doser_status.parse_status_payload
     ParsedLightStatus = _light_status.ParsedLightStatus
-    parse_light_status = _light_status.parse_light_status
 else:
     from . import api, doser_commands
     from .device import Doser, LightDevice, get_device_from_address
-    from .doser_status import PumpStatus, parse_status_payload
-    from .light_status import ParsedLightStatus, parse_light_status
+    from .doser_status import PumpStatus
+    from .light_status import ParsedLightStatus
 
 STATE_PATH = Path.home() / ".chihiros_state.json"
 AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
+
+# Module logger
+logger = logging.getLogger("chihiros_device_manager.service")
+_default_level = os.getenv("CHIHIROS_LOG_LEVEL", "INFO").upper()
+if not logging.getLogger().handlers:
+    # Basic, readable default formatting for development runs. If the application
+    # or a test harness configures logging explicitly this will be a no-op.
+    logging.basicConfig(
+        level=getattr(logging, _default_level, logging.INFO),
+        format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
+    )
+
+# Ensure our module logger gets at least the configured level
+try:
+    logger.setLevel(getattr(logging, _default_level, logging.INFO))
+except Exception:
+    logger.setLevel(logging.INFO)
 
 
 @dataclass(slots=True)
@@ -90,13 +106,17 @@ class CachedStatus:
     raw_payload: str | None
     parsed: Dict[str, Any] | None
     updated_at: float
+    model_name: str | None = None
 
 
 class BLEService:
     """Manages BLE devices, status cache, and persistence."""
 
     def __init__(self) -> None:
-        """Instantiate caches, locks, and connection state."""
+        """Instantiate caches, locks, and connection state.
+
+        Keep internal references to connected devices and an in-memory cache.
+        """
         self._lock = asyncio.Lock()
         self._doser: Optional[Doser] = None
         self._doser_address: Optional[str] = None
@@ -106,10 +126,43 @@ class BLEService:
         self._auto_reconnect = bool(int(os.getenv(AUTO_RECONNECT_ENV, "1")))
 
     async def start(self) -> None:
-        """Initialise the service and reconnect if configured."""
+        """Initialise the service and reconnect cached devices.
+
+        After reconnecting, the service updates the in-memory cache with
+        fresh live status frames and persists the state to disk.
+        """
         await self._load_state()
+        logger.info("Service start: loaded %d cached devices", len(self._cache))
         if self._auto_reconnect:
+            logger.info(
+                "Auto-reconnect enabled; attempting reconnect to cached devices"
+            )
             await self._attempt_reconnect()
+            # After reconnecting, fetch live status for each device and update
+            # cache/JSON
+            for address, status in list(self._cache.items()):
+                try:
+                    logger.debug(
+                        "Refreshing live status for %s (type=%s)",
+                        address,
+                        status.device_type,
+                    )
+                    if status.device_type == "doser":
+                        await self._ensure_doser(address)
+                        live = await self._refresh_doser_status()
+                        self._cache[address] = live
+                        logger.info("Refreshed doser %s", address)
+                    elif status.device_type == "light":
+                        await self._ensure_light(address)
+                        live = await self._refresh_light_status()
+                        self._cache[address] = live
+                        logger.info("Refreshed light %s", address)
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - runtime diagnostics
+                    logger.warning("Failed to refresh %s: %s", address, exc)
+                    continue
+            await self._save_state()
 
     async def stop(self) -> None:
         """Persist cached state and disconnect devices."""
@@ -152,23 +205,59 @@ class BLEService:
         return result
 
     async def request_status(self, address: str) -> CachedStatus:
-        """Refresh cached status for the connected device at ``address``."""
-        target: Optional[str] = None
-        async with self._lock:
-            if address == self._doser_address and self._doser:
-                target = "doser"
-            elif address == self._light_address and self._light:
-                target = "light"
-            else:
-                raise HTTPException(
-                    status_code=404, detail="Device not connected"
-                )
+        """Manually refresh status for the device at ``address``.
 
-        if target == "doser":
+        Connect if needed, update cache and JSON. This method will attempt to
+        connect even when the device is not present in the persisted cache.
+        It deliberately avoids holding the service-level lock while invoking
+        the connection/refresh helpers which themselves acquire the lock; that
+        prevents a deadlock.
+        """
+        # Fast-path: if we have a cached entry, use its recorded device_type to pick
+        # the correct connect/refresh routine. Do not hold the lock while performing
+        # the connection/refresh since those helpers use the same lock internally.
+        logger.info("Manual request_status for %s", address)
+        status = self._cache.get(address)
+        if not status:
+            # Try to discover the device type dynamically and connect.
+            try:
+                device = await get_device_from_address(address)
+            except Exception as exc:
+                logger.warning(
+                    "request_status: device not found for %s: %s", address, exc
+                )
+                raise HTTPException(
+                    status_code=404, detail="Device not found"
+                ) from exc
+
+            if isinstance(device, Doser):
+                logger.debug(
+                    "request_status: identified doser at %s, ensuring connection",
+                    address,
+                )
+                await self._ensure_doser(address)
+                return await self._refresh_doser_status()
+            if isinstance(device, LightDevice):
+                logger.debug(
+                    "request_status: identified light at %s, ensuring connection",
+                    address,
+                )
+                await self._ensure_light(address)
+                return await self._refresh_light_status()
+
+            raise HTTPException(
+                status_code=400, detail="Unsupported device type"
+            )
+
+        # Cached entry exists; refresh according to the recorded device type.
+        if status.device_type == "doser":
+            await self._ensure_doser(address)
             return await self._refresh_doser_status()
-        if target == "light":
+        if status.device_type == "light":
+            await self._ensure_light(address)
             return await self._refresh_light_status()
-        raise HTTPException(status_code=404, detail="Device not connected")
+
+        raise HTTPException(status_code=400, detail="Unknown device type")
 
     async def disconnect_device(self, address: str) -> None:
         """Disconnect the device currently registered at ``address``."""
@@ -332,8 +421,14 @@ class BLEService:
                     status_code=400, detail="Doser not connected"
                 )
             try:
+                logger.debug(
+                    "Requesting doser status from %s", self._doser_address
+                )
                 await self._doser.request_status()
             except (BleakNotFoundError, BleakConnectionError) as exc:
+                logger.warning(
+                    "Doser not reachable %s: %s", self._doser_address, exc
+                )
                 raise HTTPException(
                     status_code=404, detail="Dosing pump not reachable"
                 ) from exc
@@ -343,15 +438,21 @@ class BLEService:
                 raise HTTPException(
                     status_code=500, detail="No status received from doser"
                 )
-            parsed = _serialize_pump_status(
-                parse_status_payload(status.raw_payload)
-            )
+            # The Doser now provides a canonical parsed PumpStatus in
+            # `last_status` (set by its notification handler). Use that
+            # parsed object directly for the API snapshot; the service no
+            # longer performs any fragment merging or lifetime counter
+            # extraction.
+            parsed = _serialize_pump_status(status)
             cached = CachedStatus(
                 address=self._doser_address,
                 device_type="doser",
+                # Keep raw_payload as the most recent packet for
+                # compatibility; parsed contains the merged logical view.
                 raw_payload=status.raw_payload.hex(),
                 parsed=parsed,
                 updated_at=time.time(),
+                model_name=getattr(self._doser, "model_name", None),
             )
             if persist:
                 self._cache[self._doser_address] = cached
@@ -367,8 +468,14 @@ class BLEService:
                     status_code=400, detail="Light not connected"
                 )
             try:
+                logger.debug(
+                    "Requesting light status from %s", self._light_address
+                )
                 await self._light.request_status()
             except (BleakNotFoundError, BleakConnectionError) as exc:
+                logger.warning(
+                    "Light not reachable %s: %s", self._light_address, exc
+                )
                 raise HTTPException(
                     status_code=404, detail="Light not reachable"
                 ) from exc
@@ -378,15 +485,17 @@ class BLEService:
                 raise HTTPException(
                     status_code=500, detail="No status received from light"
                 )
-            parsed = _serialize_light_status(
-                parse_light_status(status.raw_payload)
-            )
+            # The device now supplies a ParsedLightStatus for `last_status`.
+            # Use it directly to avoid duplicate parsing and maintain a
+            # single canonical parsing path.
+            parsed = _serialize_light_status(status)
             cached = CachedStatus(
                 address=self._light_address,
                 device_type="light",
                 raw_payload=status.raw_payload.hex(),
                 parsed=parsed,
                 updated_at=time.time(),
+                model_name=getattr(self._light, "model_name", None),
             )
             if persist:
                 self._cache[self._light_address] = cached
@@ -431,6 +540,7 @@ class BLEService:
                 raw_payload=payload.get("raw_payload"),
                 parsed=payload.get("parsed"),
                 updated_at=payload.get("updated_at", 0.0),
+                model_name=payload.get("model_name"),
             )
         self._cache = cache
 
@@ -443,6 +553,7 @@ class BLEService:
                     "raw_payload": status.raw_payload,
                     "parsed": status.parsed,
                     "updated_at": status.updated_at,
+                    "model_name": status.model_name,
                 }
                 for address, status in self._cache.items()
             }
@@ -452,19 +563,35 @@ class BLEService:
     async def _attempt_reconnect(self) -> None:
         """Reconnect to previously cached devices when auto reconnect is on."""
         if self._cache:
-            for address, status in self._cache.items():
+            for address, status in list(self._cache.items()):
                 try:
+                    logger.info(
+                        "Attempting reconnect to %s (type=%s)",
+                        address,
+                        status.device_type,
+                    )
                     if status.device_type == "doser":
                         await self.connect_doser(address)
                     elif status.device_type == "light":
                         await self.connect_light(address)
-                except HTTPException:
+                except HTTPException as exc:
+                    logger.warning(
+                        "Reconnect failed for %s: %s",
+                        address,
+                        getattr(exc, "detail", exc),
+                    )
                     continue
 
 
 def _serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
     """Convert a pump status dataclass into JSON-safe primitives."""
     data = asdict(status)
+    # raw_payload and tail_raw are bytes; convert them to hex strings for JSON.
+    data["raw_payload"] = (
+        status.raw_payload.hex()
+        if getattr(status, "raw_payload", None)
+        else None
+    )
     data["tail_raw"] = status.tail_raw.hex()
     for head in data["heads"]:
         head["extra"] = bytes(head["extra"]).hex()
@@ -479,21 +606,53 @@ def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
         "weekday": status.weekday,
         "current_hour": status.current_hour,
         "current_minute": status.current_minute,
-        "keyframes": [asdict(frame) for frame in status.keyframes],
+        # Include both the raw value (0..255) and a pre-computed percentage so the
+        # frontend doesn't need to perform the conversion. Keep the original
+        # fields for backward compatibility.
+        "keyframes": [
+            # Some firmware variants encode brightness as 0..255 (8-bit) while
+            # others use a 0..100 scale.  If the value is <= 100 we assume it's
+            # already a percentage and preserve it; otherwise scale from 0..255
+            # into 0..100 for convenience in the frontend.
+            {
+                **asdict(frame),
+                "percent": (
+                    int(round(frame.value))
+                    if frame.value is not None and frame.value <= 100
+                    else int(round((frame.value / 255) * 100))
+                ),
+            }
+            for frame in status.keyframes
+        ],
         "time_markers": status.time_markers,
         "tail": status.tail.hex(),
+        # Preserve the original raw payload bytes for parity with pump
+        # serialization. The frontend or diagnostic tooling may rely on
+        # this to show the raw frame that produced the parsed view.
+        "raw_payload": status.raw_payload.hex(),
     }
     return data
 
 
 def _cached_status_to_dict(status: CachedStatus) -> Dict[str, Any]:
     """Transform a cached status into the API response structure."""
+    # Determine whether the service currently holds a live connection for this
+    # cached address.  This enables the frontend to show a connected/disconnected
+    # indicator and offer a reconnect action.
+    connected = False
+    if status.device_type == "doser":
+        connected = service.current_doser_address() == status.address
+    elif status.device_type == "light":
+        connected = service.current_light_address() == status.address
+
     return {
         "address": status.address,
         "device_type": status.device_type,
         "raw_payload": status.raw_payload,
         "parsed": status.parsed,
         "updated_at": status.updated_at,
+        "model_name": status.model_name,
+        "connected": connected,
     }
 
 
@@ -647,16 +806,12 @@ async def on_shutdown() -> None:
 
 @app.get("/api/status")
 async def get_status() -> Dict[str, Any]:
-    """Return the cached device status map for API consumers."""
-    return {
-        address: {
-            "device_type": status.device_type,
-            "raw_payload": status.raw_payload,
-            "parsed": status.parsed,
-            "updated_at": status.updated_at,
-        }
-        for address, status in service.get_status_snapshot().items()
-    }
+    """Return cached status for all devices, without connecting or refreshing."""
+    snapshot = service.get_status_snapshot()
+    results = {}
+    for address, cached in snapshot.items():
+        results[address] = _cached_status_to_dict(cached)
+    return results
 
 
 @app.post("/api/debug/live-status")
@@ -694,6 +849,39 @@ async def refresh_status(address: str) -> Dict[str, Any]:
     """Request a fresh status frame for the connected device."""
     status = await service.request_status(address)
     return _cached_status_to_dict(status)
+
+
+@app.post("/api/devices/{address}/connect")
+async def reconnect_device(address: str) -> Dict[str, Any]:
+    """Attempt to (re)connect to a device and return its cached status.
+
+    The endpoint will attempt to use the cache to determine the device type; if the
+    address is not in the cache it will attempt discovery and connect accordingly.
+    """
+    # Try to use cached device_type first
+    cached = service.get_status_snapshot().get(address)
+    if cached:
+        if cached.device_type == "doser":
+            status = await service.connect_doser(address)
+            return _cached_status_to_dict(status)
+        if cached.device_type == "light":
+            status = await service.connect_light(address)
+            return _cached_status_to_dict(status)
+
+    # Fall back to discovery-based connect
+    try:
+        device = await get_device_from_address(address)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail="Device not found") from exc
+
+    if isinstance(device, Doser):
+        status = await service.connect_doser(address)
+        return _cached_status_to_dict(status)
+    if isinstance(device, LightDevice):
+        status = await service.connect_light(address)
+        return _cached_status_to_dict(status)
+
+    raise HTTPException(status_code=400, detail="Unsupported device type")
 
 
 @app.post("/api/dosers/{address}/schedule")

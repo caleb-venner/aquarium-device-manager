@@ -22,7 +22,8 @@ class HeadSnapshot:
     minute: int
     dosed_tenths_ml: int
     extra: bytes
-    lifetime_tenths_ml: int | None = None
+    # lifetime counters removed - we only keep per-head configuration and
+    # dosed amount for the current day.
 
     def mode_label(self) -> str:
         """Return a human friendly mode name if known."""
@@ -46,7 +47,9 @@ class PumpStatus:
     tail_targets: list[int]
     tail_flag: int | None
     tail_raw: bytes
-    lifetime_totals: list[int]
+    # Preserve the original raw payload bytes so callers can access the
+    # underlying frame when necessary (keeps parity with ParsedLightStatus).
+    raw_payload: bytes = b""
 
 
 def parse_status_payload(payload: bytes) -> PumpStatus:
@@ -70,10 +73,30 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
             raise ValueError("payload too short")
         message_id = (payload[3], payload[4])
         response_mode = payload[5]
-        weekday = payload[6]
-        hour = payload[7]
-        minute = payload[8]
-        body = payload[9:]
+        # Some notification fragments (counters / totals) include the UART
+        # header and response_mode but omit the weekday/time fields; in that
+        # case the body begins immediately after response_mode. Detect this
+        # by validating the weekday/hour/minute plausibility; weekdays are
+        # expected 0-6 and hour 0-23, minute 0-59. If the values are outside
+        # these ranges treat the fragment as header-only and start the body
+        # earlier so counters/tail bytes are parsed correctly.
+        response_mode = payload[5]
+        maybe_wd = payload[6]
+        maybe_hr = payload[7]
+        maybe_min = payload[8]
+        if not (
+            0 <= maybe_wd <= 6 and 0 <= maybe_hr <= 23 and 0 <= maybe_min <= 59
+        ):
+            # Header contains no weekday/time; body starts at payload[6]
+            weekday = None
+            hour = None
+            minute = None
+            body = payload[6:]
+        else:
+            weekday = maybe_wd
+            hour = maybe_hr
+            minute = maybe_min
+            body = payload[9:]
     else:
         if len(payload) < 3:
             raise ValueError("payload too short")
@@ -111,17 +134,7 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
         if len(tail_raw) > 4:
             tail_flag = tail_raw[4]
 
-    lifetime_totals: list[int] = []
-    if body and body[0] == 0x01 and response_mode not in (0xFE, None):
-        # payload shape for 0x1E/0x22 notifications
-        counters = [
-            (body[i] << 8) | body[i + 1]
-            for i in range(1, min(len(body), 9), 2)
-            if i + 1 < len(body)
-        ]
-        lifetime_totals = counters[:4]
-        for head, total in zip(heads, lifetime_totals):
-            head.lifetime_tenths_ml = total
+    # lifetime counters removed; ignore counter-style fragments entirely.
 
     return PumpStatus(
         message_id=message_id,
@@ -133,5 +146,5 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
         tail_targets=tail_targets,
         tail_flag=tail_flag,
         tail_raw=tail_raw,
-        lifetime_totals=lifetime_totals,
+        raw_payload=payload,
     )
