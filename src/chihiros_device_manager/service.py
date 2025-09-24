@@ -32,10 +32,43 @@ except ImportError:  # pragma: no cover - fallback if library changes
         pass
 
 
-from . import api, doser_commands
-from .device import Doser, LightDevice, get_device_from_address
-from .doser_status import PumpStatus, parse_status_payload
-from .light_status import ParsedLightStatus, parse_light_status
+if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
+    # ``uvicorn service:app`` imports this module as a script, meaning the
+    # relative imports below do not have a known parent package.  When that
+    # happens we manually place the project ``src`` directory on ``sys.path`` so
+    # that imports can resolve using the absolute package name.  This keeps the
+    # module usable both when the project is installed (the normal case) and
+    # when it is executed directly from a source checkout.
+    import importlib
+    import sys
+
+    _SRC_ROOT = Path(__file__).resolve().parent.parent
+    if str(_SRC_ROOT) not in sys.path:
+        sys.path.insert(0, str(_SRC_ROOT))
+
+    _PKG_NAME = "chihiros_device_manager"
+    _current_module = sys.modules.get(__name__)
+    if _current_module is not None:
+        sys.modules.setdefault(f"{_PKG_NAME}.service", _current_module)
+
+    api = importlib.import_module(f"{_PKG_NAME}.api")  # noqa: E402
+    doser_commands = importlib.import_module(f"{_PKG_NAME}.doser_commands")  # noqa: E402
+    _device = importlib.import_module(f"{_PKG_NAME}.device")  # noqa: E402
+    _doser_status = importlib.import_module(f"{_PKG_NAME}.doser_status")  # noqa: E402
+    _light_status = importlib.import_module(f"{_PKG_NAME}.light_status")  # noqa: E402
+
+    Doser = _device.Doser
+    LightDevice = _device.LightDevice
+    get_device_from_address = _device.get_device_from_address
+    PumpStatus = _doser_status.PumpStatus
+    parse_status_payload = _doser_status.parse_status_payload
+    ParsedLightStatus = _light_status.ParsedLightStatus
+    parse_light_status = _light_status.parse_light_status
+else:
+    from . import api, doser_commands
+    from .device import Doser, LightDevice, get_device_from_address
+    from .doser_status import PumpStatus, parse_status_payload
+    from .light_status import ParsedLightStatus, parse_light_status
 
 STATE_PATH = Path.home() / ".chihiros_state.json"
 AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
