@@ -17,6 +17,7 @@ from chihiros_device_manager.service import (
     CachedStatus,
     DoserScheduleRequest,
     LightBrightnessRequest,
+    debug_live_status,
     legacy_debug_archived,
     legacy_ui_archived,
     serve_spa,
@@ -129,6 +130,44 @@ def test_service_set_light_brightness_coerces_numeric_color(
     assert result is cached
 
 
+def test_api_debug_live_status_returns_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expose live payloads via the debug endpoint without persistence."""
+
+    statuses = [_cached("doser"), _cached("light")]
+    mocked = AsyncMock(return_value=(statuses, ["pump offline"]))
+    monkeypatch.setattr(service, "get_live_statuses", mocked)
+
+    result = asyncio.run(debug_live_status())
+
+    mocked.assert_awaited_once_with()
+    assert len(result["statuses"]) == 2
+    assert result["statuses"][0]["address"] == statuses[0].address
+    assert result["errors"] == ["pump offline"]
+
+
+def test_service_get_live_statuses_avoids_persistence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ensure live status collection does not touch the persisted cache."""
+
+    doser_status = _cached("doser")
+    doser_mock = AsyncMock(return_value=doser_status)
+    light_error = HTTPException(status_code=404, detail="Light not reachable")
+    light_mock = AsyncMock(side_effect=light_error)
+
+    monkeypatch.setattr(service, "_capture_doser_status", doser_mock)
+    monkeypatch.setattr(service, "_capture_light_status", light_mock)
+
+    statuses, errors = asyncio.run(service.get_live_statuses())
+
+    doser_mock.assert_awaited_once_with(persist=False)
+    light_mock.assert_awaited_once_with(persist=False)
+    assert statuses == [doser_status]
+    assert errors == ["Light not reachable"]
+
+
 def test_root_reports_missing_spa(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -218,6 +257,7 @@ def test_spa_asset_route_404_for_missing_files(
 
 def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serve the SPA from the dev server when no build artifacts exist."""
+
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
@@ -236,6 +276,7 @@ def test_spa_asset_route_proxies_dev_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Proxy SPA asset requests to the Vite dev server when available."""
+
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )

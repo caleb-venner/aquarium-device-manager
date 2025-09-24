@@ -16,9 +16,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, validator
-
-# from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, ValidationError, validator
 
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
@@ -320,6 +318,14 @@ class BLEService:
 
     async def _refresh_doser_status(self) -> CachedStatus:
         """Request and cache the latest doser status."""
+        return await self._capture_doser_status(persist=True)
+
+    async def _refresh_light_status(self) -> CachedStatus:
+        """Request and cache the latest light status."""
+        return await self._capture_light_status(persist=True)
+
+    async def _capture_doser_status(self, persist: bool) -> CachedStatus:
+        """Fetch the latest doser status, optionally persisting it."""
         async with self._lock:
             if not self._doser or not self._doser_address:
                 raise HTTPException(
@@ -347,12 +353,14 @@ class BLEService:
                 parsed=parsed,
                 updated_at=time.time(),
             )
-            self._cache[self._doser_address] = cached
-        await self._save_state()
+            if persist:
+                self._cache[self._doser_address] = cached
+        if persist:
+            await self._save_state()
         return cached
 
-    async def _refresh_light_status(self) -> CachedStatus:
-        """Request and cache the latest light status."""
+    async def _capture_light_status(self, persist: bool) -> CachedStatus:
+        """Fetch the latest light status, optionally persisting it."""
         async with self._lock:
             if not self._light or not self._light_address:
                 raise HTTPException(
@@ -380,9 +388,29 @@ class BLEService:
                 parsed=parsed,
                 updated_at=time.time(),
             )
-            self._cache[self._light_address] = cached
-        await self._save_state()
+            if persist:
+                self._cache[self._light_address] = cached
+        if persist:
+            await self._save_state()
         return cached
+
+    async def get_live_statuses(self) -> tuple[list[CachedStatus], list[str]]:
+        """Request live status frames without updating persistent storage."""
+
+        results: list[CachedStatus] = []
+        errors: list[str] = []
+
+        for collector in (self._capture_doser_status, self._capture_light_status):
+            try:
+                status = await collector(persist=False)
+            except HTTPException as exc:
+                if exc.status_code == 400:
+                    continue
+                errors.append(str(exc.detail))
+            else:
+                results.append(status)
+
+        return results, errors
 
     async def _load_state(self) -> None:
         """Load cached state from ``STATE_PATH`` if present."""
@@ -629,6 +657,19 @@ async def get_status() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/debug/live-status")
+async def debug_live_status() -> Dict[str, Any]:
+    """Expose live payloads without updating the persisted cache."""
+
+    statuses, errors = await service.get_live_statuses()
+    return {
+        "statuses": [
+            _cached_status_to_dict(status) for status in statuses
+        ],
+        "errors": errors,
+    }
+
+
 @app.get("/api/scan")
 async def scan_devices(timeout: float = 5.0) -> list[Dict[str, Any]]:
     """Discover nearby supported devices and expose metadata."""
@@ -640,8 +681,6 @@ async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a dosing pump and return its status payload."""
     status = await service.connect_doser(request.address)
     return _cached_status_to_dict(status)
-
-
 @app.post("/api/lights/connect")
 async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a light fixture and return its cached status."""
@@ -774,6 +813,7 @@ async def serve_spa_assets(spa_path: str) -> Response:
 
 async def _proxy_dev_server(path: str) -> Response | None:
     """Attempt to fetch ``path`` from the Vite dev server if available."""
+
     if not DEV_SERVER_CANDIDATES:
         return None
 
