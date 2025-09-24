@@ -1,0 +1,89 @@
+{
+  // VS Code tasks to streamline dev and test workflows
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "frontend: dev",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "vite",
+          "applyTo": "allDocuments",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Local:\\s*http://",
+            "endsPattern": ".*ready in .*"
+          }
+        }
+      ]
+    },
+    {
+      "label": "frontend: build",
+      "type": "shell",
+      "command": "npm run build",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": ["$tsc"]
+    },
+    {
+      "label": "backend: uvicorn",
+      "type": "shell",
+      "command": "uvicorn chihiros_device_manager.service:app --reload --host 0.0.0.0 --port 8000",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/src",
+          "CHIHIROS_AUTO_RECONNECT": "0"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "python",
+          "applyTo": "allDocuments",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Uvicorn running on http://",
+            "endsPattern": ".*Uvicorn running on http://"
+          }
+        }
+      ]
+    },
+    {
+      "label": "pre-commit: run all",
+      "type": "shell",
+      "command": "pre-commit run --all-files",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
+      "label": "dev: full stack",
+      "type": "shell",
+      "command": "echo 'Launching frontend and backend...'",
+      "dependsOn": ["frontend: dev", "backend: uvicorn"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}
