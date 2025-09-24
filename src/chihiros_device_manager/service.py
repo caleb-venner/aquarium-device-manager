@@ -102,11 +102,7 @@ else:
     from .device import Doser, LightDevice, get_device_from_address
 
     # Re-export request models for backwards compatibility in tests
-    from .schemas import (
-        ConnectRequest,
-        DoserScheduleRequest,
-        LightBrightnessRequest,
-    )
+    from .schemas import DoserScheduleRequest, LightBrightnessRequest
     from .serializers import (
         _serialize_light_status,
         _serialize_pump_status,
@@ -642,7 +638,7 @@ async def _proxy_dev_server(path: str) -> Response | None:
     return await spa._proxy_dev_server(path)
 
 
-"""Mount SPA assets via helper module."""
+# Mount SPA assets via helper module
 spa.mount_assets(app)
 
 
@@ -677,7 +673,7 @@ async def on_shutdown() -> None:
     await service.stop()
 
 
-"""Include API routers for devices, dosers, and lights."""
+# Include API routers for devices, dosers, and lights.
 app.include_router(devices_router)
 app.include_router(dosers_router)
 app.include_router(lights_router)
@@ -782,7 +778,7 @@ async def set_light_brightness(
     return cached_status_to_dict(service, status)
 
 
-"""Proxy logic moved to spa helper module."""
+# Proxy logic moved to spa helper module.
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper

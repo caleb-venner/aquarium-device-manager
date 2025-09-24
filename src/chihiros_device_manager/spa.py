@@ -1,3 +1,5 @@
+"""Helpers to mount and serve the frontend SPA (built or via dev server)."""
+
 from __future__ import annotations
 
 import os
@@ -9,10 +11,11 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
-FRONTEND_DIST = Path(os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST)))
+FRONTEND_DIST = Path(
+    os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
+)
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
 
 SPA_UNAVAILABLE_MESSAGE = (
@@ -48,13 +51,19 @@ _HOP_HEADERS = {
 
 
 def mount_assets(app) -> None:
+    """Mount the '/assets' static path if a built SPA is available."""
     if SPA_DIST_AVAILABLE:
         assets_dir = FRONTEND_DIST / "assets"
         if assets_dir.exists():
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="spa-assets")
+            app.mount(
+                "/assets",
+                StaticFiles(directory=str(assets_dir)),
+                name="spa-assets",
+            )
 
 
 async def serve_index_or_proxy() -> Response:
+    """Serve built index.html or proxy to a running dev server."""
     if SPA_DIST_AVAILABLE:
         index_path = FRONTEND_DIST / "index.html"
         if index_path.exists():
@@ -71,11 +80,16 @@ async def serve_index_or_proxy() -> Response:
 
 
 async def serve_spa_asset(spa_path: str) -> Response:
+    """Serve a built asset or proxy/fallback appropriately for client routes."""
     if not spa_path:
         raise HTTPException(status_code=404)
 
     first_segment = spa_path.split("/", 1)[0]
-    if first_segment in {"api"} or spa_path in {"docs", "redoc", "openapi.json"}:
+    if first_segment in {"api"} or spa_path in {
+        "docs",
+        "redoc",
+        "openapi.json",
+    }:
         raise HTTPException(status_code=404)
 
     if not SPA_DIST_AVAILABLE:
@@ -99,15 +113,26 @@ async def serve_spa_asset(spa_path: str) -> Response:
 
 
 async def _proxy_dev_server(path: str) -> Optional[Response]:
+    """Try to fetch a path from the Vite dev server if configured."""
     if not DEV_SERVER_CANDIDATES:
         return None
     normalized = path if path.startswith("/") else f"/{path}"
     for base_url in DEV_SERVER_CANDIDATES:
         try:
-            async with httpx.AsyncClient(base_url=str(base_url), timeout=DEV_SERVER_TIMEOUT) as client:
+            async with httpx.AsyncClient(
+                base_url=str(base_url), timeout=DEV_SERVER_TIMEOUT
+            ) as client:
                 response = await client.get(normalized, follow_redirects=True)
         except httpx.HTTPError:
             continue
-        headers = {key: value for key, value in response.headers.items() if key.lower() not in _HOP_HEADERS}
-        return Response(content=response.content, status_code=response.status_code, headers=headers)
+        headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in _HOP_HEADERS
+        }
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=headers,
+        )
     return None

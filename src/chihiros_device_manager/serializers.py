@@ -17,7 +17,9 @@ def _serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
     data = asdict(status)
     # raw_payload and tail_raw are bytes; convert them to hex strings for JSON.
     data["raw_payload"] = (
-        status.raw_payload.hex() if getattr(status, "raw_payload", None) else None
+        status.raw_payload.hex()
+        if getattr(status, "raw_payload", None)
+        else None
     )
     data["tail_raw"] = status.tail_raw.hex()
     for head in data["heads"]:
