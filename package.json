@@ -1,0 +1,6 @@
+{
+  "devDependencies": {
+    "@types/node": "^24.5.2",
+    "vite": "^7.1.7"
+  }
+}

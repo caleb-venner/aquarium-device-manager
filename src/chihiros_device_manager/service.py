@@ -1137,7 +1137,6 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper
     """Run the FastAPI service under Uvicorn."""
-
     import uvicorn
 
     host = os.getenv("CHIHIROS_SERVICE_HOST", "0.0.0.0")

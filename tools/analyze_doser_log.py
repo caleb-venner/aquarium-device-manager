@@ -61,18 +61,23 @@ class Record:
 
     @property
     def msg_id(self) -> tuple[int, int]:
+        """Returns the message ID as a tuple of two integers."""
         return self.msg_id_hi, self.msg_id_lo
 
     @property
     def kind(self) -> str:
+        """Returns the type of message direction."""
         return "TX" if self.direction == "SEND" else "RX"
 
     def describe(self) -> str:
+        """Return formatted string of object's state."""
+        """Timestamp, kind, command ID,mode, message IDs, payload, checksum."""
         body = " ".join(f"{b:02X}" for b in self.payload)
         return (
             f"[{self.timestamp}] {self.kind} cmd=0x{self.cmd_id:02X} "
-            f"mode=0x{self.mode:02X} msg={
-                self.msg_id_hi:02X}:{self.msg_id_lo:02X} "
+            f"mode=0x{self.mode:02X} msg={self.msg_id_hi:02X}:"
+            ""
+            "{self.msg_id_lo:02X} "
             f"data=[{body}] chk=0x{self.checksum:02X}"
         )
 
@@ -161,8 +166,8 @@ def main() -> None:
                 )
             if status.message_id is not None:
                 header_bits.append(
-                    f"msg={status.message_id[0]:02X}:{
-                        status.message_id[1]:02X}"
+                    f"msg={status.message_id[0]:02X}:"
+                    "{status.message_id[1]:02X}"
                 )
             if status.response_mode is not None:
                 header_bits.append(f"resp=0x{status.response_mode:02X}")
