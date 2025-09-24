@@ -177,6 +177,7 @@ dl dd {
   border: 1px solid rgba(148, 163, 184, 0.25);
 }
 
+
 .parsed-table {
   width: 100%;
   border-collapse: collapse;
@@ -188,26 +189,26 @@ dl dd {
 
 .parsed-table th,
 .parsed-table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  text-align: left;
   vertical-align: top;
 }
 
-.parsed-table th {
+.parsed-table thead th {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 0.75rem;
   font-weight: 600;
   color: rgba(226, 232, 240, 0.8);
-  width: 35%;
+  background: rgba(15, 23, 42, 0.75);
 }
 
-.parsed-table td {
+.parsed-table tbody td {
   color: #f8fafc;
 }
 
-.parsed-table tr:last-child th,
-.parsed-table tr:last-child td {
+.parsed-table tbody tr:last-child td {
   border-bottom: none;
 }
 

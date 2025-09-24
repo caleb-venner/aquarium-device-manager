@@ -72,14 +72,23 @@ function renderParsedTable(parsed: Record<string, unknown> | null): string {
     return "<em>No parsed payload</em>";
   }
 
-  const rows = entries
-    .map(
-      ([key, value]) =>
-        `<tr><th>${escapeHtml(key)}</th><td>${renderParsedValue(value)}</td></tr>`
-    )
+  const headerRow = entries
+    .map(([key]) => `<th scope="col">${escapeHtml(key)}</th>`)
+    .join("");
+  const valueRow = entries
+    .map(([, value]) => `<td>${renderParsedValue(value)}</td>`)
     .join("");
 
-  return `<table class="parsed-table"><tbody>${rows}</tbody></table>`;
+  return `
+    <table class="parsed-table">
+      <thead>
+        <tr>${headerRow}</tr>
+      </thead>
+      <tbody>
+        <tr>${valueRow}</tr>
+      </tbody>
+    </table>
+  `;
 }
 
 function renderDeviceCard({ address, status }: DeviceEntry): string {
