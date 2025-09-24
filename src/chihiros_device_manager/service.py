@@ -16,7 +16,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field, ValidationError, validator
+from pydantic import BaseModel, Field, validator
 
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
@@ -396,11 +396,13 @@ class BLEService:
 
     async def get_live_statuses(self) -> tuple[list[CachedStatus], list[str]]:
         """Request live status frames without updating persistent storage."""
-
         results: list[CachedStatus] = []
         errors: list[str] = []
 
-        for collector in (self._capture_doser_status, self._capture_light_status):
+        for collector in (
+            self._capture_doser_status,
+            self._capture_light_status,
+        ):
             try:
                 status = await collector(persist=False)
             except HTTPException as exc:
@@ -660,12 +662,9 @@ async def get_status() -> Dict[str, Any]:
 @app.post("/api/debug/live-status")
 async def debug_live_status() -> Dict[str, Any]:
     """Expose live payloads without updating the persisted cache."""
-
     statuses, errors = await service.get_live_statuses()
     return {
-        "statuses": [
-            _cached_status_to_dict(status) for status in statuses
-        ],
+        "statuses": [_cached_status_to_dict(status) for status in statuses],
         "errors": errors,
     }
 
@@ -681,6 +680,8 @@ async def connect_doser(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a dosing pump and return its status payload."""
     status = await service.connect_doser(request.address)
     return _cached_status_to_dict(status)
+
+
 @app.post("/api/lights/connect")
 async def connect_light(request: ConnectRequest) -> Dict[str, Any]:
     """Connect to a light fixture and return its cached status."""
@@ -813,7 +814,6 @@ async def serve_spa_assets(spa_path: str) -> Response:
 
 async def _proxy_dev_server(path: str) -> Response | None:
     """Attempt to fetch ``path`` from the Vite dev server if available."""
-
     if not DEV_SERVER_CANDIDATES:
         return None
 

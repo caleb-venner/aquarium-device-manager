@@ -134,7 +134,6 @@ def test_api_debug_live_status_returns_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Expose live payloads via the debug endpoint without persistence."""
-
     statuses = [_cached("doser"), _cached("light")]
     mocked = AsyncMock(return_value=(statuses, ["pump offline"]))
     monkeypatch.setattr(service, "get_live_statuses", mocked)
@@ -151,7 +150,6 @@ def test_service_get_live_statuses_avoids_persistence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Ensure live status collection does not touch the persisted cache."""
-
     doser_status = _cached("doser")
     doser_mock = AsyncMock(return_value=doser_status)
     light_error = HTTPException(status_code=404, detail="Light not reachable")
@@ -257,7 +255,6 @@ def test_spa_asset_route_404_for_missing_files(
 
 def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serve the SPA from the dev server when no build artifacts exist."""
-
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
@@ -276,7 +273,6 @@ def test_spa_asset_route_proxies_dev_server(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Proxy SPA asset requests to the Vite dev server when available."""
-
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
