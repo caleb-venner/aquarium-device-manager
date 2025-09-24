@@ -11,8 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
+import httpx
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field, ValidationError, validator
@@ -481,6 +487,30 @@ FRONTEND_DIST = Path(
 )
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
 
+_DEV_SERVER_ENV = os.getenv("CHIHIROS_FRONTEND_DEV_SERVER", "").strip()
+if _DEV_SERVER_ENV == "0":
+    DEV_SERVER_CANDIDATES: tuple[httpx.URL, ...] = ()
+elif _DEV_SERVER_ENV:
+    DEV_SERVER_CANDIDATES = (httpx.URL(_DEV_SERVER_ENV.rstrip("/")),)
+else:
+    DEV_SERVER_CANDIDATES = (
+        httpx.URL("http://127.0.0.1:5173"),
+        httpx.URL("http://localhost:5173"),
+    )
+
+DEV_SERVER_TIMEOUT = httpx.Timeout(connect=1.0, read=5.0, write=5.0, pool=1.0)
+_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "content-length",
+}
+
 if SPA_DIST_AVAILABLE:
     assets_dir = FRONTEND_DIST / "assets"
     if assets_dir.exists():
@@ -555,12 +585,15 @@ class LightBrightnessRequest(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
-async def serve_spa() -> HTMLResponse:
+async def serve_spa() -> Response:
     """Serve the SPA entry point or fall back to the legacy dashboard."""
     if SPA_DIST_AVAILABLE:
         index_path = FRONTEND_DIST / "index.html"
         if index_path.exists():
             return HTMLResponse(index_path.read_text(encoding="utf-8"))
+    proxied = await _proxy_dev_server("/")
+    if proxied is not None:
+        return proxied
     return RedirectResponse(url="/ui")
 
 
@@ -1169,11 +1202,8 @@ async def debug_live_raw(request: Request) -> HTMLResponse:
 
 
 @app.get("/{spa_path:path}", include_in_schema=False)
-async def serve_spa_assets(spa_path: str):
+async def serve_spa_assets(spa_path: str) -> Response:
     """Serve built SPA assets or fallback to the index for client routes."""
-    if not SPA_DIST_AVAILABLE:
-        raise HTTPException(status_code=404, detail="SPA bundle unavailable")
-
     if not spa_path:
         raise HTTPException(status_code=404)
 
@@ -1184,6 +1214,12 @@ async def serve_spa_assets(spa_path: str):
         "openapi.json",
     }:
         raise HTTPException(status_code=404)
+
+    if not SPA_DIST_AVAILABLE:
+        proxied = await _proxy_dev_server(f"/{spa_path}")
+        if proxied is not None:
+            return proxied
+        raise HTTPException(status_code=404, detail="SPA bundle unavailable")
 
     asset_path = FRONTEND_DIST / spa_path
     if asset_path.is_file():
@@ -1197,6 +1233,37 @@ async def serve_spa_assets(spa_path: str):
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
 
     raise HTTPException(status_code=404)
+
+
+async def _proxy_dev_server(path: str) -> Response | None:
+    """Attempt to fetch ``path`` from the Vite dev server if available."""
+
+    if not DEV_SERVER_CANDIDATES:
+        return None
+
+    normalized = path if path.startswith("/") else f"/{path}"
+
+    for base_url in DEV_SERVER_CANDIDATES:
+        try:
+            async with httpx.AsyncClient(
+                base_url=str(base_url), timeout=DEV_SERVER_TIMEOUT
+            ) as client:
+                response = await client.get(normalized, follow_redirects=True)
+        except httpx.HTTPError:
+            continue
+
+        headers = {
+            key: value
+            for key, value in response.headers.items()
+            if key.lower() not in _HOP_HEADERS
+        }
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=headers,
+        )
+
+    return None
 
 
 def main() -> None:  # pragma: no cover - thin CLI wrapper

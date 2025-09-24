@@ -101,6 +101,12 @@ npm install
 npm run dev
 ```
 
+With the development server running, visiting `http://localhost:8000/` will
+transparently proxy requests to Vite (listening on port 5173 by default).
+Point `CHIHIROS_FRONTEND_DEV_SERVER` at a different origin if the dev server is
+hosted elsewhere, or set it to `0` to disable the proxy and continue using the
+legacy HTMX dashboard when no compiled bundle exists.
+
 Create a production build before packaging or running inside Docker:
 
 ```bash

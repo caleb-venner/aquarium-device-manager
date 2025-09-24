@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
+from fastapi.responses import HTMLResponse
 
 from chihiros_device_manager import doser_commands
 from chihiros_device_manager.service import (
@@ -131,6 +132,11 @@ def test_root_redirects_when_spa_missing(
     monkeypatch.setattr(
         "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
     )
+    monkeypatch.setattr(
+        "chihiros_device_manager.service._proxy_dev_server",
+        AsyncMock(return_value=None),
+    )
+
     response = asyncio.run(serve_spa())
     assert response.status_code == 307
     assert response.headers["location"] == "/ui"
@@ -204,3 +210,39 @@ def test_spa_asset_route_404_for_missing_files(
         asyncio.run(serve_spa_assets("app.js"))
 
     assert excinfo.value.status_code == 404
+
+
+def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Serve the SPA from the dev server when no build artifacts exist."""
+
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+    )
+    proxied = HTMLResponse("dev")
+    helper = AsyncMock(return_value=proxied)
+    monkeypatch.setattr(
+        "chihiros_device_manager.service._proxy_dev_server", helper
+    )
+
+    response = asyncio.run(serve_spa())
+    assert response is proxied
+    helper.assert_awaited_once_with("/")
+
+
+def test_spa_asset_route_proxies_dev_server(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Proxy SPA asset requests to the Vite dev server when available."""
+
+    monkeypatch.setattr(
+        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+    )
+    proxied = HTMLResponse("console.log('dev')")
+    helper = AsyncMock(return_value=proxied)
+    monkeypatch.setattr(
+        "chihiros_device_manager.service._proxy_dev_server", helper
+    )
+
+    response = asyncio.run(serve_spa_assets("src/main.ts"))
+    assert response is proxied
+    helper.assert_awaited_once_with("/src/main.ts")
