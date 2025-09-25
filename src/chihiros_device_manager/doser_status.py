@@ -4,6 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
+def _plausible_time(wd: int, hr: int, minute: int) -> bool:
+    return 0 <= wd <= 6 and 0 <= hr <= 23 and 0 <= minute <= 59
+
+
+def _minutes_distance(h1: int, m1: int, h2: int, m2: int) -> int:
+    """Return minimal absolute distance in minutes between two HH:MM values.
+
+    Computed modulo 24h so wrap-around at midnight is handled.
+    """
+    a = (h1 * 60 + m1) % (24 * 60)
+    b = (h2 * 60 + m2) % (24 * 60)
+    diff = abs(a - b)
+    return min(diff, (24 * 60) - diff)
+
+
 MODE_NAMES = {
     0x00: "daily",
     0x01: "24h",
@@ -84,9 +100,7 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
         maybe_wd = payload[6]
         maybe_hr = payload[7]
         maybe_min = payload[8]
-        if not (
-            0 <= maybe_wd <= 6 and 0 <= maybe_hr <= 23 and 0 <= maybe_min <= 59
-        ):
+        if not _plausible_time(maybe_wd, maybe_hr, maybe_min):
             # Header contains no weekday/time; body starts at payload[6]
             weekday = None
             hour = None
@@ -97,6 +111,29 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
             hour = maybe_hr
             minute = maybe_min
             body = payload[9:]
+            # Some frames include filler bytes before a second copy of the
+            # weekday/hour/minute at the start of the body. If present, and
+            # within ±1 minute of the header timestamp, skip up to and
+            # including that triplet so we don't accidentally parse the filler
+            # as the first head block.
+            if (
+                len(body) >= 3
+                and weekday is not None
+                and hour is not None
+                and minute is not None
+            ):
+                scan_limit = min(32, len(body) - 2)
+                adjusted_start = None
+                for off in range(0, scan_limit):
+                    wd2, hr2, min2 = body[off], body[off + 1], body[off + 2]
+                    if (
+                        _plausible_time(wd2, hr2, min2)
+                        and _minutes_distance(hour, minute, hr2, min2) <= 1
+                    ):
+                        adjusted_start = off + 3
+                        break
+                if adjusted_start is not None and adjusted_start > 0:
+                    body = body[adjusted_start:]
     else:
         if len(payload) < 3:
             raise ValueError("payload too short")

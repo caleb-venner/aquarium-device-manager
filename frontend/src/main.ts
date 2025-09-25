@@ -24,6 +24,13 @@ type LiveStatusResponse = {
   errors: string[];
 };
 
+type ScanDevice = {
+  address: string;
+  name: string;
+  product: string;
+  device_type: string;
+};
+
 // Narrow types for doser parsed JSON we care about
 type DoserHead = {
   mode: number;
@@ -248,7 +255,13 @@ function renderDeviceSection(
   emptyMessage: string
 ): string {
   if (entries.length === 0) {
-    return renderNotice(emptyMessage, "info");
+    return `
+      ${renderNotice(emptyMessage, "info")}
+      <div class="scan-panel">
+        <button class="btn" id="scan-btn" title="Scan for nearby devices">Scan for devices</button>
+        <div id="scan-results"></div>
+      </div>
+    `;
   }
 
   // Overview should render collapsed device cards by default.
@@ -530,6 +543,66 @@ async function loadOverview(): Promise<void> {
       "No devices connected yet."
     );
 
+    // If empty, wire up Scan button to discover and connect
+    if (entries.length === 0) {
+      const scanBtn = container.querySelector<HTMLButtonElement>("#scan-btn");
+      const resultsDiv = container.querySelector<HTMLDivElement>("#scan-results");
+      if (scanBtn && resultsDiv) {
+        scanBtn.addEventListener("click", async () => {
+          scanBtn.disabled = true;
+          scanBtn.textContent = "Scanning…";
+          try {
+            const found = await fetchJson<ScanDevice[]>("/api/scan");
+            if (found.length === 0) {
+              resultsDiv.innerHTML = renderNotice("No supported devices found.", "warning");
+            } else {
+              resultsDiv.innerHTML = `
+                <ul class="scan-list">
+                  ${found
+                    .map(
+                      (d) => `
+                        <li>
+                          <code>${escapeHtml(d.address)}</code> — ${escapeHtml(d.product || d.name)}
+                          <button class="btn connect-btn" data-address="${escapeHtml(d.address)}">Connect</button>
+                        </li>`
+                    )
+                    .join("")}
+                </ul>`;
+              const connectBtns = resultsDiv.querySelectorAll<HTMLButtonElement>(".connect-btn");
+              connectBtns.forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                  const address = btn.dataset.address;
+                  if (!address) return;
+                  const prev = btn.textContent;
+                  btn.disabled = true;
+                  btn.textContent = "Connecting…";
+                  try {
+                    await postJson(`/api/devices/${encodeURIComponent(address)}/connect`);
+                    // After connecting, refresh overview to show the device
+                    void loadOverview();
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Failed to connect.";
+                    alert(msg);
+                  } finally {
+                    btn.disabled = false;
+                    btn.textContent = prev || "Connect";
+                  }
+                });
+              });
+            }
+          } catch (err) {
+            resultsDiv.innerHTML = renderNotice(
+              err instanceof Error ? err.message : "Scan failed.",
+              "error"
+            );
+          } finally {
+            scanBtn.disabled = false;
+            scanBtn.textContent = "Scan for devices";
+          }
+        });
+      }
+    }
+
     // Wire up Update buttons
     const buttons = container.querySelectorAll<HTMLButtonElement>(".update-btn");
     buttons.forEach((btn) => {
@@ -617,6 +690,71 @@ async function loadDashboard(): Promise<void> {
     const entries = statusResponseToEntries(data).sort((a, b) =>
       a.address.localeCompare(b.address)
     );
+    if (entries.length === 0) {
+      container.innerHTML = `
+        ${renderNotice("No devices connected yet.", "info")}
+        <div class="scan-panel">
+          <button class="btn" id="scan-btn" title="Scan for nearby devices">Scan for devices</button>
+          <div id="scan-results"></div>
+        </div>`;
+      const scanBtn = container.querySelector<HTMLButtonElement>("#scan-btn");
+      const resultsDiv = container.querySelector<HTMLDivElement>("#scan-results");
+      if (scanBtn && resultsDiv) {
+        scanBtn.addEventListener("click", async () => {
+          scanBtn.disabled = true;
+          scanBtn.textContent = "Scanning…";
+          try {
+            const found = await fetchJson<ScanDevice[]>("/api/scan");
+            if (found.length === 0) {
+              resultsDiv.innerHTML = renderNotice("No supported devices found.", "warning");
+            } else {
+              resultsDiv.innerHTML = `
+                <ul class="scan-list">
+                  ${found
+                    .map(
+                      (d) => `
+                        <li>
+                          <code>${escapeHtml(d.address)}</code> — ${escapeHtml(d.product || d.name)}
+                          <button class="btn connect-btn" data-address="${escapeHtml(d.address)}">Connect</button>
+                        </li>`
+                    )
+                    .join("")}
+                </ul>`;
+              const connectBtns = resultsDiv.querySelectorAll<HTMLButtonElement>(".connect-btn");
+              connectBtns.forEach((btn) => {
+                btn.addEventListener("click", async () => {
+                  const address = btn.dataset.address;
+                  if (!address) return;
+                  const prev = btn.textContent;
+                  btn.disabled = true;
+                  btn.textContent = "Connecting…";
+                  try {
+                    await postJson(`/api/devices/${encodeURIComponent(address)}/connect`);
+                    void loadDashboard();
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Failed to connect.";
+                    alert(msg);
+                  } finally {
+                    btn.disabled = false;
+                    btn.textContent = prev || "Connect";
+                  }
+                });
+              });
+            }
+          } catch (err) {
+            resultsDiv.innerHTML = renderNotice(
+              err instanceof Error ? err.message : "Scan failed.",
+              "error"
+            );
+          } finally {
+            scanBtn.disabled = false;
+            scanBtn.textContent = "Scan for devices";
+          }
+        });
+      }
+      return;
+    }
+
     const doserHtml = renderDoserDashboard(entries);
     const lightHtml = renderLightDashboard(entries);
     container.innerHTML = `${doserHtml}${lightHtml}`;

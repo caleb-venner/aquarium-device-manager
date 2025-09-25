@@ -1,6 +1,8 @@
-"""Module defining commands generation functions."""
+"""Command encoders and related helpers for Chihiros devices."""
 
 import datetime
+from enum import Enum
+from typing import List
 
 
 def next_message_id(
@@ -155,3 +157,47 @@ def create_switch_to_auto_mode_command(msg_id: tuple[int, int]) -> bytearray:
 def create_status_request_command(msg_id: tuple[int, int]) -> bytearray:
     """Request a status notification from the device."""
     return _create_command_encoding(0x5A, 0x04, msg_id, [0x01])
+
+
+# ------------------------------------------------------------
+# Weekday selection encoding for light automation commands
+# ------------------------------------------------------------
+
+
+class WeekdaySelect(str, Enum):
+    """User-facing weekday enumeration for light schedules."""
+
+    monday = "monday"
+    tuesday = "tuesday"
+    wednesday = "wednesday"
+    thursday = "thursday"
+    friday = "friday"
+    saturday = "saturday"
+    sunday = "sunday"
+    everyday = "everyday"
+
+
+def encode_selected_weekdays(selection: List[WeekdaySelect]) -> int:
+    """Encode a list of weekdays into the device bitmask.
+
+    Bit layout (MSB..LSB): Mon(64) Tue(32) Wed(16) Thu(8) Fri(4) Sat(2) Sun(1).
+    A special 'everyday' value produces 127.
+    """
+    encoding = 0
+    if WeekdaySelect.everyday in selection:
+        return 127
+    if WeekdaySelect.monday in selection:
+        encoding += 64
+    if WeekdaySelect.tuesday in selection:
+        encoding += 32
+    if WeekdaySelect.wednesday in selection:
+        encoding += 16
+    if WeekdaySelect.thursday in selection:
+        encoding += 8
+    if WeekdaySelect.friday in selection:
+        encoding += 4
+    if WeekdaySelect.saturday in selection:
+        encoding += 2
+    if WeekdaySelect.sunday in selection:
+        encoding += 1
+    return encoding

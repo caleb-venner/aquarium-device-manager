@@ -11,11 +11,13 @@ from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from . import api, commands, doser_commands
+from . import commands
+from . import core_api as api
+from . import doser_commands
+from .commands import WeekdaySelect
 from .device import Doser, LightDevice, get_device_from_address
 from .doser_status import parse_status_payload
 from .light_status import ParsedLightStatus, parse_light_status
-from .weekday_encoding import WeekdaySelect
 
 app = typer.Typer()
 

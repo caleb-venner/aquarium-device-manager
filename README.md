@@ -96,6 +96,25 @@ been built (or a Vite dev server is not running), the root route will return a
 503 with instructions on how to start the frontend build. All capabilities
 remain exposed under the `/api/*` endpoints.
 
+### First run and device discovery
+
+On a fresh start (no cached devices in `~/.chihiros_state.json`), the dashboard shows a simple onboarding panel with a “Scan for devices” button. Use it to discover nearby supported devices and click “Connect” to add them to the service cache.
+
+Equivalent REST endpoints are available if you prefer scripts:
+
+- `GET /api/scan` → returns a list of nearby supported devices: address, name, product, device_type
+- `POST /api/devices/{address}/connect` → connects to the device and captures an initial status
+
+Optional automation: set `CHIHIROS_AUTO_DISCOVER_ON_START=1` to perform a one-off scan at startup (only when there are no cached devices) and attempt to connect to supported devices automatically.
+
+Tip for Make users: you can pass it through the Makefile in dev runs:
+
+```bash
+make dev-back CHIHIROS_AUTO_DISCOVER_ON_START=1
+# or
+make dev CHIHIROS_AUTO_DISCOVER_ON_START=1
+```
+
 ## Frontend development (TypeScript SPA)
 
 The project now ships with an experimental SPA scaffold under the
@@ -156,6 +175,7 @@ Centralized reference for runtime configuration knobs exposed by the service / S
 | `CHIHIROS_SERVICE_HOST` | `0.0.0.0` | str | Listen interface for the FastAPI/Uvicorn server. | `127.0.0.1` |
 | `CHIHIROS_SERVICE_PORT` | `8000` | int | Listen port for the FastAPI/Uvicorn server. | `9000` |
 | `CHIHIROS_AUTO_RECONNECT` | `1` | int/bool | Attempt reconnect to previously cached devices on startup (`1` truthy, `0` disabled). | `0` |
+| `CHIHIROS_AUTO_DISCOVER_ON_START` | `0` | int/bool | When no cached devices exist, perform a one-off scan at startup and try to connect to supported devices automatically. | `1` |
 | `CHIHIROS_STATUS_CAPTURE_WAIT` | `1.5` | float (s) | Delay after requesting a status before reading cached frame (tune for adapter speed / RF conditions). | `0.8` |
 | `CHIHIROS_FRONTEND_DEV_SERVER` | (unset) | str/URL | If set, root path proxies to a running Vite dev server instead of serving built assets. Set to `0` to force-disable proxy even if assets missing. | `http://localhost:5173` |
 | `CHIHIROS_FRONTEND_DIST` | `frontend/dist` | path | Absolute/relative path to built SPA assets (index.html + assets/). | `/opt/app/frontend-build` |
@@ -164,6 +184,7 @@ Centralized reference for runtime configuration knobs exposed by the service / S
 Notes:
 
 - Boolean style variables use simple `int()` parsing; any non-zero integer is considered enabled.
+- Auto-discover runs only when the cache is empty (first run) to avoid interrupting existing connections.
 - `CHIHIROS_STATUS_CAPTURE_WAIT` invalid (non-float) values fall back to the default at import time.
 - When both a dev server proxy and a local dist are unavailable the root route returns HTTP 503 with guidance.
 - Changes to these variables require a service restart to take effect (they are read at module import or startup).

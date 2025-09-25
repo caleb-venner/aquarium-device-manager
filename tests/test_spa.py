@@ -1,4 +1,5 @@
 """Tests specifically for SPA serving and asset routing logic."""
+
 from __future__ import annotations
 
 import asyncio

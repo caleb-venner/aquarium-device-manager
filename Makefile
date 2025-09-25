@@ -1,5 +1,9 @@
 # Simple dev helpers
 
+# Env flags (overridable). Export so recursive make and recipe shells inherit.
+# CHIHIROS_AUTO_DISCOVER_ON_START ?= 0
+# export CHIHIROS_AUTO_DISCOVER_ON_START
+
 .PHONY: help dev dev-front dev-back build front-build lint test precommit
 
 help:
@@ -30,7 +34,7 @@ front-build:
 # Backend
 
 dev-back:
-	PYTHONPATH=src CHIHIROS_AUTO_RECONNECT=0 uvicorn chihiros_device_manager.service:app --reload --host 0.0.0.0 --port 8000
+	PYTHONPATH=src CHIHIROS_AUTO_RECONNECT=1 uvicorn chihiros_device_manager.service:app --reload --host 0.0.0.0 --port 8000
 
 # Combined
 

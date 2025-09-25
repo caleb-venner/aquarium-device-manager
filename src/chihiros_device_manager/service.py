@@ -36,7 +36,8 @@ except ImportError:  # pragma: no cover - fallback if library changes
 
 # Internal serialization helpers (previously re-exported for tests;
 # tests now use API JSON)
-from . import api, doser_commands
+from . import core_api as api
+from . import doser_commands
 from . import serializers as _serializers
 from . import spa
 from .api.routes_devices import router as devices_router
@@ -47,6 +48,7 @@ from .device import Doser, LightDevice, get_device_from_address
 STATE_PATH = Path.home() / ".chihiros_state.json"
 AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
 STATUS_CAPTURE_WAIT_ENV = "CHIHIROS_STATUS_CAPTURE_WAIT"
+AUTO_DISCOVER_ENV = "CHIHIROS_AUTO_DISCOVER_ON_START"
 try:
     # Allow override of the capture wait (seconds) via env var;
     # fallback to default 1.5s.
@@ -55,6 +57,30 @@ try:
     )
 except ValueError:  # pragma: no cover - defensive parse guard
     STATUS_CAPTURE_WAIT_SECONDS = 1.5
+
+
+def _get_env_bool(name: str, default: bool) -> bool:
+    """Parse boolean-like environment variables robustly.
+
+    Accepts common truthy/falsey strings and treats missing/empty values as
+    the provided default. Falls back to the default for unrecognised values.
+    """
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    s = raw.strip()
+    if s == "":
+        return default
+    lowered = s.lower()
+    if lowered in ("1", "true", "yes", "on"):  # common truthy values
+        return True
+    if lowered in ("0", "false", "no", "off"):  # common falsey values
+        return False
+    try:
+        return bool(int(s))
+    except ValueError:
+        return default
+
 
 # Module logger
 logger = logging.getLogger("chihiros_device_manager.service")
@@ -100,7 +126,10 @@ class BLEService:
         self._light: Optional[LightDevice] = None
         self._light_address: Optional[str] = None
         self._cache: Dict[str, CachedStatus] = {}
-        self._auto_reconnect = bool(int(os.getenv(AUTO_RECONNECT_ENV, "1")))
+        self._auto_reconnect = _get_env_bool(AUTO_RECONNECT_ENV, True)
+        # Optional: when enabled and no cached devices exist, perform a one-off
+        # scan at startup and try to connect to supported devices.
+        self._auto_discover_on_start = _get_env_bool(AUTO_DISCOVER_ENV, False)
 
     async def start(self) -> None:
         """Initialise the service and reconnect cached devices.
@@ -110,6 +139,24 @@ class BLEService:
         """
         await self._load_state()
         logger.info("Service start: loaded %d cached devices", len(self._cache))
+        # Log key runtime flags to aid diagnosing startup behaviour
+        logger.info(
+            "Settings: auto_discover_on_start=%s, "
+            "auto_reconnect=%s, capture_wait=%.2fs",
+            self._auto_discover_on_start,
+            self._auto_reconnect,
+            STATUS_CAPTURE_WAIT_SECONDS,
+        )
+        # If no cached devices and auto-discover is enabled, try a one-off scan
+        if not self._cache and self._auto_discover_on_start:
+            try:
+                logger.info(
+                    "Auto-discover enabled; scanning for supported devices"
+                )
+                await self._auto_discover_and_connect()
+                await self._save_state()
+            except Exception as exc:  # pragma: no cover - runtime diagnostics
+                logger.warning("Auto-discover failed: %s", exc)
         if self._auto_reconnect:
             logger.info(
                 "Auto-reconnect enabled; attempting reconnect to cached devices"
@@ -447,7 +494,7 @@ class BLEService:
                 raise HTTPException(
                     status_code=500, detail="No status received from doser"
                 )
-            parsed = _serializers._serialize_pump_status(status)
+            parsed = _serializers.serialize_pump_status(status)
             cached = CachedStatus(
                 address=self._doser_address,
                 device_type="doser",
@@ -496,7 +543,7 @@ class BLEService:
             # The device now supplies a ParsedLightStatus for `last_status`.
             # Use it directly to avoid duplicate parsing and maintain a
             # single canonical parsing path.
-            parsed = _serializers._serialize_light_status(status)
+            parsed = _serializers.serialize_light_status(status)
             cached = CachedStatus(
                 address=self._light_address,
                 device_type="light",
@@ -595,6 +642,51 @@ class BLEService:
                         getattr(exc, "detail", exc),
                     )
                     continue
+
+    async def _auto_discover_and_connect(self) -> None:
+        """Scan for supported devices and connect to them once at startup.
+
+        This is intended for fresh starts where no cache is present. It will
+        attempt to connect to each supported device discovered within a short
+        timeout. Errors are logged and skipped to avoid blocking startup.
+        """
+        supported = await api.discover_supported_devices(timeout=5.0)
+        if not supported:
+            logger.info("No supported devices discovered")
+            return
+        logger.info("Discovered %d supported devices", len(supported))
+        for device, model_class in supported:
+            address = device.address
+            try:
+                if hasattr(model_class, "model_name") and "Doser" in getattr(
+                    model_class, "__name__", ""
+                ):
+                    status = await self.connect_doser(address)
+                elif hasattr(model_class, "model_name") and "Light" in getattr(
+                    model_class, "__name__", ""
+                ):
+                    status = await self.connect_light(address)
+                else:
+                    # Fallback: infer by instance check using helper
+                    from .device import Doser as _Doser
+                    from .device import LightDevice as _Light
+
+                    if issubclass(model_class, _Doser):
+                        status = await self.connect_doser(address)
+                    elif issubclass(model_class, _Light):
+                        status = await self.connect_light(address)
+                    else:
+                        logger.debug(
+                            "Skipping unsupported model for %s: %s",
+                            address,
+                            model_class,
+                        )
+                        continue
+                self._cache[address] = status
+                logger.info("Connected to %s (%s)", address, status.device_type)
+            except Exception as exc:  # pragma: no cover - runtime diagnostics
+                logger.warning("Connect failed for %s: %s", address, exc)
+                continue
 
 
 # Serializers were moved to `serializers.py` and used by API routers.

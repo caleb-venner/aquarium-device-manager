@@ -8,6 +8,8 @@ Added
 -----
 
 * `CHIHIROS_STATUS_CAPTURE_WAIT` environment variable to tune the post-request status capture delay (default 1.5s). Lower for faster polling on stable adapters; raise if you see intermittent missing status frames.
+* Frontend onboarding when no devices are cached: a Scan/Connect panel that calls the new `/api/scan` and `/api/devices/{address}/connect` endpoints.
+* Optional startup automation via `CHIHIROS_AUTO_DISCOVER_ON_START=1` to perform a one-off scan and auto-connect on first run (no cached devices).
 
 Removed
 -------
@@ -27,6 +29,11 @@ Internal
 --------
 
 * Cleaned unused imports and constants tied to removed wrapper logic.
+
+Fixed
+-----
+
+* Doser status parsing now tolerates a ±1 minute mismatch between the header time and the body’s leading time triplet, skipping preamble bytes when present to avoid mis-decoding head data.
 
 ---
 

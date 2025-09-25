@@ -12,23 +12,39 @@ from .doser_status import PumpStatus
 from .light_status import ParsedLightStatus
 
 
-def _serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
-    """Convert a pump status dataclass into JSON-safe primitives."""
+def serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
+    """Convert a pump status dataclass into JSON-safe primitives.
+
+    Notes:
+    - The top-level CachedStatus already carries the raw_payload as hex.
+      To avoid duplication, we omit raw_payload from the nested parsed dict.
+    """
     data = asdict(status)
-    # raw_payload and tail_raw are bytes; convert them to hex strings for JSON.
-    data["raw_payload"] = (
-        status.raw_payload.hex()
-        if getattr(status, "raw_payload", None)
-        else None
-    )
+    # Remove raw_payload from parsed to avoid duplication and non-JSON bytes
+    if "raw_payload" in data:
+        data.pop("raw_payload", None)
+    # Convert remaining byte fields to hex strings
     data["tail_raw"] = status.tail_raw.hex()
-    for head in data["heads"]:
-        head["extra"] = bytes(head["extra"]).hex()
+    # Enrich per-head data with hex-encoded extras and human-friendly mode name
+    for head_dict, head_obj in zip(data["heads"], status.heads):
+        head_dict["extra"] = bytes(head_dict["extra"]).hex()
+        # Include a friendly mode label alongside the numeric mode
+        try:
+            head_dict["mode_label"] = head_obj.mode_label()
+        except (
+            Exception
+        ):  # pragma: no cover - defensive; mode_label should exist
+            head_dict["mode_label"] = f"0x{head_dict.get('mode', 0):02X}"
     return data
 
 
-def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
-    """Convert a light status snapshot to a serializable dictionary."""
+def serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
+    """Convert a light status snapshot to a serializable dictionary.
+
+    Notes:
+    - Omit raw_payload from parsed to prevent duplication; it is available at
+      the CachedStatus top level.
+    """
     data = {
         "message_id": status.message_id,
         "response_mode": status.response_mode,
@@ -51,10 +67,6 @@ def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
         ],
         "time_markers": status.time_markers,
         "tail": status.tail.hex(),
-        # Preserve the original raw payload bytes for parity with pump
-        # serialization. The frontend or diagnostic tooling may rely on
-        # this to show the raw frame that produced the parsed view.
-        "raw_payload": status.raw_payload.hex(),
     }
     return data
 
