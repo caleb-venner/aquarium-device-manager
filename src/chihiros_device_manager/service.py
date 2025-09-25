@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 # from datetime import datetime
@@ -33,84 +34,27 @@ except ImportError:  # pragma: no cover - fallback if library changes
         pass
 
 
-if __package__ in {None, ""}:  # pragma: no cover - runtime path fallback
-    # ``uvicorn service:app`` imports this module as a script, meaning the
-    # relative imports below do not have a known parent package.  When that
-    # happens we manually place the project ``src`` directory on ``sys.path``
-    # so that imports can resolve using the absolute package name.  This keeps
-    # the module usable both when the project is installed (the normal case)
-    # and when it is executed directly from a source checkout.
-    import importlib
-    import sys
-
-    _SRC_ROOT = Path(__file__).resolve().parent.parent
-    if str(_SRC_ROOT) not in sys.path:
-        sys.path.insert(0, str(_SRC_ROOT))
-
-    _PKG_NAME = "chihiros_device_manager"
-    _current_module = sys.modules.get(__name__)
-    if _current_module is not None:
-        sys.modules.setdefault(f"{_PKG_NAME}.service", _current_module)
-
-    api = importlib.import_module(f"{_PKG_NAME}.api")  # noqa: E402
-    doser_commands = importlib.import_module(
-        f"{_PKG_NAME}.doser_commands"
-    )  # noqa: E402
-    _device = importlib.import_module(f"{_PKG_NAME}.device")  # noqa: E402
-    _doser_status = importlib.import_module(
-        f"{_PKG_NAME}.doser_status"
-    )  # noqa: E402
-    _light_status = importlib.import_module(
-        f"{_PKG_NAME}.light_status"
-    )  # noqa: E402
-    _serializers = importlib.import_module(
-        f"{_PKG_NAME}.serializers"
-    )  # noqa: E402
-    _schemas = importlib.import_module(f"{_PKG_NAME}.schemas")  # noqa: E402
-    _routes_devices = importlib.import_module(
-        f"{_PKG_NAME}.api.routes_devices"
-    )  # noqa: E402
-    _routes_dosers = importlib.import_module(
-        f"{_PKG_NAME}.api.routes_dosers"
-    )  # noqa: E402
-    _routes_lights = importlib.import_module(
-        f"{_PKG_NAME}.api.routes_lights"
-    )  # noqa: E402
-    _spa = importlib.import_module(f"{_PKG_NAME}.spa")  # noqa: E402
-
-    Doser = _device.Doser
-    LightDevice = _device.LightDevice
-    get_device_from_address = _device.get_device_from_address
-    PumpStatus = _doser_status.PumpStatus
-    ParsedLightStatus = _light_status.ParsedLightStatus
-    _serialize_pump_status = _serializers._serialize_pump_status
-    _serialize_light_status = _serializers._serialize_light_status
-    cached_status_to_dict = _serializers.cached_status_to_dict
-    # Re-export request models for backwards compatibility in tests
-    ConnectRequest = _schemas.ConnectRequest
-    DoserScheduleRequest = _schemas.DoserScheduleRequest
-    LightBrightnessRequest = _schemas.LightBrightnessRequest
-    devices_router = _routes_devices.router
-    dosers_router = _routes_dosers.router
-    lights_router = _routes_lights.router
-    spa = _spa
-else:
-    from . import api, doser_commands, spa
-    from .api.routes_devices import router as devices_router
-    from .api.routes_dosers import router as dosers_router
-    from .api.routes_lights import router as lights_router
-    from .device import Doser, LightDevice, get_device_from_address
-
-    # Re-export request models for backwards compatibility in tests
-    from .schemas import DoserScheduleRequest, LightBrightnessRequest
-    from .serializers import (
-        _serialize_light_status,
-        _serialize_pump_status,
-        cached_status_to_dict,
-    )
+# Internal serialization helpers (previously re-exported for tests;
+# tests now use API JSON)
+from . import api, doser_commands
+from . import serializers as _serializers
+from . import spa
+from .api.routes_devices import router as devices_router
+from .api.routes_dosers import router as dosers_router
+from .api.routes_lights import router as lights_router
+from .device import Doser, LightDevice, get_device_from_address
 
 STATE_PATH = Path.home() / ".chihiros_state.json"
 AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
+STATUS_CAPTURE_WAIT_ENV = "CHIHIROS_STATUS_CAPTURE_WAIT"
+try:
+    # Allow override of the capture wait (seconds) via env var;
+    # fallback to default 1.5s.
+    STATUS_CAPTURE_WAIT_SECONDS = float(
+        os.getenv(STATUS_CAPTURE_WAIT_ENV, "1.5")
+    )
+except ValueError:  # pragma: no cover - defensive parse guard
+    STATUS_CAPTURE_WAIT_SECONDS = 1.5
 
 # Module logger
 logger = logging.getLogger("chihiros_device_manager.service")
@@ -240,11 +184,25 @@ class BLEService:
     async def request_status(self, address: str) -> CachedStatus:
         """Manually refresh status for the device at ``address``.
 
-        Connect if needed, update cache and JSON. This method will attempt to
-        connect even when the device is not present in the persisted cache.
-        It deliberately avoids holding the service-level lock while invoking
-        the connection/refresh helpers which themselves acquire the lock; that
-        prevents a deadlock.
+        High-level orchestration method used by API endpoints:
+        * Determines / discovers device type when unknown.
+        * Ensures the appropriate device connection.
+        * Delegates to the type-specific ``_refresh_*_status`` helper.
+
+        Persistence behaviour:
+        This always results in a *persisted* refresh (i.e. the underlying
+        ``_capture_*_status`` call is made with ``persist=True``). That means:
+        - In-memory cache entry is updated.
+        - State file is rewritten.
+
+        If you need a *non-mutating* probe (debug / live sample) use
+        ``get_live_statuses()`` which calls the capture helpers with
+        ``persist=False``.
+
+        Concurrency note:
+        This method intentionally does not hold the service lock while calling
+        into ``_ensure_*`` or the refresh helpers, because those functions
+        acquire the same lock internally; avoiding a self-deadlock.
         """
         # Fast-path: if we have a cached entry, use its recorded device_type to pick
         # the correct connect/refresh routine. Do not hold the lock while performing
@@ -439,15 +397,33 @@ class BLEService:
         return await self._refresh_light_status()
 
     async def _refresh_doser_status(self) -> CachedStatus:
-        """Request and cache the latest doser status."""
+        """Persist doser refresh wrapper.
+
+        Thin semantic wrapper around ``_capture_doser_status(persist=True)``.
+        Keeping this indirection makes higher-level code read as *refresh*
+        rather than *capture*, and centralises the decision that a refresh
+        implies persistence.
+        """
         return await self._capture_doser_status(persist=True)
 
     async def _refresh_light_status(self) -> CachedStatus:
-        """Request and cache the latest light status."""
+        """Persist light refresh wrapper.
+
+        Mirrors ``_refresh_doser_status`` – always performs a persisted
+        capture. See ``_capture_light_status`` for the core logic and
+        explanation of the persist flag.
+        """
         return await self._capture_light_status(persist=True)
 
     async def _capture_doser_status(self, persist: bool) -> CachedStatus:
-        """Fetch the latest doser status, optionally persisting it."""
+        """Fetch the latest doser status, optionally persisting it.
+
+        persist=True:
+            Update the in-memory cache entry and write the full cache to disk.
+        persist=False:
+            Return a transient snapshot (used by debug / live probes) without
+            altering cache or disk state.
+        """
         async with self._lock:
             if not self._doser or not self._doser_address:
                 raise HTTPException(
@@ -465,23 +441,16 @@ class BLEService:
                 raise HTTPException(
                     status_code=404, detail="Dosing pump not reachable"
                 ) from exc
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(STATUS_CAPTURE_WAIT_SECONDS)
             status = self._doser.last_status
             if not status:
                 raise HTTPException(
                     status_code=500, detail="No status received from doser"
                 )
-            # The Doser now provides a canonical parsed PumpStatus in
-            # `last_status` (set by its notification handler). Use that
-            # parsed object directly for the API snapshot; the service no
-            # longer performs any fragment merging or lifetime counter
-            # extraction.
-            parsed = _serialize_pump_status(status)
+            parsed = _serializers._serialize_pump_status(status)
             cached = CachedStatus(
                 address=self._doser_address,
                 device_type="doser",
-                # Keep raw_payload as the most recent packet for
-                # compatibility; parsed contains the merged logical view.
                 raw_payload=status.raw_payload.hex(),
                 parsed=parsed,
                 updated_at=time.time(),
@@ -494,7 +463,13 @@ class BLEService:
         return cached
 
     async def _capture_light_status(self, persist: bool) -> CachedStatus:
-        """Fetch the latest light status, optionally persisting it."""
+        """Fetch the latest light status, optionally persisting it.
+
+        persist=True: update cache + write to disk.
+        persist=False: transient snapshot only (debug / live probe) with no
+        mutation of cached baseline state.
+        Mirrors ``_capture_doser_status`` semantics.
+        """
         async with self._lock:
             if not self._light or not self._light_address:
                 raise HTTPException(
@@ -512,7 +487,7 @@ class BLEService:
                 raise HTTPException(
                     status_code=404, detail="Light not reachable"
                 ) from exc
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(STATUS_CAPTURE_WAIT_SECONDS)
             status = self._light.last_status
             if not status:
                 raise HTTPException(
@@ -521,7 +496,7 @@ class BLEService:
             # The device now supplies a ParsedLightStatus for `last_status`.
             # Use it directly to avoid duplicate parsing and maintain a
             # single canonical parsing path.
-            parsed = _serialize_light_status(status)
+            parsed = _serializers._serialize_light_status(status)
             cached = CachedStatus(
                 address=self._light_address,
                 device_type="light",
@@ -537,7 +512,13 @@ class BLEService:
         return cached
 
     async def get_live_statuses(self) -> tuple[list[CachedStatus], list[str]]:
-        """Request live status frames without updating persistent storage."""
+        """Request live status frames without updating persistent storage.
+
+        Invokes the capture helpers with ``persist=False`` to obtain a
+        best-effort, side-effect-free view. Devices that are disconnected
+        (HTTP 400) are silently skipped; *reachable* errors (e.g. 404 not
+        reachable) are collected and returned alongside successful snapshots.
+        """
         results: list[CachedStatus] = []
         errors: list[str] = []
 
@@ -620,14 +601,22 @@ class BLEService:
 
 
 service = BLEService()
-app = FastAPI(title="Chihiros BLE Service")
-# Expose service to routers via application state
-app.state.service = service
 
-ARCHIVED_TEMPLATE_MESSAGE = (
-    "The legacy HTMX dashboard has been retired. Switch to the SPA at '/' "
-    "or use the REST API under /api/*."
-)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage BLE service startup and shutdown via FastAPI lifespan."""
+    # Make service instance available to routers
+    app.state.service = service
+    await service.start()
+    try:
+        yield
+    finally:
+        await service.stop()
+
+
+app = FastAPI(title="Chihiros BLE Service", lifespan=lifespan)
+
 # Back-compat constants and helpers for tests
 SPA_UNAVAILABLE_MESSAGE = getattr(spa, "SPA_UNAVAILABLE_MESSAGE")
 SPA_DIST_AVAILABLE = getattr(spa, "SPA_DIST_AVAILABLE")
@@ -661,52 +650,13 @@ async def serve_spa() -> Response:
     )
 
 
-@app.on_event("startup")
-async def on_startup() -> None:
-    """Initialise the BLE service when FastAPI boots."""
-    await service.start()
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    """Tear down BLE connections during application shutdown."""
-    await service.stop()
+# Startup/shutdown handled by lifespan above
 
 
 # Include API routers for devices, dosers, and lights.
 app.include_router(devices_router)
 app.include_router(dosers_router)
 app.include_router(lights_router)
-
-
-@app.api_route(
-    "/ui{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    include_in_schema=False,
-)
-async def legacy_ui_archived(path: str = "") -> Response:
-    """Return a 410 response for retired HTMX routes."""
-    return Response(
-        ARCHIVED_TEMPLATE_MESSAGE,
-        status_code=410,
-        media_type="text/plain",
-        headers={"cache-control": "no-store"},
-    )
-
-
-@app.api_route(
-    "/debug{path:path}",
-    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-    include_in_schema=False,
-)
-async def legacy_debug_archived(path: str = "") -> Response:
-    """Indicate that debug template routes are no longer served."""
-    return Response(
-        ARCHIVED_TEMPLATE_MESSAGE,
-        status_code=410,
-        media_type="text/plain",
-        headers={"cache-control": "no-store"},
-    )
 
 
 @app.get("/{spa_path:path}", include_in_schema=False)
@@ -738,44 +688,6 @@ async def serve_spa_assets(spa_path: str) -> Response:
     if index_path.exists():
         return HTMLResponse(index_path.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404)
-
-
-async def debug_live_status() -> Dict[str, Any]:
-    """Expose live payloads without updating persisted cache (test helper)."""
-    statuses, errors = await service.get_live_statuses()
-    return {
-        "statuses": [cached_status_to_dict(service, s) for s in statuses],
-        "errors": errors,
-    }
-
-
-async def set_doser_schedule(
-    address: str, payload: "DoserScheduleRequest"
-) -> Dict[str, Any]:
-    """Back-compat endpoint wrapper used by tests."""
-    status = await service.set_doser_schedule(
-        address,
-        head_index=payload.head_index,
-        volume_tenths_ml=payload.volume_tenths_ml,
-        hour=payload.hour,
-        minute=payload.minute,
-        weekdays=payload.weekdays,
-        confirm=payload.confirm,
-        wait_seconds=payload.wait_seconds,
-    )
-    return cached_status_to_dict(service, status)
-
-
-async def set_light_brightness(
-    address: str, payload: "LightBrightnessRequest"
-) -> Dict[str, Any]:
-    """Back-compat endpoint wrapper used by tests."""
-    status = await service.set_light_brightness(
-        address,
-        brightness=payload.brightness,
-        color=payload.color,
-    )
-    return cached_status_to_dict(service, status)
 
 
 # Proxy logic moved to spa helper module.

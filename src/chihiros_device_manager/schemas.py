@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 from . import doser_commands
 
@@ -26,7 +26,7 @@ class DoserScheduleRequest(BaseModel):
     confirm: bool = False
     wait_seconds: float = Field(1.5, ge=0.0, le=30.0)
 
-    @validator("weekdays", pre=True)
+    @field_validator("weekdays", mode="before")
     def _normalize_weekdays(cls, value: Any) -> Any:
         if value is None or value == []:
             return None

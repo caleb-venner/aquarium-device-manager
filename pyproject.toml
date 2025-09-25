@@ -41,7 +41,7 @@ where = [
 [tool.setuptools_scm]
 
 [project.scripts]
-chihirosctl = "chihiros_device_manager.chihirosctl:app"
+chihirosctl = "chihirosctl:app"
 chihiros-service = "chihiros_device_manager.service:main"
 
 [tool.black]

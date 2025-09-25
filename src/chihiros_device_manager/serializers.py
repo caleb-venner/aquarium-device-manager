@@ -35,9 +35,9 @@ def _serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
         "weekday": status.weekday,
         "current_hour": status.current_hour,
         "current_minute": status.current_minute,
-        # Include both the raw value (0..255) and a pre-computed percentage so the
-        # frontend doesn't need to perform the conversion. Keep the original
-        # fields for backward compatibility.
+        # Include both the raw value (0..255) and a pre-computed percentage so
+        # the frontend doesn't need to perform the conversion. Keep the
+        # original fields for backward compatibility.
         "keyframes": [
             {
                 **asdict(frame),

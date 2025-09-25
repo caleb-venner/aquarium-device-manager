@@ -5,6 +5,7 @@ Maintained by **Caleb Venner**. This project builds on the open-source work publ
 Chihiros Device Manager currently contains the historically shipped python **CLI** tooling alongside a new FastAPI-based BLE service for managing Chihiros Bluetooth devices. The near-term roadmap focuses on a standalone service and accompanying Docker packaging.
 
 ## Supported Devices
+
 - [Chihiros LED A2](https://www.chihirosaquaticstudio.com/products/chihiros-a-ii-built-in-bluetooth)
 - [Chihiros WRGB II](https://www.chihirosaquaticstudio.com/products/chihiros-wrgb-ii-led-built-in-bluetooth) (Regular, Pro, Slim)
 - Chihiros Tiny Terrarium Egg
@@ -15,10 +16,18 @@ Chihiros Device Manager currently contains the historically shipped python **CLI
 
 
 ## Requirements
+
 - a device with bluetooth LE support for sending the commands to the LED
 - [Python 3.10+](https://www.python.org/downloads/) with pip
 
 ## Using the CLI
+
+> NOTE: The CLI is now considered a legacy / diagnostic tool. It performs
+> direct BLE operations and is not required for normal operation of the
+> `chihiros-service` FastAPI backend + SPA. For day-to-day control prefer
+> running the service and using its REST/SPA interfaces. The CLI will
+> eventually become an API client or be deprecated.
+
 ```bash
 # setup the environment
 python -m venv venv
@@ -122,6 +131,43 @@ By default the FastAPI app serves the compiled bundle from
 `frontend/dist`. If the assets live elsewhere, point the service at the
 correct directory via the `CHIHIROS_FRONTEND_DIST` environment variable.
 
+### Service runtime tuning
+
+The service performs a brief wait after issuing a BLE status request to
+allow notification frames to arrive before reading the device's
+`last_status`. This delay defaults to `1.5` seconds but can be tuned via
+the environment variable:
+
+```bash
+export CHIHIROS_STATUS_CAPTURE_WAIT=0.8  # seconds
+```
+
+Lowering the value can make successive manual refreshes faster but risks
+capturing an incomplete status frame on slower adapters or noisy RF
+environments. Increasing it slightly may help if you observe intermittent
+"No status received" errors when polling devices.
+
+## Environment Variables
+
+Centralized reference for runtime configuration knobs exposed by the service / SPA integration.
+
+| Variable | Default | Type | Purpose | Example |
+|----------|---------|------|---------|---------|
+| `CHIHIROS_SERVICE_HOST` | `0.0.0.0` | str | Listen interface for the FastAPI/Uvicorn server. | `127.0.0.1` |
+| `CHIHIROS_SERVICE_PORT` | `8000` | int | Listen port for the FastAPI/Uvicorn server. | `9000` |
+| `CHIHIROS_AUTO_RECONNECT` | `1` | int/bool | Attempt reconnect to previously cached devices on startup (`1` truthy, `0` disabled). | `0` |
+| `CHIHIROS_STATUS_CAPTURE_WAIT` | `1.5` | float (s) | Delay after requesting a status before reading cached frame (tune for adapter speed / RF conditions). | `0.8` |
+| `CHIHIROS_FRONTEND_DEV_SERVER` | (unset) | str/URL | If set, root path proxies to a running Vite dev server instead of serving built assets. Set to `0` to force-disable proxy even if assets missing. | `http://localhost:5173` |
+| `CHIHIROS_FRONTEND_DIST` | `frontend/dist` | path | Absolute/relative path to built SPA assets (index.html + assets/). | `/opt/app/frontend-build` |
+| `CHIHIROS_LOG_LEVEL` | `INFO` | str | Logging verbosity for service logger (standard Python levels). | `DEBUG` |
+
+Notes:
+
+- Boolean style variables use simple `int()` parsing; any non-zero integer is considered enabled.
+- `CHIHIROS_STATUS_CAPTURE_WAIT` invalid (non-float) values fall back to the default at import time.
+- When both a dev server proxy and a local dist are unavailable the root route returns HTTP 503 with guidance.
+- Changes to these variables require a service restart to take effect (they are read at module import or startup).
+
 ## Docker usage
 
 Build and run the service inside a container:
@@ -143,7 +189,9 @@ Containerised BLE access often requires forwarding the host adapter or
 running with elevated capabilities; adjust the `docker run` flags to suit
 your environment.
 
+
 ## Protocol
+
 The vendor app uses Bluetooth LE to communicate with the LED. The LED advertises a UART service with the UUID `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`. This service contains a RX characteristic with the UUID `6E400002-B5A3-F393-E0A9-E50E24DCCA9E`. This characteristic can be used to send commands to the LED. The LED will respond to commands by sending a notification to the corresponding TX service with the UUID `6E400003-B5A3-F393-E0A9-E50E24DCCA9E`.
 
 
@@ -160,16 +208,22 @@ The message id is a 16 bit number that is incremented with each command. It is s
 
 The command length is the number of parameters + 5.
 
+
 ### Manual Mode
+
 The LED can be set to a specific brightness by sending the following command with the following options:
+
 - Command ID: **90**
 - Mode: **7**
 - Parameters: [ **Color** (0-2), **Brightness** (0 - 100)]
 
 On non-RGB models, the color parameter should be set to 0 to indicate white. On RGB models, each color's brightness is sent as a separate command. Red is 0, green is 1, blue is 2.
 
+
 ### Auto Mode
+
 To switch to auto mode, the following command can be used:
+
 - Command ID: **90**
 - Mode: **5**
 - Parameters: [ **18**, **255**, **255** ]
@@ -186,7 +240,9 @@ On non-RGB models, the desired brightness should be set as the red brightness wh
 
 To deactivate a setting, the same command can be used but the brightness has to be set to **255**.
 
+
 #### Set Time
+
 The current time is required for auto mode and can be set by sending the following command:
 
 - Command ID: **90**
@@ -195,8 +251,11 @@ The current time is required for auto mode and can be set by sending the followi
 
 - Weekday is 1 - 7 for Monday - Sunday
 
+
 #### Reset Auto Mode Settings
+
 The auto mode and its settings can be reset by sending the following command:
+
 - Command ID: **90**
 - Mode: **5**
 - Parameters: [ **5**, **255**, **255** ]
