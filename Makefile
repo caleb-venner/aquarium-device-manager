@@ -1,8 +1,8 @@
 # Simple dev helpers
 
 # Env flags (overridable). Export so recursive make and recipe shells inherit.
-# CHIHIROS_AUTO_DISCOVER_ON_START ?= 0
-# export CHIHIROS_AUTO_DISCOVER_ON_START
+CHIHIROS_AUTO_DISCOVER_ON_START ?= 0
+export CHIHIROS_AUTO_DISCOVER_ON_START
 
 .PHONY: help dev dev-front dev-back build front-build lint test precommit
 
@@ -41,7 +41,7 @@ dev-back:
 dev:
 	@echo "Starting dev servers (frontend + backend)"
 	@echo "Tip: In VS Code, run the 'dev: full stack' task to launch both in background."
-	@$(MAKE) -j2 dev-front dev-back
+	@$(MAKE) -j2 CHIHIROS_AUTO_DISCOVER_ON_START=1 dev-front dev-back
 
 # Build & quality
 

@@ -17,6 +17,7 @@ Removed
 * Dropped legacy runtime import fallback (sys.path / importlib hack) from `service.py`.
 * Removed transitional wrapper endpoints: `debug_live_status`, `set_doser_schedule`, `set_light_brightness` and archived `legacy_ui_archived`, `legacy_debug_archived` 410 routes. These paths now return 404.
 * Removed legacy HTMX templates and unused empty `static/` directory (SPA + REST now primary interfaces).
+* Removed the duplicate `chihiros_device_manager/api.py` module in favour of `core_api` to avoid package/module name collisions.
 
 Changed
 -------
@@ -29,6 +30,7 @@ Internal
 --------
 
 * Cleaned unused imports and constants tied to removed wrapper logic.
+* Normalised boolean environment variable parsing (`true/false`, `yes/no`, `on/off`, or `0/1`).
 
 Fixed
 -----

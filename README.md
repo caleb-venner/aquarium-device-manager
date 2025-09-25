@@ -107,12 +107,15 @@ Equivalent REST endpoints are available if you prefer scripts:
 
 Optional automation: set `CHIHIROS_AUTO_DISCOVER_ON_START=1` to perform a one-off scan at startup (only when there are no cached devices) and attempt to connect to supported devices automatically.
 
-Tip for Make users: you can pass it through the Makefile in dev runs:
+Tip: `make dev` now enables this flag automatically to smooth first-run setup. Override it when needed:
 
 ```bash
+# Disable auto-discover when launching both servers
+make dev CHIHIROS_AUTO_DISCOVER_ON_START=0
+
+# Run just the backend with auto-discover disabled/enabled explicitly
+make dev-back CHIHIROS_AUTO_DISCOVER_ON_START=0
 make dev-back CHIHIROS_AUTO_DISCOVER_ON_START=1
-# or
-make dev CHIHIROS_AUTO_DISCOVER_ON_START=1
 ```
 
 ## Frontend development (TypeScript SPA)
@@ -183,7 +186,7 @@ Centralized reference for runtime configuration knobs exposed by the service / S
 
 Notes:
 
-- Boolean style variables use simple `int()` parsing; any non-zero integer is considered enabled.
+- Boolean style variables accept `0/1`, `true/false`, `yes/no`, or `on/off` (case-insensitive). Invalid or empty values fall back to the documented default.
 - Auto-discover runs only when the cache is empty (first run) to avoid interrupting existing connections.
 - `CHIHIROS_STATUS_CAPTURE_WAIT` invalid (non-float) values fall back to the default at import time.
 - When both a dev server proxy and a local dist are unavailable the root route returns HTTP 503 with guidance.
