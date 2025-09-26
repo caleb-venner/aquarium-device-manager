@@ -1,3 +1,5 @@
+"""Unit tests for the light storage persistence layer."""
+
 from __future__ import annotations
 
 import json
@@ -12,10 +14,12 @@ from chihiros_device_manager.light_storage import LightStorage
 
 @pytest.fixture
 def storage_path(tmp_path: Path) -> Path:
+    """Provide a temporary path for light storage tests."""
     return tmp_path / "lights.json"
 
 
 def _channels() -> list[dict]:
+    """Return a sample list of channel definitions for tests."""
     return [
         {"key": "R", "label": "Red", "min": 0, "max": 100, "step": 5},
         {"key": "G", "label": "Green", "min": 10, "max": 90, "step": 10},
@@ -59,6 +63,7 @@ def _example_device(device_id: str = "light-1") -> dict:
 
 
 def test_storage_roundtrip(storage_path: Path) -> None:
+    """Verify light storage roundtrip and profile persistence."""
     storage = LightStorage(storage_path)
     stored = storage.upsert_device(_example_device())
 
@@ -77,6 +82,7 @@ def test_storage_roundtrip(storage_path: Path) -> None:
 
 
 def test_manual_profile_must_cover_all_channels(storage_path: Path) -> None:
+    """Manual profile must include entries for every channel."""
     device = _example_device()
     device["configurations"][0]["revisions"][0]["profile"]["levels"].pop("G")
 
@@ -86,6 +92,7 @@ def test_manual_profile_must_cover_all_channels(storage_path: Path) -> None:
 
 
 def test_custom_profile_requires_increasing_times(storage_path: Path) -> None:
+    """Custom profile points must be strictly increasing in time."""
     device = _example_device()
     device["configurations"][0]["revisions"][0]["profile"] = {
         "mode": "custom",
@@ -102,6 +109,7 @@ def test_custom_profile_requires_increasing_times(storage_path: Path) -> None:
 
 
 def test_auto_profile_validates_days_and_sun_times(storage_path: Path) -> None:
+    """Auto programs must include valid days and sunrise < sunset."""
     device = _example_device()
     device["configurations"][0]["revisions"][0]["profile"] = {
         "mode": "auto",
@@ -124,6 +132,7 @@ def test_auto_profile_validates_days_and_sun_times(storage_path: Path) -> None:
 
 
 def test_create_configuration_adds_revision(storage_path: Path) -> None:
+    """Creating a new configuration adds a first revision and can set active."""
     storage = LightStorage(storage_path)
     storage.upsert_device(_example_device())
 
@@ -154,6 +163,7 @@ def test_create_configuration_adds_revision(storage_path: Path) -> None:
 
 
 def test_add_revision_increments_revision(storage_path: Path) -> None:
+    """Adding a revision increments the revision counter and can set active."""
     storage = LightStorage(storage_path)
     storage.upsert_device(_example_device())
 
@@ -178,6 +188,7 @@ def test_add_revision_increments_revision(storage_path: Path) -> None:
 
 
 def test_set_active_configuration_switches(storage_path: Path) -> None:
+    """Setting active configuration updates device.activeConfigurationId."""
     storage = LightStorage(storage_path)
     storage.upsert_device(_example_device())
 

@@ -1,3 +1,8 @@
+"""Tests for encoder checksum collision handling.
+
+Ensure the encoder bumps message id when a checksum collision would occur.
+"""
+
 import pytest
 
 from chihiros_device_manager.commands import encoder

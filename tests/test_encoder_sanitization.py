@@ -1,7 +1,10 @@
+"""Tests for encoder sanitization and framing helpers."""
+
 from chihiros_device_manager.commands import encoder
 
 
 def test_sanitization_replaces_0x5a_with_0x59():
+    """Ensure payload bytes equal to 0x5A are replaced with 0x59."""
     cmd_id = 0xA5
     mode = 0x04
     msg_id = (0, 1)

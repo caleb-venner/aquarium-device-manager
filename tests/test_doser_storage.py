@@ -1,3 +1,5 @@
+"""Unit tests for the doser storage module."""
+
 from __future__ import annotations
 
 import json
@@ -12,10 +14,12 @@ from chihiros_device_manager.doser_storage import DoserStorage
 
 @pytest.fixture
 def storage_path(tmp_path: Path) -> Path:
+    """Provide a temporary path for doser storage tests."""
     return tmp_path / "doser_devices.json"
 
 
 def _example_device(device_id: str = "device-1") -> dict:
+    """Return an example doser device payload for tests."""
     heads = [
         {
             "index": 1,
@@ -101,6 +105,7 @@ def _legacy_device_payload(device_id: str = "device-legacy") -> dict:
 
 
 def test_storage_roundtrip(storage_path: Path) -> None:
+    """Verify storage write/read roundtrip and active configuration."""
     storage = DoserStorage(storage_path)
     stored = storage.upsert_device(_example_device())
 
@@ -127,6 +132,7 @@ def test_storage_roundtrip(storage_path: Path) -> None:
 
 
 def test_head_limit_enforced(storage_path: Path) -> None:
+    """Ensure validation rejects more than four heads or duplicate indexes."""
     device = _legacy_device_payload()
     device["heads"] = [
         {**device["heads"][0], "index": 1},
@@ -142,6 +148,7 @@ def test_head_limit_enforced(storage_path: Path) -> None:
 
 
 def test_custom_periods_total_doses_capped(storage_path: Path) -> None:
+    """Custom periods schedules cannot exceed 24 total doses."""
     device = _legacy_device_payload()
     device["heads"][0]["schedule"] = {
         "mode": "custom_periods",

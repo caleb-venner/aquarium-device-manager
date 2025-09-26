@@ -165,6 +165,7 @@ class BLEService:
     """Manages BLE devices, status cache, and persistence."""
 
     def __init__(self) -> None:
+        """Initialize the BLEService, device maps and runtime flags."""
         self._lock = asyncio.Lock()
         self._devices: Dict[str, BaseDevice] = {}
         self._addresses: Dict[str, str] = {}
@@ -176,10 +177,12 @@ class BLEService:
 
     @property
     def _doser(self) -> Optional[Doser]:
+        """Return the currently connected doser device if present."""
         return cast(Optional[Doser], self._devices.get("doser"))
 
     @_doser.setter
     def _doser(self, value: Optional[Doser]) -> None:
+        """Set or clear the cached doser device reference."""
         if value is None:
             self._devices.pop("doser", None)
         else:
@@ -187,10 +190,12 @@ class BLEService:
 
     @property
     def _doser_address(self) -> Optional[str]:
+        """Return the stored address for the doser device, if any."""
         return self._addresses.get("doser")
 
     @_doser_address.setter
     def _doser_address(self, value: Optional[str]) -> None:
+        """Set or clear the stored doser address."""
         if value is None:
             self._addresses.pop("doser", None)
         else:
@@ -198,10 +203,12 @@ class BLEService:
 
     @property
     def _light(self) -> Optional[LightDevice]:
+        """Return the currently connected light device if present."""
         return cast(Optional[LightDevice], self._devices.get("light"))
 
     @_light.setter
     def _light(self, value: Optional[LightDevice]) -> None:
+        """Set or clear the cached light device reference."""
         if value is None:
             self._devices.pop("light", None)
         else:
@@ -209,23 +216,28 @@ class BLEService:
 
     @property
     def _light_address(self) -> Optional[str]:
+        """Return the stored address for the light device, if any."""
         return self._addresses.get("light")
 
     @_light_address.setter
     def _light_address(self, value: Optional[str]) -> None:
+        """Set or clear the stored light address."""
         if value is None:
             self._addresses.pop("light", None)
         else:
             self._addresses["light"] = value
 
     def current_device_address(self, device_type: str) -> Optional[str]:
+        """Return the current address for a device type, if known."""
         return self._addresses.get(device_type.lower())
 
     @staticmethod
     def _normalize_kind(device_type: Optional[str]) -> str:
+        """Normalize a device type string to a lower-case kind."""
         return (device_type or "device").lower()
 
     def _format_message(self, device_type: Optional[str], category: str) -> str:
+        """Format a user-friendly error message for device errors."""
         kind = self._normalize_kind(device_type)
         label = kind.capitalize()
         if category == "not_found":
@@ -241,6 +253,7 @@ class BLEService:
     def _get_device_kind(
         self, device: BaseDevice | Type[BaseDevice]
     ) -> Optional[str]:
+        """Return the device kind attribute lowercased if present."""
         kind = getattr(device, "device_kind", None)
         if isinstance(kind, str) and kind:
             return kind.lower()
@@ -249,6 +262,7 @@ class BLEService:
     async def connect_device(
         self, address: str, device_type: Optional[str] = None
     ) -> CachedStatus:
+        """Connect to a device by address and return its cached status."""
         device = await self._ensure_device(address, device_type)
         device_kind = self._get_device_kind(device)
         if device_kind is None:
@@ -390,6 +404,7 @@ class BLEService:
         return self._get_device_kind(device)
 
     async def start(self) -> None:
+        """Start background tasks and load persisted state."""
         await self._load_state()
         logger.info("Service start: loaded %d cached devices", len(self._cache))
         logger.info(
@@ -432,6 +447,7 @@ class BLEService:
                     logger.info("Reconnect worker scheduled in background")
 
     async def _auto_discover_worker(self) -> None:
+        """Background worker that auto-discovers and connects devices."""
         try:
             logger.info("Auto-discover worker: scanning for supported devices")
             connected_any = await self._auto_discover_and_connect()
@@ -467,6 +483,7 @@ class BLEService:
             logger.exception("Auto-discover worker failed unexpectedly")
 
     async def _reconnect_and_refresh(self) -> None:
+        """Reconnect to cached devices and refresh their live status."""
         try:
             await self._attempt_reconnect()
             for address, status in list(self._cache.items()):
@@ -493,6 +510,7 @@ class BLEService:
             logger.exception("Reconnect worker failed unexpectedly")
 
     async def stop(self) -> None:
+        """Stop background workers and persist current service state."""
         if self._reconnect_task is not None:
             self._reconnect_task.cancel()
             try:
@@ -513,6 +531,7 @@ class BLEService:
             self._addresses.clear()
 
     async def scan_devices(self, timeout: float = 5.0) -> list[Dict[str, Any]]:
+        """Scan for BLE devices and return those matching known models."""
         supported = await discover_supported_devices(timeout=timeout)
         result: list[Dict[str, Any]] = []
         for device, model_class in supported:
@@ -528,6 +547,7 @@ class BLEService:
         return result
 
     async def request_status(self, address: str) -> CachedStatus:
+        """Request and return the status for a device by address."""
         logger.info("Manual request_status for %s", address)
         status = self._cache.get(address)
         if status:
@@ -560,6 +580,7 @@ class BLEService:
         return await self.connect_device(address, device_type)
 
     async def disconnect_device(self, address: str) -> None:
+        """Disconnect a connected device by address if present."""
         async with self._lock:
             for kind, current_address in list(self._addresses.items()):
                 if current_address == address:
@@ -570,6 +591,7 @@ class BLEService:
                     break
 
     def get_status_snapshot(self) -> Dict[str, CachedStatus]:
+        """Return an in-memory copy of the cached device statuses."""
         return self._cache.copy()
 
     async def set_doser_schedule(
@@ -584,6 +606,7 @@ class BLEService:
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> CachedStatus:
+        """Set a doser schedule on the given device address."""
         return await device_commands.set_doser_schedule(
             self,
             address,
@@ -599,23 +622,29 @@ class BLEService:
     async def set_light_brightness(
         self, address: str, *, brightness: int, color: str | int = 0
     ) -> CachedStatus:
+        """Set brightness (and optional color) for a light device."""
         return await device_commands.set_light_brightness(
             self, address, brightness=brightness, color=color
         )
 
     async def turn_light_on(self, address: str) -> CachedStatus:
+        """Turn the light device at the address on."""
         return await device_commands.turn_light_on(self, address)
 
     async def turn_light_off(self, address: str) -> CachedStatus:
+        """Turn the light device at the address off."""
         return await device_commands.turn_light_off(self, address)
 
     async def enable_auto_mode(self, address: str) -> CachedStatus:
+        """Enable auto mode on the specified light device."""
         return await device_commands.enable_auto_mode(self, address)
 
     async def set_manual_mode(self, address: str) -> CachedStatus:
+        """Switch the specified light device to manual mode."""
         return await device_commands.set_manual_mode(self, address)
 
     async def reset_auto_settings(self, address: str) -> CachedStatus:
+        """Reset auto mode settings on the specified light device."""
         return await device_commands.reset_auto_settings(self, address)
 
     async def add_light_auto_setting(
@@ -628,6 +657,7 @@ class BLEService:
         ramp_up_minutes: int = 0,
         weekdays: list[commands.LightWeekday] | None = None,
     ) -> CachedStatus:
+        """Add an auto program to a light device."""
         return await device_commands.add_light_auto_setting(
             self,
             address,
@@ -639,6 +669,10 @@ class BLEService:
         )
 
     async def get_live_statuses(self) -> tuple[list[CachedStatus], list[str]]:
+        """Capture live statuses for known device kinds and return results.
+
+        Returns a tuple of (results, errors).
+        """
         results: list[CachedStatus] = []
         errors: list[str] = []
 

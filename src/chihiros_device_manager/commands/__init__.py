@@ -1,3 +1,6 @@
+# Package for CLI commands used by chihirosctl and other tools.
+"""Commands package: CLI command implementations used by tools."""
+
 __all__ = [
     "next_message_id",
     "create_set_time_command",

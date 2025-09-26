@@ -8,6 +8,11 @@ from typing import Iterable, List, Sequence
 def next_message_id(
     current_msg_id: tuple[int, int] = (0, 0)
 ) -> tuple[int, int]:
+    """Return the next message id pair, avoiding reserved values.
+
+    The encoder uses two-byte message ids that skip 0x5A/90 in both
+    positions. This helper encapsulates that wrap/skip behaviour.
+    """
     msg_id_higher_byte, msg_id_lower_byte = current_msg_id
     if msg_id_lower_byte == 255:
         if msg_id_higher_byte == 255:
@@ -17,7 +22,6 @@ def next_message_id(
             # higher byte should never be 90
             return (msg_id_higher_byte + 2, msg_id_lower_byte)
         return (msg_id_higher_byte + 1, 0)
-
     else:
         if msg_id_lower_byte == 89:
             # lower byte should never be 90
@@ -41,6 +45,7 @@ def _calculate_checksum(input_bytes: bytes) -> int:
 
 
 def _encode_timestamp(ts: datetime.datetime) -> list[int]:
+    """Encode a datetime into the device timestamp byte sequence."""
     # note: day is weekday e.g. 3 for wednesday
     return [
         ts.year - 2000,
@@ -53,6 +58,7 @@ def _encode_timestamp(ts: datetime.datetime) -> list[int]:
 
 
 def create_set_time_command(msg_id: tuple[int, int]) -> bytearray:
+    """Build a set-time UART command for the device."""
     return _encode_uart_command(
         90, 9, msg_id, _encode_timestamp(datetime.datetime.now())
     )
@@ -61,6 +67,7 @@ def create_set_time_command(msg_id: tuple[int, int]) -> bytearray:
 def create_manual_setting_command(
     msg_id: tuple[int, int], color: int, brightness_level: int
 ) -> bytearray:
+    """Create a manual color/brightness setting command."""
     return _encode_uart_command(90, 7, msg_id, [color, brightness_level])
 
 
@@ -72,6 +79,7 @@ def create_add_auto_setting_command(
     ramp_up_minutes: int,
     weekdays: int,
 ) -> bytearray:
+    """Create a command to add an auto program to a light device."""
     parameters = [
         sunrise.hour,
         sunrise.minute,
@@ -97,24 +105,30 @@ def create_delete_auto_setting_command(
     ramp_up_minutes: int,
     weekdays: int,
 ) -> bytearray:
+    """Create a delete-auto-setting command (encoded via add with 255s)."""
     return create_add_auto_setting_command(
         msg_id, sunrise, sunset, (255, 255, 255), ramp_up_minutes, weekdays
     )
 
 
 def create_reset_auto_settings_command(msg_id: tuple[int, int]) -> bytearray:
+    """Return a command to reset auto settings on the device."""
     return _encode_uart_command(90, 5, msg_id, [5, 255, 255])
 
 
 def create_switch_to_auto_mode_command(msg_id: tuple[int, int]) -> bytearray:
+    """Return a command switching the light to auto mode."""
     return _encode_uart_command(90, 5, msg_id, [18, 255, 255])
 
 
 def create_status_request_command(msg_id: tuple[int, int]) -> bytearray:
+    """Build a status request command frame."""
     return _encode_uart_command(0x5A, 0x04, msg_id, [0x01])
 
 
 class LightWeekday(str, Enum):
+    """Enum for human-readable weekday selections used by light commands."""
+
     monday = "monday"
     tuesday = "tuesday"
     wednesday = "wednesday"

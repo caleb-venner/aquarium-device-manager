@@ -17,9 +17,13 @@ try:
 except ImportError:  # pragma: no cover - fallback if library changes
 
     class BleakNotFoundError(Exception):
+        """Raised when a BLE device cannot be found during connection attempts."""
+
         pass
 
     class BleakConnectionError(Exception):
+        """Raised when a BLE connection attempt fails irrecoverably."""
+
         pass
 
 
@@ -43,6 +47,7 @@ async def set_doser_schedule(
     confirm: bool = False,
     wait_seconds: float = 1.5,
 ) -> "CachedStatus":
+    """Set a daily dose schedule on a connected doser device."""
     device = await service._ensure_device(address, "doser")
     try:
         await device.set_daily_dose(
@@ -66,6 +71,7 @@ async def set_doser_schedule(
 async def set_light_brightness(
     service: Any, address: str, *, brightness: int, color: str | int = 0
 ) -> "CachedStatus":
+    """Set the light brightness and optional color on a device."""
     device = await service._ensure_device(address, "light")
     try:
         target_color: str | int = color
@@ -86,6 +92,7 @@ async def set_light_brightness(
 
 
 async def turn_light_on(service: Any, address: str) -> "CachedStatus":
+    """Turn the specified light device on."""
     device = await service._ensure_device(address, "light")
     try:
         await device.turn_on()
@@ -97,6 +104,7 @@ async def turn_light_on(service: Any, address: str) -> "CachedStatus":
 
 
 async def turn_light_off(service: Any, address: str) -> "CachedStatus":
+    """Turn the specified light device off."""
     device = await service._ensure_device(address, "light")
     try:
         await device.turn_off()
@@ -108,6 +116,7 @@ async def turn_light_off(service: Any, address: str) -> "CachedStatus":
 
 
 async def enable_auto_mode(service: Any, address: str) -> "CachedStatus":
+    """Enable auto mode on the light device."""
     device = await service._ensure_device(address, "light")
     try:
         await device.enable_auto_mode()
@@ -119,6 +128,7 @@ async def enable_auto_mode(service: Any, address: str) -> "CachedStatus":
 
 
 async def set_manual_mode(service: Any, address: str) -> "CachedStatus":
+    """Switch the light device to manual control mode."""
     device = await service._ensure_device(address, "light")
     try:
         await device.set_manual_mode()
@@ -130,6 +140,7 @@ async def set_manual_mode(service: Any, address: str) -> "CachedStatus":
 
 
 async def reset_auto_settings(service: Any, address: str) -> "CachedStatus":
+    """Reset stored auto settings on the light device."""
     device = await service._ensure_device(address, "light")
     try:
         await device.reset_settings()
@@ -150,6 +161,7 @@ async def add_light_auto_setting(
     ramp_up_minutes: int = 0,
     weekdays: list[LightWeekday] | None = None,
 ) -> "CachedStatus":
+    """Add an auto program setting to the specified light device."""
     device = await service._ensure_device(address, "light")
     try:
         if isinstance(brightness, int):

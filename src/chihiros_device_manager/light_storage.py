@@ -37,6 +37,8 @@ def _ensure_unique(values: Sequence[str], what: str) -> None:
 
 
 class ChannelDef(BaseModel):
+    """Definition of a color/level channel exposed by a light device."""
+
     key: str
     label: str | None = None
     min: int = 0
@@ -47,6 +49,7 @@ class ChannelDef(BaseModel):
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ChannelDef":
+        """Validate channel bounds and presence of key."""
         if not self.key:
             raise ValueError("Channel key cannot be empty")
         if self.max < self.min:
@@ -60,28 +63,45 @@ ChannelLevels = Mapping[str, int]
 
 
 class ManualProfile(BaseModel):
+    """Profile for manual fixed channel levels."""
+
     mode: Literal["manual"]
     levels: dict[str, int]
 
     model_config = ConfigDict(extra="forbid")
 
+    """Manual mode profile specifying fixed channel levels."""
+
+    def __init__(self, **data):
+        """Initialize a manual profile."""
+        super().__init__(**data)
+
 
 class CustomPoint(BaseModel):
+    """A timed level point within a custom profile."""
+
     time: str = TimeString
     levels: dict[str, int]
 
     model_config = ConfigDict(extra="forbid")
 
+    """A single point in a custom profile (time + levels)."""
+
 
 class CustomProfile(BaseModel):
+    """Custom profile made of time-indexed points and interpolation."""
+
     mode: Literal["custom"]
     interpolation: InterpolationKind
     points: list[CustomPoint]
 
     model_config = ConfigDict(extra="forbid")
 
+    """Custom time-based profile with interpolation between points."""
+
     @model_validator(mode="after")
     def validate_points(self) -> "CustomProfile":
+        """Validate custom profile points ordering and uniqueness."""
         if not self.points:
             raise ValueError("Custom profile requires at least one point")
         if len(self.points) > 24:
@@ -100,6 +120,8 @@ class CustomProfile(BaseModel):
 
 
 class AutoProgram(BaseModel):
+    """Auto program describing sunrise/sunset transitions for days."""
+
     id: str
     label: str | None = None
     enabled: bool
@@ -111,8 +133,11 @@ class AutoProgram(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    """An auto program that defines sunrise/sunset transitions for days."""
+
     @model_validator(mode="after")
     def validate_program(self) -> "AutoProgram":
+        """Validate auto program fields (days, times, ramp)."""
         if not self.id:
             raise ValueError("Auto program id cannot be empty")
         if not self.days:
@@ -126,13 +151,18 @@ class AutoProgram(BaseModel):
 
 
 class AutoProfile(BaseModel):
+    """Auto profile containing multiple AutoProgram entries."""
+
     mode: Literal["auto"]
     programs: list[AutoProgram]
 
     model_config = ConfigDict(extra="forbid")
 
+    """Auto profile containing multiple auto programs."""
+
     @model_validator(mode="after")
     def validate_programs(self) -> "AutoProfile":
+        """Validate the collection of auto programs for limits and uniqueness."""
         if len(self.programs) > 7:
             raise ValueError("Auto profile cannot include more than 7 programs")
         return self
@@ -142,6 +172,8 @@ ProfileField = Field(discriminator="mode")
 
 
 class LightProfileRevision(BaseModel):
+    """A revision of a light device profile."""
+
     revision: int = Field(ge=1)
     savedAt: str
     profile: ManualProfile | CustomProfile | AutoProfile = ProfileField
@@ -150,14 +182,22 @@ class LightProfileRevision(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    def __init__(self, **data):
+        """Initialize a profile revision."""
+        super().__init__(**data)
+
 
 class _ProfileWrapper(BaseModel):
+    """Internal wrapper used to coerce profile dicts into models."""
+
     profile: ManualProfile | CustomProfile | AutoProfile = ProfileField
 
     model_config = ConfigDict(extra="forbid")
 
 
 class LightConfiguration(BaseModel):
+    """A named configuration containing profile revisions for a light."""
+
     id: str
     name: str
     revisions: list[LightProfileRevision]
@@ -169,6 +209,7 @@ class LightConfiguration(BaseModel):
 
     @model_validator(mode="after")
     def validate_revisions(self) -> "LightConfiguration":
+        """Validate revisions: ensure ordering, uniqueness and sequential numbering."""
         if not self.revisions:
             raise ValueError("Configuration must include at least one revision")
 
@@ -186,10 +227,13 @@ class LightConfiguration(BaseModel):
         return self
 
     def latest_revision(self) -> LightProfileRevision:
+        """Return the most recent profile revision for this configuration."""
         return self.revisions[-1]
 
 
 class LightDevice(BaseModel):
+    """Top-level light device model including channels and configurations."""
+
     id: str
     name: str | None = None
     timezone: str
@@ -203,6 +247,7 @@ class LightDevice(BaseModel):
 
     @model_validator(mode="after")
     def validate_device(self) -> "LightDevice":
+        """Validate device-level invariants such as channels and configurations."""
         if not self.channels:
             raise ValueError("Light device must define at least one channel")
 
@@ -234,24 +279,29 @@ class LightDevice(BaseModel):
         return self
 
     def get_configuration(self, configuration_id: str) -> LightConfiguration:
+        """Return a specific configuration by id or raise KeyError if missing."""
         for configuration in self.configurations:
             if configuration.id == configuration_id:
                 return configuration
         raise KeyError(configuration_id)
 
     def get_active_configuration(self) -> LightConfiguration:
+        """Return the currently active configuration for the device."""
         if self.activeConfigurationId is None:
             raise ValueError("Device does not have an active configuration set")
         return self.get_configuration(self.activeConfigurationId)
 
 
 class LightDeviceCollection(BaseModel):
+    """A collection container for persisted light devices."""
+
     devices: list[LightDevice] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> "LightDeviceCollection":
+        """Ensure all devices within a collection have unique ids."""
         _ensure_unique([device.id for device in self.devices], "device id")
         return self
 
@@ -307,13 +357,16 @@ class LightStorage:
     """A lightweight JSON-backed store for light device profiles."""
 
     def __init__(self, path: Path | str):
+        """Initialize storage and load existing collection from disk if present."""
         self._path = Path(path)
         self._collection = self._read()
 
     def list_devices(self) -> list[LightDevice]:
+        """Return all persisted light devices."""
         return list(self._collection.devices)
 
     def get_device(self, device_id: str) -> LightDevice | None:
+        """Return a light device by id or None if not found."""
         return next(
             (
                 device
@@ -324,6 +377,7 @@ class LightStorage:
         )
 
     def upsert_device(self, device: LightDevice | dict) -> LightDevice:
+        """Insert or update a device and persist the collection."""
         model = self._validate_device(device)
         existing = self.get_device(model.id)
         if existing is None:
@@ -337,12 +391,14 @@ class LightStorage:
     def upsert_many(
         self, devices: Iterable[LightDevice | dict]
     ) -> list[LightDevice]:
+        """Replace the entire device collection with the provided devices."""
         models = [self._validate_device(device) for device in devices]
         self._collection = LightDeviceCollection(devices=models)
         self._write()
         return models
 
     def delete_device(self, device_id: str) -> bool:
+        """Remove a device by id from the collection, returning True if removed."""
         for idx, device in enumerate(self._collection.devices):
             if device.id == device_id:
                 del self._collection.devices[idx]
@@ -351,12 +407,14 @@ class LightStorage:
         return False
 
     def list_configurations(self, device_id: str) -> list[LightConfiguration]:
+        """List configurations for the given device id."""
         device = self._require_device(device_id)
         return list(device.configurations)
 
     def get_configuration(
         self, device_id: str, configuration_id: str
     ) -> LightConfiguration:
+        """Return the configuration for a device by configuration id."""
         device = self._require_device(device_id)
         return device.get_configuration(configuration_id)
 
@@ -373,6 +431,7 @@ class LightStorage:
         saved_at: str | None = None,
         set_active: bool = False,
     ) -> LightConfiguration:
+        """Create a new configuration for a device and persist it."""
         device = self._require_device(device_id)
         channel_map = {channel.key: channel for channel in device.channels}
 
@@ -423,6 +482,7 @@ class LightStorage:
         saved_at: str | None = None,
         set_active: bool = False,
     ) -> LightProfileRevision:
+        """Add a new profile revision to an existing device configuration."""
         device = self._require_device(device_id)
         configuration = device.get_configuration(configuration_id)
         channel_map = {channel.key: channel for channel in device.channels}
@@ -450,6 +510,7 @@ class LightStorage:
     def set_active_configuration(
         self, device_id: str, configuration_id: str
     ) -> LightConfiguration:
+        """Mark a configuration as active for the given device and persist."""
         device = self._require_device(device_id)
         configuration = device.get_configuration(configuration_id)
         device.activeConfigurationId = configuration.id
