@@ -6,7 +6,7 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
 
-from ..device import Doser, LightDevice, get_device_from_address
+from ..device import get_device_from_address
 from ..serializers import cached_status_to_dict
 
 router = APIRouter(prefix="/api", tags=["devices"])
@@ -59,26 +59,19 @@ async def reconnect_device(request: Request, address: str) -> Dict[str, Any]:
     service = request.app.state.service
     cached = service.get_status_snapshot().get(address)
     if cached:
-        if cached.device_type == "doser":
-            status = await service.connect_doser(address)
-            return cached_status_to_dict(service, status)
-        if cached.device_type == "light":
-            status = await service.connect_light(address)
-            return cached_status_to_dict(service, status)
+        status = await service.connect_device(address, cached.device_type)
+        return cached_status_to_dict(service, status)
 
     try:
         device = await get_device_from_address(address)
     except Exception as exc:  # pragma: no cover - passthrough
         raise HTTPException(status_code=404, detail="Device not found") from exc
 
-    if isinstance(device, Doser):
-        status = await service.connect_doser(address)
-        return cached_status_to_dict(service, status)
-    if isinstance(device, LightDevice):
-        status = await service.connect_light(address)
-        return cached_status_to_dict(service, status)
-
-    raise HTTPException(status_code=400, detail="Unsupported device type")
+    kind = getattr(device, "device_kind", None)
+    if not kind:
+        raise HTTPException(status_code=400, detail="Unsupported device type")
+    status = await service.connect_device(address, kind)
+    return cached_status_to_dict(service, status)
 
 
 @router.post("/devices/{address}/disconnect")

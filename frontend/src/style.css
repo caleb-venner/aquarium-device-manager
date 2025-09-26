@@ -32,7 +32,8 @@ main {
   border: 1px solid rgba(148, 163, 184, 0.2);
 }
 
-.tab-button {
+.tab-button,
+.tab {
   flex: 1;
   background: transparent;
   color: inherit;
@@ -44,7 +45,8 @@ main {
   transition: background 0.2s ease, color 0.2s ease;
 }
 
-.tab-button.active {
+.tab-button.active,
+.tab.active {
   background: rgba(34, 211, 238, 0.2);
   color: #22d3ee;
 }
@@ -112,6 +114,25 @@ button {
 button:hover {
   transform: translateY(-1px);
   box-shadow: 0 10px 30px rgba(34, 211, 238, 0.35);
+}
+
+input[type="number"],
+input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.85);
+  color: #f8fafc;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+input[type="number"]:focus,
+input[type="text"]:focus {
+  outline: 2px solid rgba(34, 211, 238, 0.55);
+  outline-offset: 2px;
 }
 
 .device-grid {
@@ -217,11 +238,18 @@ button:hover {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .device h2 {
   margin: 0;
   font-size: 1.25rem;
+}
+
+.device-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .badge {
@@ -349,6 +377,51 @@ code {
   border-color: rgba(248, 113, 113, 0.4);
   background: rgba(248, 113, 113, 0.15);
   color: #fca5a5;
+}
+
+.dev-tools {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.manual-command-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.manual-command-form .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.channel-fields {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.channel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.form-feedback {
+  margin: 0;
+  min-height: 1.25rem;
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 0.875rem;
+}
+
+.form-hint {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.75);
+  font-size: 0.875rem;
 }
 
 .muted {

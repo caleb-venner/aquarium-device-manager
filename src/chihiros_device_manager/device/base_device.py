@@ -3,10 +3,8 @@
 import asyncio
 import logging
 from abc import ABC, ABCMeta
-from datetime import datetime
-from typing import cast
+from typing import ClassVar, Optional, cast
 
-import typer
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
 from bleak.backends.service import BleakGATTCharacteristic  # type: ignore
@@ -20,10 +18,8 @@ from bleak_retry_connector import (
     establish_connection,
     retry_bluetooth_connection_error,
 )
-from typing_extensions import Annotated
 
-from .. import commands
-from ..commands import WeekdaySelect, encode_selected_weekdays
+from ..commands import encoder as commands
 from ..const import UART_RX_CHAR_UUID, UART_TX_CHAR_UUID
 from ..exception import CharacteristicMissingError
 
@@ -40,6 +36,9 @@ class _classproperty(property):
 
 class BaseDevice(ABC):
     """Base device class used by device classes."""
+
+    device_kind: ClassVar[str] = "device"
+    status_serializer: ClassVar[Optional[str]] = None
 
     _model_name: str | None = None
     _model_codes: list[str] = []
@@ -127,135 +126,6 @@ class BaseDevice(ABC):
         return None
 
     # Command methods
-
-    async def set_color_brightness(
-        self,
-        brightness: Annotated[int, typer.Argument(min=0, max=100)],
-        color: str | int = 0,
-    ) -> None:
-        """Set brightness of a color."""
-        color_id: int | None = None
-        if isinstance(color, int) and color in self._colors.values():
-            color_id = color
-        elif isinstance(color, str) and color in self._colors:
-            color_id = self._colors.get(color)
-        if color_id is None:
-            self._logger.warning("Color not supported: `%s`", color)
-            return
-        cmd = commands.create_manual_setting_command(
-            self.get_next_msg_id(), color_id, brightness
-        )
-        await self._send_command(cmd, 3)
-
-    async def set_brightness(
-        self, brightness: Annotated[int, typer.Argument(min=0, max=100)]
-    ) -> None:
-        """Set light brightness."""
-        await self.set_color_brightness(brightness)
-
-    async def set_rgb_brightness(
-        self, brightness: Annotated[tuple[int, int, int], typer.Argument()]
-    ) -> None:
-        """Set RGB brightness."""
-        for c, b in enumerate(brightness):
-            await self.set_color_brightness(c, b)
-
-    async def turn_on(self) -> None:
-        """Turn on light."""
-        for color_name in self._colors:
-            await self.set_color_brightness(100, color_name)
-
-    async def turn_off(self) -> None:
-        """Turn off light."""
-        for color_name in self._colors:
-            await self.set_color_brightness(0, color_name)
-
-    async def add_setting(
-        self,
-        sunrise: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        max_brightness: Annotated[int, typer.Option(max=100, min=0)] = 100,
-        ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-        weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
-            WeekdaySelect.everyday
-        ],
-    ) -> None:
-        """Add an automation setting to the light."""
-        cmd = commands.create_add_auto_setting_command(
-            self.get_next_msg_id(),
-            sunrise.time(),
-            sunset.time(),
-            (max_brightness, 255, 255),
-            ramp_up_in_minutes,
-            encode_selected_weekdays(weekdays),
-        )
-        await self._send_command(cmd, 3)
-
-    async def add_rgb_setting(
-        self,
-        sunrise: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        max_brightness: Annotated[tuple[int, int, int], typer.Option()] = (
-            100,
-            100,
-            100,
-        ),
-        ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-        weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
-            WeekdaySelect.everyday
-        ],
-    ) -> None:
-        """Add an automation setting to the RGB light."""
-        cmd = commands.create_add_auto_setting_command(
-            self.get_next_msg_id(),
-            sunrise.time(),
-            sunset.time(),
-            max_brightness,
-            ramp_up_in_minutes,
-            encode_selected_weekdays(weekdays),
-        )
-        await self._send_command(cmd, 3)
-
-    async def remove_setting(
-        self,
-        sunrise: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        sunset: Annotated[datetime, typer.Argument(formats=["%H:%M"])],
-        ramp_up_in_minutes: Annotated[int, typer.Option(min=0, max=150)] = 0,
-        weekdays: Annotated[list[WeekdaySelect], typer.Option()] = [
-            WeekdaySelect.everyday
-        ],
-    ) -> None:
-        """Remove an automation setting from the light."""
-        cmd = commands.create_delete_auto_setting_command(
-            self.get_next_msg_id(),
-            sunrise.time(),
-            sunset.time(),
-            ramp_up_in_minutes,
-            encode_selected_weekdays(weekdays),
-        )
-        await self._send_command(cmd, 3)
-
-    async def reset_settings(self) -> None:
-        """Remove all automation settings from the light."""
-        cmd = commands.create_reset_auto_settings_command(
-            self.get_next_msg_id()
-        )
-        await self._send_command(cmd, 3)
-
-    async def enable_auto_mode(self) -> None:
-        """Enable auto mode of the light."""
-        switch_cmd = commands.create_switch_to_auto_mode_command(
-            self.get_next_msg_id()
-        )
-        time_cmd = commands.create_set_time_command(self.get_next_msg_id())
-        await self._send_command(switch_cmd, 3)
-        await self._send_command(time_cmd, 3)
-
-    async def set_manual_mode(self) -> None:
-        """Switch to manual mode by sending a manual mode command."""
-        # Set each color to the stored or default brightness (for example 100).
-        for color_name in self._colors:
-            await self.set_color_brightness(100, color_name)
 
     # Bluetooth methods
 

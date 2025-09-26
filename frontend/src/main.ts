@@ -1,5 +1,19 @@
 import axios from "axios";
 import "./style.css";
+import { escapeHtml, pad2, formatRawPayload, formatTimestamp, formatDayTime, renderNotice } from "./utils";
+import { fetchJson, postJson, sendManualBrightnessCommands } from "./api";
+import { renderDeviceCard, renderDeviceCardCollapsed, renderDeviceSection } from "./ui/deviceCard";
+import { renderDoserDashboard, renderLightDashboard } from "./ui/dashboards";
+
+type LightChannel = {
+  index: number;
+  name: string;
+};
+
+type ManualBrightnessPayload = {
+  index: number;
+  value: number;
+};
 
 type DeviceStatus = {
   device_type: string;
@@ -8,6 +22,7 @@ type DeviceStatus = {
   updated_at: number;
   model_name?: string | null;
   connected?: boolean;
+  channels?: LightChannel[] | null;
 };
 
 type StatusResponse = Record<string, DeviceStatus>;
@@ -50,373 +65,657 @@ const app = document.querySelector<HTMLDivElement>("#app");
 
 // Auto-refresh disabled: loads happen only when tabs are activated
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
-function formatTimestamp(timestamp: number): string {
-  const date = new Date(timestamp * 1000);
-  return date.toLocaleString();
-}
+// Device UI renderers are now in ui modules
 
-function pad2(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function weekdayName(n: number | null | undefined): string {
-  // 1..7 -> Monday..Sunday (per backend comments)
-  const names = [
-    "",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-  ];
-  if (!n || n < 1 || n > 7) return "";
-  return names[n];
-}
-
-function formatDayTime(weekday: number | null | undefined, hour: number | null | undefined, minute: number | null | undefined): string {
-  if (weekday && hour != null && minute != null) {
-    return `${weekdayName(weekday)} ${pad2(hour)}:${pad2(minute)}`;
-  }
-  return "";
-}
-
-function renderNotice(
-  message: string,
-  variant: "info" | "warning" | "error" = "info"
-): string {
-  return `<div class="notice ${variant}"><p>${escapeHtml(message)}</p></div>`;
-}
-
-function renderParsedValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "<em>None</em>";
-  }
-
-  if (Array.isArray(value) || typeof value === "object") {
-    return `<pre class="code-block">${escapeHtml(
-      JSON.stringify(value, null, 2)
-    )}</pre>`;
-  }
-
-  if (typeof value === "boolean") {
-    return `<span class="badge ${value ? "success" : "warning"}">${
-      value ? "true" : "false"
-    }</span>`;
-  }
-
-  return `<code>${escapeHtml(String(value))}</code>`;
-}
-
-function renderParsedTable(parsed: Record<string, unknown> | null): string {
-  if (!parsed) {
-    return "<em>No decoded payload</em>";
-  }
-
-  const entries = Object.entries(parsed);
-  if (entries.length === 0) {
-    return "<em>No fields</em>";
-  }
-
-  const headerRow = entries
-    .map(([key]) => `<th scope="col">${escapeHtml(key)}</th>`)
-    .join("");
-  const valueRow = entries
-    .map(([, value]) => `<td>${renderParsedValue(value)}</td>`)
-    .join("");
-
-  return `
-    <table class="parsed-table">
-      <thead>
-        <tr>${headerRow}</tr>
-      </thead>
-      <tbody>
-        <tr>${valueRow}</tr>
-      </tbody>
-    </table>
-  `;
-}
-
-function renderParsedRaw(parsed: Record<string, unknown> | null): string {
-  if (!parsed) return "<em>No decoded payload</em>";
-  return `<pre class="code-block">${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`;
-}
-
-function renderDeviceCard({ address, status }: DeviceEntry): string {
-  const raw = status.raw_payload
-    ? `<code>${escapeHtml(status.raw_payload)}</code>`
-    : "<em>No raw payload</em>";
+function renderDevManualCard({ address, status }: DeviceEntry): string {
+  const modelName = status.model_name || address;
   const connectedBadge = status.connected
     ? `<span class="badge success">connected</span>`
     : `<span class="badge warning">disconnected</span>`;
+  const rawChannels = Array.isArray(status.channels) ? status.channels : [];
+  const normalizedChannels = rawChannels
+    .filter((channel): channel is LightChannel =>
+      channel !== null && typeof channel === "object" && typeof channel.index === "number"
+    )
+    .map((channel) => ({
+      index: channel.index,
+      name:
+        typeof channel.name === "string" && channel.name.trim().length > 0
+          ? channel.name.trim()
+          : `Channel ${channel.index + 1}`,
+    }))
+    .sort((a, b) => a.index - b.index);
+  const hasChannels = normalizedChannels.length > 0;
+  const datasetAttr = hasChannels
+    ? ` data-channels="${escapeHtml(JSON.stringify(normalizedChannels))}"`
+    : "";
+  const channelCountControl = hasChannels
+    ? ""
+    : `<div class="form-field">
+          <label>
+            <span>Number of channels</span>
+            <input type="number" name="channelCount" min="1" max="6" value="1" required />
+          </label>
+        </div>`;
+  const channelHint = hasChannels
+    ? `<p class="form-hint">Detected channels: ${normalizedChannels
+        .map((channel) => escapeHtml(channel.name))
+        .join(", ")}</p>`
+    : "";
 
   return `
-    <article class="device">
+    <article class="device dev-card" data-address="${escapeHtml(address)}">
       <header>
-        <h2>${escapeHtml(status.model_name || address)}</h2>
-        <span class="badge">${escapeHtml(status.device_type)}</span>
-        ${connectedBadge}
-        <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
-        <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
+        <h2>${escapeHtml(modelName)}</h2>
+        <div class="device-meta">
+          <span class="badge">light</span>
+          ${connectedBadge}
+        </div>
       </header>
-      <dl>
-        <div>
-          <dt>Last Update</dt>
-          <dd>${formatTimestamp(status.updated_at)}</dd>
+      <form class="manual-command-form" data-address="${escapeHtml(address)}"${datasetAttr}>
+        ${channelCountControl}
+        ${channelHint}
+        <div class="channel-fields" data-role="channel-fields"></div>
+        <div class="form-actions">
+          <button type="submit" class="btn set-manual-btn">Send</button>
         </div>
-        <div>
-          <dt>Raw Payload</dt>
-          <dd>${raw}</dd>
-        </div>
-        <div>
-          <dt>Decoded Payload</dt>
-          <dd>
-            <details class="payload-details">
-              <summary>Decoded Payload</summary>
-              <div class="payload-controls">
-                <button class="btn copy-payload" data-address="${escapeHtml(address)}" title="Copy JSON">
-                  <svg class="icon copy-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                  <span class="btn-label">Copy</span>
-                </button>
-              </div>
-              ${renderParsedRaw(status.parsed)}
-            </details>
-          </dd>
-        </div>
-      </dl>
+        <p class="form-feedback" role="status" aria-live="polite"></p>
+      </form>
     </article>
   `;
 }
 
-function renderDeviceCardCollapsed({ address, status }: DeviceEntry): string {
-  const raw = status.raw_payload
-    ? `<code>${escapeHtml(status.raw_payload)}</code>`
-    : "<em>No raw payload</em>";
-  const connectedBadge = status.connected
-    ? `<span class="badge success">connected</span>`
-    : `<span class="badge warning">disconnected</span>`;
-
-  return `
-    <details class="device device-details" data-address="${escapeHtml(address)}">
-      <summary>
-        <div class="device-summary-left">
-          <h2>${escapeHtml(status.model_name || address)}</h2>
-          <span class="badge">${escapeHtml(status.device_type)}</span>
-          ${connectedBadge}
-        </div>
-        <div class="device-summary-right">
-          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
-          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
-        </div>
-      </summary>
-      <div class="device-body">
-        <dl>
-          <div>
-            <dt>Last Update</dt>
-            <dd>${formatTimestamp(status.updated_at)}</dd>
-          </div>
-          <div>
-            <dt>Raw Payload</dt>
-            <dd>${raw}</dd>
-          </div>
-          <div>
-            <dt>Decoded Payload</dt>
-            <dd>
-              <details class="payload-details">
-                <summary>Decoded Payload</summary>
-                <div class="payload-controls">
-                  <button class="btn copy-payload" data-address="${escapeHtml(address)}" title="Copy JSON">
-                    <svg class="icon copy-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M16 1H4a2 2 0 0 0-2 2v14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="8" y="5" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    <span class="btn-label">Copy</span>
-                  </button>
-                </div>
-                ${renderParsedRaw(status.parsed)}
-              </details>
-            </dd>
-          </div>
-        </dl>
-      </div>
-    </details>
-  `;
-}
-
-function renderDeviceSection(
-  entries: DeviceEntry[],
-  emptyMessage: string
-): string {
-  if (entries.length === 0) {
-    return `
-      ${renderNotice(emptyMessage, "info")}
-      <div class="scan-panel">
-        <button class="btn" id="scan-btn" title="Scan for nearby devices">Scan for devices</button>
-        <div id="scan-results"></div>
-      </div>
-    `;
-  }
-
-  // Overview should render collapsed device cards by default.
-  return `<section class="device-grid">${entries
-    .map((entry) => renderDeviceCardCollapsed(entry))
+function renderDevManualSection(entries: DeviceEntry[]): string {
+  return `<section class="device-grid dev-tools">${entries
+    .map((entry) => renderDevManualCard(entry))
     .join("")}</section>`;
 }
 
-function renderDoserDashboard(entries: DeviceEntry[]): string {
-  // Filter only dosers with parsed payload
-  const dosers = entries.filter(
-    (e) => e.status.device_type === "doser" && e.status.parsed
-  );
-  if (dosers.length === 0) {
-    return renderNotice("No dosers connected yet.", "info");
-  }
+function renderDevAutoCard({ address, status }: DeviceEntry): string {
+  const modelName = status.model_name || address;
+  const connectedBadge = status.connected
+    ? `<span class="badge success">connected</span>`
+    : `<span class="badge warning">disconnected</span>`;
+  const rawChannels = Array.isArray(status.channels) ? status.channels : [];
+  const normalizedChannels = rawChannels
+    .filter((channel): channel is LightChannel =>
+      channel !== null && typeof channel === "object" && typeof channel.index === "number"
+    )
+    .map((channel) => ({
+      index: channel.index,
+      name:
+        typeof channel.name === "string" && channel.name.trim().length > 0
+          ? channel.name.trim()
+          : `Channel ${channel.index + 1}`,
+    }))
+    .sort((a, b) => a.index - b.index);
+  const hasChannels = normalizedChannels.length > 0;
+  const datasetAttr = hasChannels
+    ? ` data-channels="${escapeHtml(JSON.stringify(normalizedChannels))}"`
+    : "";
+  const channelCountControl = hasChannels
+    ? ""
+    : `<div class="form-field">
+          <label>
+            <span>Number of channels</span>
+            <input type="number" name="autoChannelCount" min="1" max="6" value="1" required />
+          </label>
+        </div>`;
+  const channelHint = hasChannels
+    ? `<p class="form-hint">Detected channels: ${normalizedChannels
+        .map((channel) => escapeHtml(channel.name))
+        .join(", ")}</p>`
+    : "";
 
-  const sections = dosers.map(({ address, status }) => {
-    const parsed = status.parsed as unknown as DoserParsed;
-    const header = formatDayTime(parsed?.weekday ?? null, parsed?.hour ?? null, parsed?.minute ?? null);
-    const modelName = status.model_name || address;
-
-    const heads = Array.isArray(parsed?.heads) ? parsed.heads : [];
-    const rows = heads.slice(0, 4).map((h, idx) => {
-      const pump = idx + 1;
-      const mode = typeof h.mode === "number" ? h.mode : "";
-      const sched = (typeof h.hour === "number" && typeof h.minute === "number")
-        ? `${pad2(h.hour)}:${pad2(h.minute)}`
-        : "";
-      const dosed = typeof h.dosed_tenths_ml === "number"
-        ? `${(h.dosed_tenths_ml / 10).toFixed(1)} ml`
-        : "";
-      return `<tr>
-        <td>${pump}</td>
-        <td>${mode}</td>
-        <td>${sched}</td>
-        <td>${dosed}</td>
-      </tr>`;
-    }).join("");
-
-    return `
-      <article class="device">
-        <header>
-          <h2>${escapeHtml(modelName)}</h2>
-          <span class="badge">doser</span>
-          ${status.connected ? `<span class="badge ${status.connected ? 'success' : 'warning'}">${status.connected ? 'connected' : 'disconnected'}</span>` : ''}
-          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
-          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
-        </header>
-        <div class="row-top">${header ? escapeHtml(header) : ""}</div>
-        <table class="parsed-table">
-          <thead>
-            <tr>
-              <th scope="col">pump</th>
-              <th scope="col">mode</th>
-              <th scope="col">scheduled</th>
-              <th scope="col">dosed</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </article>
-    `;
-  });
-
-  return `<section class="device-grid">${sections.join("")}</section>`;
-}
-
-// Narrow types for light parsed JSON
-type LightKeyframe = { hour: number; minute: number; value: number; percent?: number };
-type LightParsed = {
-  weekday: number | null;
-  current_hour: number | null;
-  current_minute: number | null;
-  keyframes: LightKeyframe[];
-};
-
-function toHexByte(n: number): string {
-  const clamped = Math.max(0, Math.min(255, Math.floor(n)));
-  return `0x${clamped.toString(16).toUpperCase().padStart(2, "0")}`;
-}
-
-function valueToPercent(n: number): number {
-  // Backend value is 0..255; percent is approx n/255*100 rounded
-  const p = Math.round((n / 255) * 100);
-  return Math.max(0, Math.min(100, p));
-}
-
-function renderLightDashboard(entries: DeviceEntry[]): string {
-  const lights = entries.filter(
-    (e) => e.status.device_type === "light" && e.status.parsed
-  );
-  if (lights.length === 0) {
-    return renderNotice("No lights connected yet.", "info");
-  }
-
-  const sections = lights.map(({ address, status }) => {
-    const parsed = status.parsed as unknown as LightParsed;
-    const header = formatDayTime(
-      parsed?.weekday ?? null,
-      parsed?.current_hour ?? null,
-      parsed?.current_minute ?? null
-    );
-    const modelName = status.model_name || address;
-    const frames = Array.isArray(parsed?.keyframes) ? parsed.keyframes : [];
-    const rows = frames
-      .map((f) => {
-        const time =
-          typeof f.hour === "number" && typeof f.minute === "number"
-            ? `${pad2(f.hour)}:${pad2(f.minute)}`
-            : "";
-        // Prefer explicit percent provided by the backend. Fall back to
-        // converting the raw 0..255 value to percent if needed for
-        // compatibility with older backends.
-        const val =
-          typeof f.percent === "number"
-            ? f.percent
-            : typeof f.value === "number"
-            ? valueToPercent(f.value)
-            : 0;
-        return `<tr>
-        <td>${time}</td>
-        <td>${val}%</td>
-      </tr>`;
-      })
-      .join("");
-
-    return `
-      <article class="device">
-        <header>
-          <h2>${escapeHtml(modelName)}</h2>
+  return `
+    <article class="device dev-card" data-address="${escapeHtml(address)}">
+      <header>
+        <h2>${escapeHtml(modelName)}</h2>
+        <div class="device-meta">
           <span class="badge">light</span>
-          ${status.connected ? `<span class="badge ${status.connected ? 'success' : 'warning'}">${status.connected ? 'connected' : 'disconnected'}</span>` : ''}
-          <button class="btn reconnect-btn" data-address="${escapeHtml(address)}" title="(Re)connect to device">Reconnect</button>
-          <button class="btn update-btn" data-address="${escapeHtml(address)}" title="Request a fresh status from the device">Update</button>
-        </header>
-        <div class="row-top">${header ? escapeHtml(header) : ""}</div>
-        <table class="parsed-table">
-          <thead>
-            <tr>
-              <th scope="col">time</th>
-              <th scope="col">brightness</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-      </article>
-    `;
-  });
+          ${connectedBadge}
+        </div>
+      </header>
+      <form class="auto-setting-form" data-address="${escapeHtml(address)}"${datasetAttr}>
+        <div class="auto-field-grid">
+          <label class="form-field time-field">
+            <span>Sunrise</span>
+            <div class="time-inputs">
+              <input type="number" name="sunriseHour" min="0" max="23" value="8" required />
+              <span class="time-separator">:</span>
+              <input type="number" name="sunriseMinute" min="0" max="59" value="0" required />
+            </div>
+          </label>
+          <label class="form-field time-field">
+            <span>Sunset</span>
+            <div class="time-inputs">
+              <input type="number" name="sunsetHour" min="0" max="23" value="20" required />
+              <span class="time-separator">:</span>
+              <input type="number" name="sunsetMinute" min="0" max="59" value="0" required />
+            </div>
+          </label>
+          <label class="form-field">
+            <span>Ramp-up (minutes)</span>
+            <input type="number" name="ramp" min="0" max="150" value="0" />
+          </label>
+        </div>
+        <fieldset class="weekday-fieldset">
+          <legend>Weekdays</legend>
+          <div class="weekday-options">
+            <label><input type="checkbox" data-weekday value="everyday" checked />Everyday</label>
+            <label><input type="checkbox" data-weekday value="monday" />Mon</label>
+            <label><input type="checkbox" data-weekday value="tuesday" />Tue</label>
+            <label><input type="checkbox" data-weekday value="wednesday" />Wed</label>
+            <label><input type="checkbox" data-weekday value="thursday" />Thu</label>
+            <label><input type="checkbox" data-weekday value="friday" />Fri</label>
+            <label><input type="checkbox" data-weekday value="saturday" />Sat</label>
+            <label><input type="checkbox" data-weekday value="sunday" />Sun</label>
+          </div>
+        </fieldset>
+        ${channelCountControl}
+        ${channelHint}
+        <div class="channel-fields" data-role="auto-channel-fields"></div>
+        <div class="form-actions auto-actions">
+          <button type="submit" class="btn">Add Setting</button>
+          <button type="button" class="btn auto-enable-btn">Enable Auto</button>
+          <button type="button" class="btn auto-manual-btn">Set Manual</button>
+          <button type="button" class="btn auto-reset-btn">Reset Auto</button>
+        </div>
+        <p class="form-feedback" role="status" aria-live="polite"></p>
+      </form>
+    </article>
+  `;
+}
 
-  return `<section class="device-grid">${sections.join("")}</section>`;
+function renderDevAutoSection(entries: DeviceEntry[]): string {
+  return `<section class="device-grid dev-tools">${entries
+    .map((entry) => renderDevAutoCard(entry))
+    .join("")}</section>`;
+}
+
+function renderDevLightTabs(entries: DeviceEntry[]): string {
+  return `
+    <div class="dev-subtabs" role="tablist" aria-label="Light developer tools">
+      <button class="dev-subtab active" role="tab" id="dev-tab-manual" aria-selected="true" aria-controls="dev-panel-manual">Manual</button>
+      <button class="dev-subtab" role="tab" id="dev-tab-auto" aria-selected="false" aria-controls="dev-panel-auto">Auto</button>
+    </div>
+    <section id="dev-panel-manual" class="dev-subpanel" role="tabpanel" aria-labelledby="dev-tab-manual">
+      ${renderDevManualSection(entries)}
+    </section>
+    <section id="dev-panel-auto" class="dev-subpanel" role="tabpanel" aria-labelledby="dev-tab-auto" hidden>
+      ${renderDevAutoSection(entries)}
+    </section>
+  `;
+}
+
+function setupManualCommandForms(container: HTMLElement): void {
+  const forms = container.querySelectorAll<HTMLFormElement>(".manual-command-form");
+  forms.forEach((form) => {
+    const channelFields = form.querySelector<HTMLDivElement>('[data-role="channel-fields"]');
+    const feedback = form.querySelector<HTMLParagraphElement>(".form-feedback");
+    const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const address = form.dataset.address;
+    if (!channelFields || !submitBtn || !address) {
+      return;
+    }
+
+    const channelInput = form.querySelector<HTMLInputElement>('input[name="channelCount"]');
+    const parsedChannels: LightChannel[] = (() => {
+      const raw = form.dataset.channels;
+      if (!raw) return [];
+      try {
+        const data = JSON.parse(raw) as LightChannel[];
+        if (!Array.isArray(data)) return [];
+        return data
+          .filter((channel): channel is LightChannel =>
+            channel !== null && typeof channel === "object" && typeof channel.index === "number"
+          )
+          .map((channel) => ({
+            index: channel.index,
+            name:
+              typeof channel.name === "string" && channel.name.trim().length > 0
+                ? channel.name.trim()
+                : `Channel ${channel.index + 1}`,
+          }))
+          .sort((a, b) => a.index - b.index);
+      } catch {
+        return [];
+      }
+    })();
+
+    const renderChannels = (channels: LightChannel[]) => {
+      const normalized = channels.map((channel, position) => ({
+        index: Number.isFinite(channel.index) ? channel.index : position,
+        name:
+          typeof channel.name === "string" && channel.name.trim().length > 0
+            ? channel.name.trim()
+            : `Channel ${Number.isFinite(channel.index) ? channel.index + 1 : position + 1}`,
+      }));
+      channelFields.innerHTML = "";
+      normalized.forEach((channel) => {
+        const label = document.createElement("label");
+        label.className = "form-field channel-field";
+        const span = document.createElement("span");
+        span.textContent = channel.name;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.max = "100";
+        input.step = "1";
+        input.value = "100";
+        input.required = true;
+        input.dataset.channelIndex = String(channel.index);
+        input.dataset.channelName = channel.name;
+        label.append(span, input);
+        channelFields.appendChild(label);
+      });
+    };
+
+    const clampChannelCount = (value: number) => {
+      if (!Number.isFinite(value)) {
+        return 1;
+      }
+      return Math.max(1, Math.min(6, Math.floor(value)));
+    };
+
+    const buildFromCount = (count: number) => {
+      const generated = Array.from({ length: count }, (_, idx) => ({
+        index: idx,
+        name: `Channel ${idx + 1}`,
+      }));
+      renderChannels(generated);
+    };
+
+    if (parsedChannels.length > 0) {
+      renderChannels(parsedChannels);
+      if (channelInput) {
+        channelInput.value = String(parsedChannels.length);
+        channelInput.disabled = true;
+        const wrapper = channelInput.closest(".form-field");
+        if (wrapper instanceof HTMLElement) {
+          wrapper.setAttribute("hidden", "true");
+        }
+      }
+    } else {
+      const initialCount = clampChannelCount(
+        channelInput ? Number.parseInt(channelInput.value, 10) : Number.NaN
+      );
+      if (channelInput) {
+        channelInput.value = String(initialCount);
+      }
+      buildFromCount(initialCount);
+      if (channelInput) {
+        channelInput.addEventListener("change", () => {
+          const parsed = Number.parseInt(channelInput.value, 10);
+          const count = clampChannelCount(parsed);
+          channelInput.value = String(count);
+          buildFromCount(count);
+        });
+      }
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const inputs = Array.from(
+        channelFields.querySelectorAll<HTMLInputElement>("input[data-channel-index]")
+      );
+      if (inputs.length === 0) {
+        if (feedback) feedback.textContent = "Add at least one channel.";
+        return;
+      }
+
+      const payloads: ManualBrightnessPayload[] = [];
+      for (let idx = 0; idx < inputs.length; idx += 1) {
+        const input = inputs[idx];
+        const value = Number.parseInt(input.value, 10);
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+          if (feedback) feedback.textContent = "Brightness must be between 0 and 100.";
+          input.focus();
+          return;
+        }
+        const channelIndexRaw = Number.parseInt(input.dataset.channelIndex ?? "", 10);
+        const targetIndex = Number.isFinite(channelIndexRaw) ? channelIndexRaw : idx;
+        payloads.push({ index: targetIndex, value });
+      }
+
+      const previousChannelInputDisabled = channelInput?.disabled ?? false;
+      submitBtn.disabled = true;
+      if (channelInput) {
+        channelInput.disabled = true;
+      }
+      inputs.forEach((input) => {
+        input.disabled = true;
+      });
+      if (feedback) feedback.textContent = "Sending…";
+
+      try {
+        await sendManualBrightnessCommands(address, payloads);
+        if (feedback) feedback.textContent = "Manual command sent successfully.";
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to send command.";
+        if (feedback) feedback.textContent = message;
+      } finally {
+        submitBtn.disabled = false;
+        if (channelInput) {
+          channelInput.disabled = previousChannelInputDisabled;
+        }
+        inputs.forEach((input) => {
+          input.disabled = false;
+        });
+      }
+    });
+
+  });
+}
+
+function setupAutoSettingForms(container: HTMLElement): void {
+  const forms = container.querySelectorAll<HTMLFormElement>(".auto-setting-form");
+  forms.forEach((form) => {
+    const channelFields = form.querySelector<HTMLDivElement>("[data-role=\"auto-channel-fields\"]");
+    const feedback = form.querySelector<HTMLParagraphElement>(".form-feedback");
+    const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    const address = form.dataset.address;
+    if (!channelFields || !submitBtn || !address) {
+      return;
+    }
+
+    const channelInput = form.querySelector<HTMLInputElement>('input[name="autoChannelCount"]');
+    const parsedChannels: LightChannel[] = (() => {
+      const raw = form.dataset.channels;
+      if (!raw) return [];
+      try {
+        const data = JSON.parse(raw) as LightChannel[];
+        if (!Array.isArray(data)) return [];
+        return data
+          .filter((channel): channel is LightChannel =>
+            channel !== null && typeof channel === "object" && typeof channel.index === "number"
+          )
+          .map((channel) => ({
+            index: channel.index,
+            name:
+              typeof channel.name === "string" && channel.name.trim().length > 0
+                ? channel.name.trim()
+                : `Channel ${channel.index + 1}`,
+          }))
+          .sort((a, b) => a.index - b.index)
+          .slice(0, 3);
+      } catch {
+        return [];
+      }
+    })();
+
+    const renderChannels = (channels: LightChannel[]) => {
+      const normalized = channels.map((channel, position) => ({
+        index: Number.isFinite(channel.index) ? channel.index : position,
+        name:
+          typeof channel.name === "string" && channel.name.trim().length > 0
+            ? channel.name.trim()
+            : `Channel ${Number.isFinite(channel.index) ? channel.index + 1 : position + 1}`,
+      }));
+      channelFields.innerHTML = "";
+      normalized.forEach((channel) => {
+        const label = document.createElement("label");
+        label.className = "form-field channel-field";
+        const span = document.createElement("span");
+        span.textContent = channel.name;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.max = "100";
+        input.step = "1";
+        input.value = "100";
+        input.required = true;
+        input.dataset.channelIndex = String(channel.index);
+        input.dataset.channelName = channel.name;
+        label.append(span, input);
+        channelFields.appendChild(label);
+      });
+    };
+
+    const clampChannelCount = (value: number) => {
+      if (!Number.isFinite(value)) {
+        return 1;
+      }
+      return Math.max(1, Math.min(3, Math.floor(value)));
+    };
+
+    const buildFromCount = (count: number) => {
+      const limited = clampChannelCount(count);
+      const generated = Array.from({ length: limited }, (_, idx) => ({
+        index: idx,
+        name: `Channel ${idx + 1}`,
+      }));
+      renderChannels(generated);
+    };
+
+    if (parsedChannels.length > 0) {
+      renderChannels(parsedChannels);
+      if (channelInput) {
+        channelInput.value = String(parsedChannels.length);
+        channelInput.disabled = true;
+        const wrapper = channelInput.closest(".form-field");
+        if (wrapper instanceof HTMLElement) {
+          wrapper.setAttribute("hidden", "true");
+        }
+      }
+    } else {
+      const initialCount = clampChannelCount(
+        channelInput ? Number.parseInt(channelInput.value, 10) : Number.NaN
+      );
+      if (channelInput) {
+        channelInput.value = String(initialCount);
+      }
+      buildFromCount(initialCount);
+      if (channelInput) {
+        channelInput.addEventListener("change", () => {
+          const parsed = Number.parseInt(channelInput.value, 10);
+          const count = clampChannelCount(parsed);
+          channelInput.value = String(count);
+          buildFromCount(count);
+        });
+      }
+    }
+
+    const weekdayCheckboxes = Array.from(
+      form.querySelectorAll<HTMLInputElement>("input[data-weekday]")
+    );
+    const everydayCheckbox = weekdayCheckboxes.find((cb) => cb.value === "everyday");
+    weekdayCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener("change", () => {
+        if (checkbox.value === "everyday" && checkbox.checked) {
+          weekdayCheckboxes.forEach((cb) => {
+            if (cb !== checkbox) {
+              cb.checked = false;
+            }
+          });
+        } else if (checkbox.checked && everydayCheckbox) {
+          everydayCheckbox.checked = false;
+        }
+        if (!weekdayCheckboxes.some((cb) => cb.checked) && everydayCheckbox) {
+          everydayCheckbox.checked = true;
+        }
+      });
+    });
+
+    async function triggerAutoAction(endpoint: string, button?: HTMLButtonElement) {
+      const prev = button?.textContent ?? null;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Working…";
+      }
+      if (feedback) feedback.textContent = "Working…";
+      if (!address) {
+        if (feedback) feedback.textContent = "Missing device address.";
+        if (button) button.disabled = false;
+        return;
+      }
+      try {
+        await postJson(`/api/lights/${encodeURIComponent(address)}/${endpoint}`);
+        if (feedback) feedback.textContent = "Command sent.";
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to send command.";
+        if (feedback) feedback.textContent = msg;
+      } finally {
+        if (button) {
+          button.disabled = false;
+          if (prev !== null) {
+            button.textContent = prev;
+          }
+        }
+        setTimeout(() => {
+          if (feedback) feedback.textContent = "";
+        }, 1500);
+      }
+    }
+
+    const autoEnableBtn = form.querySelector<HTMLButtonElement>(".auto-enable-btn");
+    const autoManualBtn = form.querySelector<HTMLButtonElement>(".auto-manual-btn");
+    const autoResetBtn = form.querySelector<HTMLButtonElement>(".auto-reset-btn");
+    autoEnableBtn?.addEventListener("click", () => void triggerAutoAction("auto/enable", autoEnableBtn));
+    autoManualBtn?.addEventListener("click", () => void triggerAutoAction("auto/manual", autoManualBtn));
+    autoResetBtn?.addEventListener("click", () => void triggerAutoAction("auto/reset", autoResetBtn));
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const sunriseHourInput = form.querySelector<HTMLInputElement>('input[name="sunriseHour"]');
+      const sunriseMinuteInput = form.querySelector<HTMLInputElement>('input[name="sunriseMinute"]');
+      const sunsetHourInput = form.querySelector<HTMLInputElement>('input[name="sunsetHour"]');
+      const sunsetMinuteInput = form.querySelector<HTMLInputElement>('input[name="sunsetMinute"]');
+      const rampInput = form.querySelector<HTMLInputElement>('input[name="ramp"]');
+      if (
+        !sunriseHourInput ||
+        !sunriseMinuteInput ||
+        !sunsetHourInput ||
+        !sunsetMinuteInput ||
+        !rampInput
+      ) {
+        if (feedback) feedback.textContent = "Missing inputs.";
+        return;
+      }
+
+      const sunriseHour = Number.parseInt(sunriseHourInput.value, 10);
+      const sunriseMinute = Number.parseInt(sunriseMinuteInput.value, 10);
+      const sunsetHour = Number.parseInt(sunsetHourInput.value, 10);
+      const sunsetMinute = Number.parseInt(sunsetMinuteInput.value, 10);
+      const rampUpMinutes = Number.parseInt(rampInput.value || "0", 10);
+
+      if (
+        !Number.isFinite(sunriseHour) ||
+        sunriseHour < 0 ||
+        sunriseHour > 23 ||
+        !Number.isFinite(sunriseMinute) ||
+        sunriseMinute < 0 ||
+        sunriseMinute > 59 ||
+        !Number.isFinite(sunsetHour) ||
+        sunsetHour < 0 ||
+        sunsetHour > 23 ||
+        !Number.isFinite(sunsetMinute) ||
+        sunsetMinute < 0 ||
+        sunsetMinute > 59
+      ) {
+        if (feedback) feedback.textContent = "Invalid sunrise/sunset time.";
+        return;
+      }
+
+      if (!Number.isFinite(rampUpMinutes) || rampUpMinutes < 0 || rampUpMinutes > 150) {
+        if (feedback) feedback.textContent = "Ramp must be 0–150 minutes.";
+        return;
+      }
+
+      const channelInputs = Array.from(
+        channelFields.querySelectorAll<HTMLInputElement>("input[data-channel-index]")
+      );
+      if (channelInputs.length === 0) {
+        if (feedback) feedback.textContent = "Add at least one channel.";
+        return;
+      }
+      if (channelInputs.length !== 1 && channelInputs.length !== 3) {
+        if (feedback) feedback.textContent = "Auto settings require one or three channels.";
+        return;
+      }
+
+      const brightnessValues: number[] = [];
+      for (const input of channelInputs) {
+        const value = Number.parseInt(input.value, 10);
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+          if (feedback) feedback.textContent = "Channel brightness must be 0–100.";
+          input.focus();
+          return;
+        }
+        brightnessValues.push(value);
+      }
+
+      const weekdayValues = weekdayCheckboxes
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.value.trim().toLowerCase())
+        .filter(Boolean);
+      const weekdays = weekdayValues.length === 0 || weekdayValues.includes("everyday")
+        ? ["everyday"]
+        : weekdayValues;
+
+      const sunrise = `${pad2(sunriseHour)}:${pad2(sunriseMinute)}`;
+      const sunset = `${pad2(sunsetHour)}:${pad2(sunsetMinute)}`;
+      const brightness = brightnessValues.length === 1
+        ? brightnessValues[0]
+        : [brightnessValues[0], brightnessValues[1], brightnessValues[2]] as [number, number, number];
+
+      submitBtn.disabled = true;
+      if (channelInput && !channelInput.hasAttribute("hidden")) {
+        channelInput.disabled = true;
+      }
+      channelInputs.forEach((input) => {
+        input.disabled = true;
+      });
+      if (feedback) feedback.textContent = "Sending…";
+
+      try {
+        await postJson(`/api/lights/${encodeURIComponent(address)}/auto/setting`, {
+          sunrise,
+          sunset,
+          ramp_up_minutes: rampUpMinutes,
+          weekdays,
+          brightness,
+        });
+        if (feedback) feedback.textContent = "Auto setting added.";
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to add setting.";
+        if (feedback) feedback.textContent = msg;
+      } finally {
+        submitBtn.disabled = false;
+        if (channelInput && !channelInput.hasAttribute("hidden")) {
+          channelInput.disabled = false;
+        }
+        channelInputs.forEach((input) => {
+          input.disabled = false;
+        });
+        setTimeout(() => {
+          if (feedback) feedback.textContent = "";
+        }, 2000);
+      }
+    });
+  });
+}
+
+function setupDevSubTabs(container: HTMLElement): void {
+  const tabManual = container.querySelector<HTMLButtonElement>("#dev-tab-manual");
+  const tabAuto = container.querySelector<HTMLButtonElement>("#dev-tab-auto");
+  const panelManual = container.querySelector<HTMLElement>("#dev-panel-manual");
+  const panelAuto = container.querySelector<HTMLElement>("#dev-panel-auto");
+  if (!tabManual || !tabAuto || !panelManual || !panelAuto) return;
+
+  const setActive = (view: "manual" | "auto") => {
+    const isManual = view === "manual";
+    tabManual.classList.toggle("active", isManual);
+    tabAuto.classList.toggle("active", !isManual);
+    tabManual.setAttribute("aria-selected", isManual ? "true" : "false");
+    tabAuto.setAttribute("aria-selected", !isManual ? "true" : "false");
+    panelManual.toggleAttribute("hidden", !isManual);
+    panelAuto.toggleAttribute("hidden", isManual);
+  };
+
+  tabManual.addEventListener("click", () => setActive("manual"));
+  tabAuto.addEventListener("click", () => setActive("auto"));
 }
 
 function statusResponseToEntries(data: StatusResponse): DeviceEntry[] {
@@ -451,6 +750,7 @@ function renderLayout(): void {
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab active" role="tab" id="tab-dashboard" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
       <button class="tab" role="tab" id="tab-overview" aria-selected="false" aria-controls="panel-overview">Overview</button>
+      <button class="tab" role="tab" id="tab-dev" aria-selected="false" aria-controls="panel-dev">Dev</button>
       <div class="spacer"></div>
     </nav>
 
@@ -461,6 +761,9 @@ function renderLayout(): void {
       <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
         <div id="overview-content">${renderNotice("Loading overview…")}</div>
       </section>
+      <section id="panel-dev" role="tabpanel" aria-labelledby="tab-dev" hidden>
+        <div id="dev-content">${renderNotice("Preparing developer tools…")}</div>
+      </section>
     </main>
   `;
 }
@@ -468,64 +771,54 @@ function renderLayout(): void {
 function setupTabs(): void {
   const tabDashboard = document.getElementById("tab-dashboard") as HTMLButtonElement | null;
   const tabOverview = document.getElementById("tab-overview") as HTMLButtonElement | null;
+  const tabDev = document.getElementById("tab-dev") as HTMLButtonElement | null;
   const panelDashboard = document.getElementById("panel-dashboard");
   const panelOverview = document.getElementById("panel-overview");
-  if (!tabDashboard || !tabOverview || !panelDashboard || !panelOverview) return;
+  const panelDev = document.getElementById("panel-dev");
+  if (!tabDashboard || !tabOverview || !tabDev || !panelDashboard || !panelOverview || !panelDev) return;
 
-  // Narrow to non-null for use inside nested functions
   const tDashboard = tabDashboard as HTMLButtonElement;
   const tOverview = tabOverview as HTMLButtonElement;
+  const tDev = tabDev as HTMLButtonElement;
   const pDashboard = panelDashboard as HTMLElement;
   const pOverview = panelOverview as HTMLElement;
+  const pDev = panelDev as HTMLElement;
 
-  // No timers when switching tabs
+  function applyState(tab: HTMLButtonElement, panel: HTMLElement, active: boolean) {
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+    if (active) {
+      panel.removeAttribute("hidden");
+    } else {
+      panel.setAttribute("hidden", "true");
+    }
+  }
 
-  function setActive(tab: "dashboard" | "overview") {
+  function setActive(tab: "dashboard" | "overview" | "dev") {
     const isDashboard = tab === "dashboard";
     const isOverview = tab === "overview";
+    const isDev = tab === "dev";
 
-  tDashboard.classList.toggle("active", isDashboard);
-  tDashboard.setAttribute("aria-selected", isDashboard ? "true" : "false");
-  tOverview.classList.toggle("active", isOverview);
-  tOverview.setAttribute("aria-selected", isOverview ? "true" : "false");
-  pDashboard.toggleAttribute("hidden", !isDashboard);
-  pOverview.toggleAttribute("hidden", !isOverview);
+    applyState(tDashboard, pDashboard, isDashboard);
+    applyState(tOverview, pOverview, isOverview);
+    applyState(tDev, pDev, isDev);
 
     if (isDashboard) {
       void loadDashboard();
     } else if (isOverview) {
       void loadOverview();
+    } else if (isDev) {
+      void loadDev();
     }
   }
 
   tDashboard.addEventListener("click", () => setActive("dashboard"));
   tOverview.addEventListener("click", () => setActive("overview"));
+  tDev.addEventListener("click", () => setActive("dev"));
 }
 
 function setupInteractions(): void {
   // No refresh buttons for now
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
-  }
-  return (await res.json()) as T;
-}
-
-async function postJson<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Request failed (${res.status}): ${text || res.statusText}`);
-  }
-  return (await res.json()) as T;
 }
 
 async function loadOverview(): Promise<void> {
@@ -590,6 +883,7 @@ async function loadOverview(): Promise<void> {
                 });
               });
             }
+
           } catch (err) {
             resultsDiv.innerHTML = renderNotice(
               err instanceof Error ? err.message : "Scan failed.",
@@ -675,6 +969,35 @@ async function loadOverview(): Promise<void> {
   } catch (err) {
     container.innerHTML = renderNotice(
       err instanceof Error ? err.message : "Failed to load overview.",
+      "error"
+    );
+  }
+}
+
+async function loadDev(): Promise<void> {
+  const container = document.getElementById("dev-content");
+  if (!container) return;
+
+  container.innerHTML = renderNotice("Loading developer tools…");
+  try {
+    const data = await fetchJson<StatusResponse>("/api/status");
+    const entries = statusResponseToEntries(data).sort((a, b) =>
+      a.address.localeCompare(b.address)
+    );
+    const lights = entries.filter((entry) => entry.status.device_type === "light");
+
+    if (lights.length === 0) {
+      container.innerHTML = renderNotice("No lights connected yet.", "info");
+      return;
+    }
+
+    container.innerHTML = renderDevLightTabs(lights);
+    setupManualCommandForms(container);
+    setupAutoSettingForms(container);
+    setupDevSubTabs(container);
+  } catch (err) {
+    container.innerHTML = renderNotice(
+      err instanceof Error ? err.message : "Failed to load developer tools.",
       "error"
     );
   }

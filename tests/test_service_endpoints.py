@@ -9,8 +9,9 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from chihiros_device_manager import doser_commands
-from chihiros_device_manager.service import CachedStatus, app, service
+from chihiros_device_manager.ble_service import CachedStatus
+from chihiros_device_manager.commands import encoder as doser_commands
+from chihiros_device_manager.service import app, service
 
 
 def _cached(device_type: str = "doser") -> CachedStatus:
@@ -21,6 +22,8 @@ def _cached(device_type: str = "doser") -> CachedStatus:
         raw_payload="deadbeef",
         parsed={"example": True},
         updated_at=123.456,
+        model_name=None,
+        channels=None,
     )
 
 
@@ -66,8 +69,8 @@ def test_api_doser_schedule_normalizes_weekdays(
     assert call_kwargs["wait_seconds"] == 2.0
     assert call_kwargs["confirm"] is True
     assert call_kwargs["weekdays"] == [
-        doser_commands.Weekday.monday,
-        doser_commands.Weekday.wednesday,
+        doser_commands.PumpWeekday.monday,
+        doser_commands.PumpWeekday.wednesday,
     ]
 
 
@@ -98,10 +101,10 @@ def test_service_set_light_brightness_coerces_numeric_color(
     cached = _cached("light")
 
     monkeypatch.setattr(
-        service, "_ensure_light", AsyncMock(return_value=fake_light)
+        service, "_ensure_device", AsyncMock(return_value=fake_light)
     )
     monkeypatch.setattr(
-        service, "_refresh_light_status", AsyncMock(return_value=cached)
+        service, "_refresh_device_status", AsyncMock(return_value=cached)
     )
 
     result = asyncio.run(
@@ -137,8 +140,15 @@ def test_service_get_live_statuses_avoids_persistence(
     light_error = HTTPException(status_code=404, detail="Light not reachable")
     light_mock = AsyncMock(side_effect=light_error)
 
-    monkeypatch.setattr(service, "_capture_doser_status", doser_mock)
-    monkeypatch.setattr(service, "_capture_light_status", light_mock)
+    monkeypatch.setattr(
+        service,
+        "_refresh_device_status",
+        lambda kind, persist=False: (
+            doser_mock(persist=persist)
+            if kind == "doser"
+            else light_mock(persist=persist)
+        ),
+    )
 
     statuses, errors = asyncio.run(service.get_live_statuses())
 

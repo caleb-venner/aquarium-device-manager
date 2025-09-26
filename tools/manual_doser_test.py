@@ -1,4 +1,9 @@
-"""Manual testing script for the Chihiros dosing pump."""
+"""Manual testing script for the Chihiros dosing pump.
+
+Developer tool: This script is intended for manual developer testing and
+debugging of dosing pumps. It is not used by the automated test suite
+or the production application. Keep it in `tools/` for convenience.
+"""
 
 import argparse
 import asyncio
@@ -7,8 +12,8 @@ from pathlib import Path
 
 from bleak import BleakScanner
 
+from chihiros_device_manager.commands.encoder import PumpWeekday as Weekday
 from chihiros_device_manager.device.doser import Doser
-from chihiros_device_manager.doser_commands import Weekday
 from chihiros_device_manager.doser_status import parse_status_payload
 
 ROOT = Path(__file__).resolve().parents[1]

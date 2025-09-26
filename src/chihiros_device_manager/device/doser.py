@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Sequence
+from typing import ClassVar, Sequence
 
 from bleak.backends.service import BleakGATTCharacteristic
 
-from .. import doser_commands
+from ..commands import encoder as doser_commands
 from ..doser_status import PumpStatus, parse_status_payload
 from .base_device import BaseDevice
 
@@ -23,6 +23,8 @@ class DoserStatus:
 class Doser(BaseDevice):
     """Chihiros four-head dosing pump."""
 
+    device_kind: ClassVar[str] = "doser"
+    status_serializer: ClassVar[str] = "serialize_pump_status"
     _model_name = "Dosing Pump"
     _model_codes = ["DYDOSE"]
     _colors: dict[str, int] = {}
@@ -68,13 +70,15 @@ class Doser(BaseDevice):
         minute: int,
         *,
         weekdays: (
-            doser_commands.Weekday | Sequence[doser_commands.Weekday] | None
+            doser_commands.PumpWeekday
+            | Sequence[doser_commands.PumpWeekday]
+            | None
         ) = None,
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> DoserStatus | None:
         """Update daily schedule and optionally refresh status."""
-        weekday_mask = doser_commands.encode_weekdays(weekdays)
+        weekday_mask = doser_commands.encode_pump_weekdays(weekdays)
         command_batch = [
             doser_commands.create_prepare_command(
                 self.get_next_msg_id(),

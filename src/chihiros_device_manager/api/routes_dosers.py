@@ -18,7 +18,7 @@ async def connect_doser(
 ) -> Dict[str, Any]:
     """Connect to a doser and return its status."""
     service = request.app.state.service
-    status = await service.connect_doser(payload.address)
+    status = await service.connect_device(payload.address, "doser")
     return cached_status_to_dict(service, status)
 
 

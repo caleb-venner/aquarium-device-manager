@@ -49,6 +49,10 @@ build: front-build
 	$(PY) -m build
 
 lint:
+	@if ! command -v pre-commit >/dev/null 2>&1; then \
+		echo "Installing pre-commit (missing dependency)"; \
+		$(PY) -m pip install pre-commit; \
+	fi
 	pre-commit run --all-files
 
 precommit:

@@ -1,9 +1,13 @@
 """Helper script to inspect Chihiros dosing pump BLE logs.
 
-The pump reuse the Nordic UART protocol already handled by the lighting
-integration.  PacketLogger "RAW" exports used in this project contain the
+Developer tool: this script is intended for developer use when
+investigating BLE packet logs. It is not part of the production service
+or automated tests.
+
+The pump reuses the Nordic UART protocol already handled by the lighting
+integration. PacketLogger "RAW" exports used in this project contain the
 decoded ATT payload twice on each line: once in a truncated string and again
-as the raw HCI frame.  This script extracts the UART payload, decodes the
+as the raw HCI frame. This script extracts the UART payload, decodes the
 header (command id, message id, mode, parameters) and prints a compact
 summary so we can spot patterns while reverse engineering the protocol.
 

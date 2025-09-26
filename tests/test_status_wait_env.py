@@ -35,8 +35,14 @@ def test_capture_wait_uses_env_override(
 
     # Speed: ensure no real BLE operations happen.
     service = service_mod.service
-    service._doser = AsyncMock()  # type: ignore[attr-defined]
-    service._doser_address = "AA:BB"  # type: ignore[attr-defined]
+    # type: ignore[attr-defined]
+    service._doser = AsyncMock()
+    # type: ignore[attr-defined]
+    service._doser.device_kind = "doser"
+    # type: ignore[attr-defined]
+    service._doser.status_serializer = "serialize_pump_status"
+    # type: ignore[attr-defined]
+    service._doser_address = "AA:BB"
 
     # Provide a fake status object compatible with serializer expectations.
     # Minimal fake status object; we'll bypass real serialization by patching.
@@ -55,8 +61,10 @@ def test_capture_wait_uses_env_override(
     service._doser.request_status = AsyncMock(side_effect=fake_request_status)
 
     # Patch serializer to avoid depending on full pump dataclass shape
+    from chihiros_device_manager import ble_service as ble_impl
+
     monkeypatch.setattr(
-        service_mod._serializers,
+        ble_impl._serializers,
         "serialize_pump_status",
         lambda s: {"ok": True},
     )
@@ -73,7 +81,12 @@ def test_capture_wait_uses_env_override(
     # Run capture with persist=False so we don't need full serialization
     # path reload complexity
     # type: ignore[attr-defined]
-    result = _asyncio.run(service._capture_doser_status(persist=False))
+    target = "doser"
+    persist_arg = False
+    result = _asyncio.run(
+        service._refresh_device_status(target, persist=persist_arg)
+    )
     assert result is not None
     # Confirm we used the env override value, not the default 1.5
-    assert 0.009 <= recorded.get("delay", 0) <= 0.02, recorded
+    delay_val = recorded.get("delay", 0)
+    assert 0.009 <= delay_val <= 0.02, recorded

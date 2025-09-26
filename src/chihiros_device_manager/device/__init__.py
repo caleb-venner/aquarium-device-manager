@@ -16,7 +16,6 @@ from .c2rgb import CIIRGB
 from .commander1 import Commander1
 from .commander4 import Commander4
 from .doser import Doser
-from .fallback import Fallback
 from .light_device import LightDevice
 from .tiny_terrarium_egg import TinyTerrariumEgg
 from .universal_wrgb import UniversalWRGB
@@ -36,7 +35,10 @@ def get_model_class_from_name(
     device_name: str,
 ) -> Callable[[BLEDevice], BaseDevice]:
     """Get device class name from device name."""
-    return CODE2MODEL.get(device_name[:-12], Fallback)
+    model_class = CODE2MODEL.get(device_name[:-12])
+    if model_class is None:
+        raise DeviceNotFound(f"Device model code not found for: {device_name}")
+    return model_class
 
 
 async def get_device_from_address(device_address: str) -> BaseDevice:

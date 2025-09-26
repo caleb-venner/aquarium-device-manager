@@ -73,11 +73,9 @@ def serialize_light_status(status: ParsedLightStatus) -> Dict[str, Any]:
 
 def cached_status_to_dict(service, status) -> Dict[str, Any]:
     """Transform a cached status into the API response structure."""
-    connected = False
-    if status.device_type == "doser":
-        connected = service.current_doser_address() == status.address
-    elif status.device_type == "light":
-        connected = service.current_light_address() == status.address
+    connected = (
+        service.current_device_address(status.device_type) == status.address
+    )
 
     return {
         "address": status.address,
@@ -87,4 +85,5 @@ def cached_status_to_dict(service, status) -> Dict[str, Any]:
         "updated_at": status.updated_at,
         "model_name": status.model_name,
         "connected": connected,
+        "channels": status.channels,
     }

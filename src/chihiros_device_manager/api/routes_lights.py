@@ -6,7 +6,11 @@ from typing import Any, Dict
 
 from fastapi import APIRouter, Request
 
-from ..schemas import ConnectRequest, LightBrightnessRequest
+from ..schemas import (
+    ConnectRequest,
+    LightAutoSettingRequest,
+    LightBrightnessRequest,
+)
 from ..serializers import cached_status_to_dict
 
 router = APIRouter(prefix="/api/lights", tags=["lights"])
@@ -18,7 +22,7 @@ async def connect_light(
 ) -> Dict[str, Any]:
     """Connect to a light and return its status."""
     service = request.app.state.service
-    status = await service.connect_light(payload.address)
+    status = await service.connect_device(payload.address, "light")
     return cached_status_to_dict(service, status)
 
 
@@ -49,4 +53,45 @@ async def turn_light_off(request: Request, address: str) -> Dict[str, Any]:
     """Turn a light off and return current status."""
     service = request.app.state.service
     status = await service.turn_light_off(address)
+    return cached_status_to_dict(service, status)
+
+
+@router.post("/{address}/auto/enable")
+async def enable_auto_mode(request: Request, address: str) -> Dict[str, Any]:
+    """Enable auto mode on the light and return refreshed status."""
+    service = request.app.state.service
+    status = await service.enable_auto_mode(address)
+    return cached_status_to_dict(service, status)
+
+
+@router.post("/{address}/auto/manual")
+async def set_manual_mode(request: Request, address: str) -> Dict[str, Any]:
+    """Switch the light to manual mode and return refreshed status."""
+    service = request.app.state.service
+    status = await service.set_manual_mode(address)
+    return cached_status_to_dict(service, status)
+
+
+@router.post("/{address}/auto/reset")
+async def reset_auto_settings(request: Request, address: str) -> Dict[str, Any]:
+    """Reset all auto settings on the light and return refreshed status."""
+    service = request.app.state.service
+    status = await service.reset_auto_settings(address)
+    return cached_status_to_dict(service, status)
+
+
+@router.post("/{address}/auto/setting")
+async def add_auto_setting(
+    request: Request, address: str, payload: LightAutoSettingRequest
+) -> Dict[str, Any]:
+    """Add an auto-mode schedule entry to a light and return refreshed status."""
+    service = request.app.state.service
+    status = await service.add_light_auto_setting(
+        address,
+        sunrise=payload.sunrise,
+        sunset=payload.sunset,
+        brightness=payload.brightness,
+        ramp_up_minutes=payload.ramp_up_minutes,
+        weekdays=[x for x in (payload.weekdays or [])],
+    )
     return cached_status_to_dict(service, status)
