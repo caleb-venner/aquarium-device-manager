@@ -43,7 +43,6 @@ def get_model_class_from_name(
 
 async def get_device_from_address(device_address: str) -> BaseDevice:
     """Get BLEDevice object from mac address."""
-    # TODO Add logger
     ble_dev = await BleakScanner.find_device_by_address(device_address)
     if ble_dev and ble_dev.name is not None:
         model_class = get_model_class_from_name(ble_dev.name)
@@ -66,11 +65,9 @@ __all__ = [
     "CII",
     "CIIRGB",
     "UniversalWRGB",
-    "FallBack",
     "BaseDevice",
     "LightDevice",
     "ParsedLightStatus",
-    "RGBMode",
     "CODE2MODEL",
     "get_device_from_address",
     "get_model_class_from_name",

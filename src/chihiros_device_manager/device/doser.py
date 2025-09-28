@@ -3,33 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from typing import ClassVar, Sequence
 
 from bleak.backends.service import BleakGATTCharacteristic
 
 from ..commands import encoder as doser_commands
-from ..doser_status import PumpStatus, parse_status_payload
+from ..doser_status import DoserStatus, parse_status_payload
 from .base_device import BaseDevice
-
-
-@dataclass(slots=True)
-class DoserStatus:
-    """Simple container for the current state reported by the pump."""
-
-    raw_payload: bytes
 
 
 class Doser(BaseDevice):
     """Chihiros four-head dosing pump."""
 
     device_kind: ClassVar[str] = "doser"
-    status_serializer: ClassVar[str] = "serialize_pump_status"
+    status_serializer: ClassVar[str] = "serialize_doser_status"
     _model_name = "Dosing Pump"
     _model_codes = ["DYDOSE"]
     _colors: dict[str, int] = {}
 
-    _last_status: PumpStatus | None = None
+    _last_status: DoserStatus | None = None
 
     async def request_status(self) -> None:
         """Send a handshake to ask the pump for its latest status."""
@@ -44,7 +36,7 @@ class Doser(BaseDevice):
 
     def handle_notification(self, payload: bytes) -> None:
         """Handle an incoming UART notification from the pump."""
-        # Parse the incoming payload into a PumpStatus and keep only the
+        # Parse the incoming payload into a DoserStatus and keep only the
         # canonical parsed status. Historically we retained a short history
         # of fragments for the service to merge; after refactor the device
         # provides the canonical parsed view and the service consumes that
@@ -59,7 +51,7 @@ class Doser(BaseDevice):
 
     @property
     def last_status(self) -> DoserStatus | None:
-        """Return the most recent status decoded from the pump."""
+        """Return the most recent DoserStatus decoded from the pump."""
         return self._last_status
 
     async def set_daily_dose(

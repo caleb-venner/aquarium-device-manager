@@ -11,9 +11,14 @@
 ## Command & Client Coverage
 
 - Expose remaining light automation helpers (auto mode, presets, RGB scheduling) via REST/UI.
-- Provide CLI shim that delegates to the service API instead of direct BLE access.
-- Begin refactoring legacy CLI (now under tools/) to call REST endpoints (Phase 1: wrap existing actions with HTTP calls; Phase 2: remove direct BLE code paths; Phase 3: deprecate remaining raw BLE commands).
 - Publish simple Python client or OpenAPI description for third-party integrations.
+
+## Legacy CLI Status
+
+- **DEPRECATED**: The CLI (`tools/chihirosctl.py`) is now a developer-only debugging tool.
+- ~~Begin refactoring legacy CLI to call REST endpoints~~ - CLI will remain as direct BLE tool for debugging.
+- ~~Provide CLI shim that delegates to the service API~~ - Not planned, use REST API directly.
+- For production integrations, use the FastAPI service endpoints at `/api/*`.
 
 ## Persistence & State
 

@@ -8,12 +8,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any, Dict
 
-from .doser_status import PumpStatus
+from .doser_status import DoserStatus
 from .light_status import ParsedLightStatus
 
 
-def serialize_pump_status(status: PumpStatus) -> Dict[str, Any]:
-    """Convert a pump status dataclass into JSON-safe primitives.
+def serialize_doser_status(status: DoserStatus) -> Dict[str, Any]:
+    """Convert a dosing status dataclass into JSON-safe primitives.
 
     Notes:
     - The top-level CachedStatus already carries the raw_payload as hex.

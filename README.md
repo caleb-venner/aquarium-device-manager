@@ -22,11 +22,11 @@ Chihiros Device Manager currently contains the historically shipped python **CLI
 
 ## Using the CLI
 
-> NOTE: The CLI is now considered a legacy / diagnostic tool. It performs
-> direct BLE operations and is not required for normal operation of the
-> `chihiros-service` FastAPI backend + SPA. For day-to-day control prefer
-> running the service and using its REST/SPA interfaces. The CLI will
-> eventually become an API client or be deprecated.
+> **DEPRECATED**: The CLI is now a developer-only diagnostic tool. It performs
+> direct BLE operations and is **not recommended for production use**. For
+> day-to-day control, use the `chihiros-service` FastAPI backend + SPA at
+> <http://localhost:8000/>. The CLI will remain available for debugging purposes
+> but will not be further developed or integrated with the REST API.
 
 ```bash
 # setup the environment

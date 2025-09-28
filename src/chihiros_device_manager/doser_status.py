@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 
 def _plausible_time(wd: int, hr: int, minute: int) -> bool:
-    return 0 <= wd <= 6 and 0 <= hr <= 23 and 0 <= minute <= 59
+    return 0 <= wd <= 7 and 0 <= hr <= 23 and 0 <= minute <= 59
 
 
 def _minutes_distance(h1: int, m1: int, h2: int, m2: int) -> int:
@@ -51,7 +51,7 @@ class HeadSnapshot:
 
 
 @dataclass(slots=True)
-class PumpStatus:
+class DoserStatus:
     """High level representation of a status notification."""
 
     message_id: tuple[int, int] | None
@@ -68,7 +68,7 @@ class PumpStatus:
     raw_payload: bytes = b""
 
 
-def parse_status_payload(payload: bytes) -> PumpStatus:
+def parse_status_payload(payload: bytes) -> DoserStatus:
     """Parse the 0xFE status notification from the pump.
 
     The function accepts either the full UART frame (starting with 0x5B) or
@@ -173,7 +173,7 @@ def parse_status_payload(payload: bytes) -> PumpStatus:
 
     # lifetime counters removed; ignore counter-style fragments entirely.
 
-    return PumpStatus(
+    return DoserStatus(
         message_id=message_id,
         response_mode=response_mode,
         weekday=weekday,

@@ -70,6 +70,37 @@
       ]
     },
     {
+      "label": "backend: uvicorn (no reload)",
+      "type": "shell",
+      "command": "uvicorn chihiros_device_manager.service:app --host 0.0.0.0 --port 8000",
+      "options": {
+        "cwd": "${workspaceFolder}",
+        "env": {
+          "PYTHONPATH": "${workspaceFolder}/src",
+          "CHIHIROS_AUTO_RECONNECT": "0"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "owner": "python",
+          "applyTo": "allDocuments",
+          "fileLocation": ["relative", "${workspaceFolder}"],
+          "pattern": {
+            "regexp": ".*",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".*Uvicorn running on http://",
+            "endsPattern": ".*Uvicorn running on http://"
+          }
+        }
+      ]
+    },
+    {
       "label": "pre-commit: run all",
       "type": "shell",
       "command": "pre-commit run --all-files",
@@ -82,6 +113,14 @@
       "type": "shell",
       "command": "echo 'Launching frontend and backend...'",
       "dependsOn": ["frontend: dev", "backend: uvicorn"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    },
+    {
+      "label": "dev: full stack (stable)",
+      "type": "shell",
+      "command": "echo 'Launching frontend and backend without auto-reload...'",
+      "dependsOn": ["frontend: dev", "backend: uvicorn (no reload)"],
       "dependsOrder": "parallel",
       "problemMatcher": []
     }

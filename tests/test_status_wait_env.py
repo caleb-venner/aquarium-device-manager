@@ -40,7 +40,7 @@ def test_capture_wait_uses_env_override(
     # type: ignore[attr-defined]
     service._doser.device_kind = "doser"
     # type: ignore[attr-defined]
-    service._doser.status_serializer = "serialize_pump_status"
+    service._doser.status_serializer = "serialize_doser_status"
     # type: ignore[attr-defined]
     service._doser_address = "AA:BB"
 
@@ -65,7 +65,7 @@ def test_capture_wait_uses_env_override(
 
     monkeypatch.setattr(
         ble_impl._serializers,
-        "serialize_pump_status",
+        "serialize_doser_status",
         lambda s: {"ok": True},
     )
 

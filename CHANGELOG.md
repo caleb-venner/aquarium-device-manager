@@ -11,6 +11,11 @@ Added
 * Frontend onboarding when no devices are cached: a Scan/Connect panel that calls the new `/api/scan` and `/api/devices/{address}/connect` endpoints.
 * Optional startup automation via `CHIHIROS_AUTO_DISCOVER_ON_START=1` to perform a one-off scan and auto-connect on first run (no cached devices).
 
+Deprecated
+----------
+
+* **CLI Tool (`chihirosctl`)**: Now designated as developer-only debugging tool. Direct BLE access will not be further developed or integrated with REST API. Use FastAPI service + SPA for production control.
+
 Removed
 -------
 

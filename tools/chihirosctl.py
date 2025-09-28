@@ -1,10 +1,12 @@
-"""Chihiros led control CLI entrypoint.
+"""Chihiros LED control CLI entrypoint.
 
-Developer tool: this script connects directly to BLE devices and is
-intended for local developer use and debugging. It is not part of the
-production service nor the automated test suite. TODO: migrate CLI
-commands to call the FastAPI service layer rather than talking directly
-to hardware.
+DEPRECATED DEVELOPER TOOL: This script connects directly to BLE devices and is
+intended only for local developer use and debugging. It is not part of the
+production service nor the automated test suite.
+
+This CLI will remain as-is for developer debugging purposes but will not be
+further adapted or integrated with the REST API service layer. For production
+use, prefer the FastAPI service and SPA interface at http://localhost:8000/.
 """
 
 import asyncio
@@ -27,8 +29,10 @@ from ..src.chihiros_device_manager.device import (
     LightDevice,
     get_device_from_address,
 )
-from ..src.chihiros_device_manager.device.doser import DoserStatus
-from ..src.chihiros_device_manager.doser_status import parse_status_payload
+from ..src.chihiros_device_manager.doser_status import (
+    DoserStatus,
+    parse_status_payload,
+)
 from ..src.chihiros_device_manager.light_status import (
     ParsedLightStatus,
     parse_light_status,
@@ -36,8 +40,8 @@ from ..src.chihiros_device_manager.light_status import (
 
 app = typer.Typer()
 
-# TODO: Migrate CLI commands to use the FastAPI service layer instead of
-#       connecting directly to BLE devices.
+# NOTE: This CLI tool is deprecated and maintained as a developer debugging aid only.
+# It connects directly to BLE devices and bypasses the REST API service layer.
 
 msg_id = commands.next_message_id()
 
@@ -616,10 +620,7 @@ def _run_device_func(device_address: str, **kwargs: Any) -> None:
 
 @app.command()
 def list_devices(timeout: Annotated[int, typer.Option()] = 5) -> None:
-    """List all bluetooth devices.
-
-    TODO: add an option to show only Chihiros devices
-    """
+    """List all bluetooth devices."""
     supported = asyncio.run(api.discover_supported_devices(timeout=timeout))
     if not supported:
         print("No supported Chihiros devices found.")
