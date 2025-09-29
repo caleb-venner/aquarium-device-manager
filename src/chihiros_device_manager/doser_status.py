@@ -68,7 +68,7 @@ class DoserStatus:
     raw_payload: bytes = b""
 
 
-def parse_status_payload(payload: bytes) -> DoserStatus:
+def parse_doser_payload(payload: bytes) -> DoserStatus:
     """Parse the 0xFE status notification from the pump.
 
     The function accepts either the full UART frame (starting with 0x5B) or

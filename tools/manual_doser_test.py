@@ -14,7 +14,7 @@ from bleak import BleakScanner
 
 from chihiros_device_manager.commands.encoder import PumpWeekday as Weekday
 from chihiros_device_manager.device.doser import Doser
-from chihiros_device_manager.doser_status import parse_status_payload
+from chihiros_device_manager.doser_status import parse_doser_payload
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -121,7 +121,7 @@ async def main(
         payload = doser.last_status.raw_payload
         print("Received status:", payload.hex())
         try:
-            parsed = parse_status_payload(payload)
+            parsed = parse_doser_payload(payload)
         except ValueError:
             parsed = None
         if parsed:

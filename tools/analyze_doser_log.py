@@ -35,7 +35,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from chihiros_device_manager.doser_status import (  # noqa: E402
-    parse_status_payload,
+    parse_doser_payload,
 )
 
 LINE_RE = re.compile(
@@ -152,7 +152,7 @@ def main() -> None:
         print(record.describe())
         if record.kind == "RX" and record.mode == 0xFE:
             try:
-                status = parse_status_payload(record.payload)
+                status = parse_doser_payload(record.payload)
             except ValueError:
                 continue
             head_summaries = ", ".join(

@@ -8,7 +8,7 @@ from typing import ClassVar, Sequence
 from bleak.backends.service import BleakGATTCharacteristic
 
 from ..commands import encoder as doser_commands
-from ..doser_status import DoserStatus, parse_status_payload
+from ..doser_status import DoserStatus, parse_doser_payload
 from .base_device import BaseDevice
 
 
@@ -42,7 +42,7 @@ class Doser(BaseDevice):
         # provides the canonical parsed view and the service consumes that
         # directly (similar to lights).
         try:
-            parsed = parse_status_payload(payload)
+            parsed = parse_doser_payload(payload)
         except Exception:
             # If parsing fails, keep no change to last_status rather than
             # overwrite with invalid data.

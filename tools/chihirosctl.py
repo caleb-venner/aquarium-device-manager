@@ -31,11 +31,11 @@ from ..src.chihiros_device_manager.device import (
 )
 from ..src.chihiros_device_manager.doser_status import (
     DoserStatus,
-    parse_status_payload,
+    parse_doser_payload,
 )
 from ..src.chihiros_device_manager.light_status import (
     ParsedLightStatus,
-    parse_light_status,
+    parse_light_payload,
 )
 
 app = typer.Typer()
@@ -74,7 +74,7 @@ def _parse_weekday_options(
 def _render_status_payload(payload: bytes) -> None:
     """Print a human friendly breakdown of a status notification."""
     try:
-        parsed = parse_status_payload(payload)
+        parsed = parse_doser_payload(payload)
     except ValueError as exc:
         print(f"  Unable to parse status: {exc}")
         return
@@ -277,7 +277,7 @@ async def _interactive_doser_menu(timeout: int) -> None:
         if not status:
             print("No status received yet.")
             return
-        parsed = parse_light_status(status.raw_payload)
+        parsed = parse_light_payload(status.raw_payload)
         _render_light_status(parsed)
 
     try:

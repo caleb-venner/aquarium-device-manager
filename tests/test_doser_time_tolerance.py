@@ -1,6 +1,6 @@
 """Tests for doser decode tolerance of ±1 minute header/body mismatch."""
 
-from chihiros_device_manager.doser_status import parse_status_payload
+from chihiros_device_manager.doser_status import parse_doser_payload
 
 
 def test_doser_status_parsing_tolerates_one_minute_mismatch():
@@ -19,7 +19,7 @@ def test_doser_status_parsing_tolerates_one_minute_mismatch():
 
     payload = header + filler + body_time + head + tail
 
-    status = parse_status_payload(payload)
+    status = parse_doser_payload(payload)
 
     # Header fields preserved
     assert status.weekday == 0x04

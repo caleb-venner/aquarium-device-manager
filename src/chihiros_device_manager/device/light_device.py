@@ -7,7 +7,7 @@ from typing import ClassVar, Optional
 from bleak.backends.service import BleakGATTCharacteristic
 
 from ..commands import encoder as commands
-from ..light_status import ParsedLightStatus, parse_light_status
+from ..light_status import ParsedLightStatus, parse_light_payload
 from .base_device import BaseDevice
 
 
@@ -38,7 +38,7 @@ class LightDevice(BaseDevice):
             mode = payload[5]
             if mode == 0xFE:
                 try:
-                    parsed = parse_light_status(payload)
+                    parsed = parse_light_payload(payload)
                 except Exception:
                     # Keep raw_payload available in the parsed-like structure
                     # as a fallback so other parts of the code can still

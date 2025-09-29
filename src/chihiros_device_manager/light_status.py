@@ -57,7 +57,7 @@ def _split_body(
     return message_id, response_mode, weekday, hour, minute, body
 
 
-def parse_light_status(payload: bytes) -> ParsedLightStatus:
+def parse_light_payload(payload: bytes) -> ParsedLightStatus:
     """Decode a WRGB status payload into keyframes and markers."""
     (
         message_id,
