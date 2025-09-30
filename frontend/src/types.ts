@@ -49,6 +49,37 @@ export type DoserHead = {
   dosed_tenths_ml: number;
 };
 
+// Command system types
+export type CommandStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "timed_out"
+  | "cancelled";
+
+export type CommandRecord = {
+  id: string;
+  address: string;
+  action: string;
+  args: Record<string, unknown> | null;
+  status: CommandStatus;
+  attempts: number;
+  result: Record<string, unknown> | null;
+  error: string | null;
+  created_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+  timeout: number;
+};
+
+export type CommandRequest = {
+  id?: string;
+  action: string;
+  args?: Record<string, unknown>;
+  timeout?: number;
+};
+
 export type DoserParsed = {
   weekday: number | null;
   hour: number | null;

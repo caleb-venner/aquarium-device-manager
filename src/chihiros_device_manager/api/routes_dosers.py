@@ -26,7 +26,12 @@ async def connect_doser(
 async def set_doser_schedule(
     request: Request, address: str, payload: DoserScheduleRequest
 ) -> Dict[str, Any]:
-    """Apply schedule update to a doser and return refreshed status."""
+    """Apply schedule update to a doser and return refreshed status.
+
+    DEPRECATED: Use POST /api/devices/{address}/commands
+      with action 'set_schedule' instead.
+    This endpoint will be removed in a future version.
+    """
     service = request.app.state.service
     status = await service.set_doser_schedule(
         address,

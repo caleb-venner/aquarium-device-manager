@@ -170,6 +170,7 @@ class BLEService:
         self._devices: Dict[str, BaseDevice] = {}
         self._addresses: Dict[str, str] = {}
         self._cache: Dict[str, CachedStatus] = {}
+        self._commands: Dict[str, list] = {}  # Per-device command history
         self._auto_reconnect = _get_env_bool(AUTO_RECONNECT_ENV, True)
         self._auto_discover_on_start = _get_env_bool(AUTO_DISCOVER_ENV, False)
         self._reconnect_task: asyncio.Task | None = None
@@ -713,6 +714,12 @@ class BLEService:
             )
         self._cache = cache
 
+        # Load command history
+        commands = data.get("commands", {})
+        self._commands = {
+            address: cmd_list for address, cmd_list in commands.items()
+        }
+
     async def _save_state(self) -> None:
         data = {
             "devices": {
@@ -725,7 +732,8 @@ class BLEService:
                     "channels": status.channels,
                 }
                 for address, status in self._cache.items()
-            }
+            },
+            "commands": self._commands,
         }
         STATE_PATH.write_text(json.dumps(data, indent=2, sort_keys=True))
 
@@ -773,3 +781,41 @@ class BLEService:
                 logger.warning("Connect failed for %s: %s", address, exc)
                 continue
         return connected_any
+
+    # Command persistence methods
+
+    def save_command(self, command_record) -> None:
+        """Save a command record to persistent storage."""
+        address = command_record.address
+        if address not in self._commands:
+            self._commands[address] = []
+
+        # Update existing command or append new one
+        command_dict = command_record.to_dict()
+        existing_commands = self._commands[address]
+
+        # Try to find existing command by ID
+        for i, existing in enumerate(existing_commands):
+            if existing.get("id") == command_record.id:
+                existing_commands[i] = command_dict
+                break
+        else:
+            # New command, append it
+            existing_commands.append(command_dict)
+
+            # Keep only last 50 commands per device
+            if len(existing_commands) > 50:
+                existing_commands[:] = existing_commands[-50:]
+
+    def get_commands(self, address: str, limit: int = 20):
+        """Get recent commands for a device."""
+        commands = self._commands.get(address, [])
+        return commands[-limit:] if limit else commands
+
+    def get_command(self, address: str, command_id: str):
+        """Get a specific command by ID."""
+        commands = self._commands.get(address, [])
+        for cmd in commands:
+            if cmd.get("id") == command_id:
+                return cmd
+        return None

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WRGB Pro II Wattage Calculator Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        .calculator {
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 1rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .input-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .input-field label {
+            font-weight: 600;
+        }
+        .input-field input {
+            padding: 0.5rem;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 0.5rem;
+            background: rgba(30, 41, 59, 0.4);
+            color: #e2e8f0;
+        }
+        .result {
+            background: rgba(34, 211, 238, 0.1);
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+        .channel-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .channel-result {
+            text-align: center;
+            padding: 0.5rem;
+            background: rgba(15, 23, 42, 0.3);
+            border-radius: 0.5rem;
+        }
+        .btn {
+            background: rgba(34, 211, 238, 0.2);
+            color: #22d3ee;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .btn:hover {
+            background: rgba(34, 211, 238, 0.3);
+        }
+        .test-cases {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        .test-case {
+            background: rgba(15, 23, 42, 0.3);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .test-case:hover {
+            border-color: rgba(34, 211, 238, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <h1>WRGB Pro II Wattage Calculator</h1>
+
+    <div class="calculator">
+        <h2>Calculate Wattage Output</h2>
+        <div class="input-group">
+            <div class="input-field">
+                <label for="red">Red (%)</label>
+                <input type="number" id="red" min="0" max="140" value="75" step="1">
+            </div>
+            <div class="input-field">
+                <label for="green">Green (%)</label>
+                <input type="number" id="green" min="0" max="140" value="75" step="1">
+            </div>
+            <div class="input-field">
+                <label for="blue">Blue (%)</label>
+                <input type="number" id="blue" min="0" max="140" value="75" step="1">
+            </div>
+            <div class="input-field">
+                <label for="white">White (%)</label>
+                <input type="number" id="white" min="0" max="140" value="75" step="1">
+            </div>
+        </div>
+
+        <button class="btn" onclick="calculateWattage()">Calculate Wattage</button>
+
+        <div id="result" class="result" style="display: none;">
+            <h3>Comparison: Both Calculation Methods</h3>
+
+            <!-- Original Step-Based Method -->
+            <div style="background: rgba(15, 23, 42, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
+                <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Original Method (Step + Embedded/Shared Base)</h4>
+                <div id="original-total-wattage" style="font-size: 1.2em; font-weight: bold; margin-bottom: 0.5rem;"></div>
+                <div id="original-efficiency"></div>
+                <div id="original-power-limiting" style="display: none; color: #f59e0b; margin: 0.5rem 0;"></div>
+
+                <div style="margin-top: 1rem;">
+                    <h5 style="margin-bottom: 0.5rem; color: #22d3ee;">Calculation Breakdown</h5>
+                    <div class="channel-breakdown">
+                        <div class="channel-result">
+                            <div style="color: #fbbf24; font-weight: bold;">Step Sum</div>
+                            <div id="step-sum"></div>
+                        </div>
+                        <div class="channel-result">
+                            <div style="color: #a78bfa; font-weight: bold;">Embedded Base</div>
+                            <div id="embedded-base-sum"></div>
+                        </div>
+                        <div class="channel-result">
+                            <div style="color: #34d399; font-weight: bold;">Shared Base</div>
+                            <div id="shared-base"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- New Efficiency-Based Method -->
+            <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <h4 style="color: #22c55e; margin-bottom: 0.5rem;">New Method (Efficiency-Based) ⭐</h4>
+                <div id="efficiency-total-wattage" style="font-size: 1.2em; font-weight: bold; margin-bottom: 0.5rem;"></div>
+                <div id="efficiency-details"></div>
+                <div id="efficiency-power-limiting" style="display: none; color: #f59e0b; margin: 0.5rem 0;"></div>
+
+                <div style="margin-top: 1rem;">
+                    <h5 style="margin-bottom: 0.5rem; color: #22d3ee;">Calculation Breakdown</h5>
+                    <div class="channel-breakdown">
+                        <div class="channel-result">
+                            <div style="color: #fbbf24; font-weight: bold;">Raw Power Sum</div>
+                            <div id="raw-power-sum"></div>
+                        </div>
+                        <div class="channel-result">
+                            <div style="color: #a78bfa; font-weight: bold;">Active Channels</div>
+                            <div id="active-channels"></div>
+                        </div>
+                        <div class="channel-result">
+                            <div style="color: #34d399; font-weight: bold;">Efficiency</div>
+                            <div id="efficiency-factor"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Channel Breakdown (shared) -->
+            <div style="background: rgba(15, 23, 42, 0.3); padding: 1rem; border-radius: 0.5rem;">
+                <h4 style="margin-bottom: 0.5rem; color: #22d3ee;">Individual Channel Powers (from lookup tables)</h4>
+                <div class="channel-breakdown">
+                    <div class="channel-result">
+                        <div style="color: #ef4444; font-weight: bold;">Red</div>
+                        <div id="red-wattage"></div>
+                    </div>
+                    <div class="channel-result">
+                        <div style="color: #22c55e; font-weight: bold;">Green</div>
+                        <div id="green-wattage"></div>
+                    </div>
+                    <div class="channel-result">
+                        <div style="color: #3b82f6; font-weight: bold;">Blue</div>
+                        <div id="blue-wattage"></div>
+                    </div>
+                    <div class="channel-result">
+                        <div style="color: #f8fafc; font-weight: bold;">White</div>
+                        <div id="white-wattage"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="calculator">
+        <h2>Test Cases</h2>
+        <div class="test-cases">
+            <div class="test-case" onclick="setTestCase(0, 0, 0, 0)">
+                <strong>Off</strong><br>
+                R:0% G:0% B:0% W:0%
+            </div>
+            <div class="test-case" onclick="setTestCase(50, 50, 50, 50)">
+                <strong>50% All</strong><br>
+                R:50% G:50% B:50% W:50%
+            </div>
+            <div class="test-case" onclick="setTestCase(100, 100, 100, 100)">
+                <strong>100% All</strong><br>
+                R:100% G:100% B:100% W:100%
+            </div>
+            <div class="test-case" onclick="setTestCase(139, 139, 137, 140)">
+                <strong>Maximum</strong><br>
+                R:139% G:139% B:137% W:140%
+            </div>
+            <div class="test-case" onclick="setTestCase(100, 0, 0, 0)">
+                <strong>Red Only</strong><br>
+                R:100% G:0% B:0% W:0%
+            </div>
+            <div class="test-case" onclick="setTestCase(0, 100, 0, 0)">
+                <strong>Green Only</strong><br>
+                R:0% G:100% B:0% W:0%
+            </div>
+            <div class="test-case" onclick="setTestCase(0, 0, 100, 0)">
+                <strong>Blue Only</strong><br>
+                R:0% G:0% B:100% W:0%
+            </div>
+            <div class="test-case" onclick="setTestCase(0, 0, 0, 100)">
+                <strong>White Only</strong><br>
+                R:0% G:0% B:0% W:100%
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { calculateLightWattage, calculateEfficiencyBasedPower, getMaxWattage, getTheoreticalMaxWattage, formatWattage } from './src/wattage-calculator.ts';
+
+        // Make functions globally available
+        window.calculateWattageFunc = calculateLightWattage;
+        window.calculateEfficiencyFunc = calculateEfficiencyBasedPower;
+        window.getMaxWattageFunc = getMaxWattage;
+        window.getTheoreticalMaxWattageFunc = getTheoreticalMaxWattage;
+        window.formatWattageFunc = formatWattage;
+
+        // Display device specifications
+        document.body.insertAdjacentHTML('beforeend', `
+            <div class="calculator">
+                <h2>Device Specifications</h2>
+                <p><strong>Actual Maximum Wattage:</strong> ${formatWattage(getMaxWattage())} (power supply limited)</p>
+                <p><strong>Theoretical Maximum:</strong> ${formatWattage(getTheoreticalMaxWattage())} (if no power limiting)</p>
+                <p><strong>Model:</strong> WRGB Pro II</p>
+                <p><strong>Power Limiting:</strong> Channels scaled down proportionally when total exceeds 138W</p>
+            </div>
+        `);
+    </script>
+
+    <script>
+        function setTestCase(red, green, blue, white) {
+            document.getElementById('red').value = red;
+            document.getElementById('green').value = green;
+            document.getElementById('blue').value = blue;
+            document.getElementById('white').value = white;
+            calculateWattage();
+        }
+
+        function calculateWattage() {
+            const red = parseInt(document.getElementById('red').value);
+            const green = parseInt(document.getElementById('green').value);
+            const blue = parseInt(document.getElementById('blue').value);
+            const white = parseInt(document.getElementById('white').value);
+
+            if (typeof window.calculateWattageFunc === 'function' && typeof window.calculateEfficiencyFunc === 'function') {
+                // Calculate using both methods
+                const originalResult = window.calculateWattageFunc({ red, green, blue, white });
+                const efficiencyResult = window.calculateEfficiencyFunc({ red, green, blue, white });
+
+                document.getElementById('result').style.display = 'block';
+
+                // Original method results
+                document.getElementById('original-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(originalResult.totalWattage)}</strong>`;
+                document.getElementById('original-efficiency').innerHTML = `Efficiency: ${originalResult.efficiency}% of rated power`;
+
+                // Original power limiting
+                const originalPowerLimitingDiv = document.getElementById('original-power-limiting');
+                if (originalResult.powerLimited) {
+                    originalPowerLimitingDiv.style.display = 'block';
+                    originalPowerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Requested ${window.formatWattageFunc(originalResult.requestedWattage)} but limited to ${window.formatWattageFunc(originalResult.totalWattage)}`;
+                } else {
+                    originalPowerLimitingDiv.style.display = 'none';
+                }
+
+                // Original breakdown
+                document.getElementById('step-sum').textContent = window.formatWattageFunc(originalResult.stepSum);
+                document.getElementById('embedded-base-sum').textContent = window.formatWattageFunc(originalResult.embeddedBaseSum);
+                document.getElementById('shared-base').textContent = window.formatWattageFunc(originalResult.sharedBase);
+
+                // Efficiency method results
+                document.getElementById('efficiency-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(efficiencyResult.deviceDraw)}</strong>`;
+                document.getElementById('efficiency-details').innerHTML = `${efficiencyResult.activeChannels} channels active, ${(efficiencyResult.efficiency * 100).toFixed(0)}% efficiency`;
+
+                // Efficiency power limiting
+                const efficiencyPowerLimitingDiv = document.getElementById('efficiency-power-limiting');
+                if (efficiencyResult.powerLimited) {
+                    efficiencyPowerLimitingDiv.style.display = 'block';
+                    efficiencyPowerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Calculated ${window.formatWattageFunc(Math.round(efficiencyResult.rawPowerSum * efficiencyResult.efficiency))} but capped at 138W`;
+                } else {
+                    efficiencyPowerLimitingDiv.style.display = 'none';
+                }
+
+                // Efficiency breakdown
+                document.getElementById('raw-power-sum').textContent = window.formatWattageFunc(efficiencyResult.rawPowerSum);
+                document.getElementById('active-channels').textContent = efficiencyResult.activeChannels.toString();
+                document.getElementById('efficiency-factor').textContent = (efficiencyResult.efficiency * 100).toFixed(0) + '%';
+
+                // Individual channel powers (from efficiency result since it uses lookup tables directly)
+                document.getElementById('red-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.red);
+                document.getElementById('green-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.green);
+                document.getElementById('blue-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.blue);
+                document.getElementById('white-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.white);
+            }
+        }
+
+        // Auto-calculate on input change
+        ['red', 'green', 'blue', 'white'].forEach(id => {
+            document.getElementById(id).addEventListener('input', calculateWattage);
+        });
+
+        // Initial calculation
+        setTimeout(calculateWattage, 100);
+    </script>
+</body>
+</html>

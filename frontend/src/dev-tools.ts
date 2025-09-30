@@ -1,9 +1,26 @@
 // Developer tools for manual and auto device control
 
-import type { DeviceEntry, LightChannel, ManualBrightnessPayload, StatusResponse } from "./types";
+import type {
+  DeviceEntry,
+  LightChannel,
+  ManualBrightnessPayload,
+  StatusResponse,
+  CommandRecord
+} from "./types";
 import { statusResponseToEntries } from "./types";
 import { escapeHtml, pad2, renderNotice } from "./utils";
-import { postJson, sendManualBrightnessCommands, fetchJson } from "./api";
+import {
+  postJson,
+  sendManualBrightnessCommands,
+  fetchJson,
+  getCommandHistory,
+  turnLightOn,
+  turnLightOff,
+  enableAutoMode,
+  setManualMode,
+  resetAutoSettings,
+  addAutoSetting
+} from "./api";
 
 export async function loadDevTools(): Promise<void> {
   const container = document.getElementById("dev-content");
@@ -26,6 +43,11 @@ export async function loadDevTools(): Promise<void> {
     setupManualCommandForms(container);
     setupAutoSettingForms(container);
     setupDevSubTabs(container);
+
+    // Initialize command history for all devices
+    for (const light of lights) {
+      await updateCommandHistoryDisplay(light.address, container);
+    }
   } catch (err) {
     container.innerHTML = renderNotice(
       err instanceof Error ? err.message : "Failed to load developer tools.",
@@ -77,6 +99,9 @@ function renderDevManualCard({ address, status }: DeviceEntry): string {
         <button type="submit" class="btn">Send Command</button>
         <p class="form-feedback"></p>
       </form>
+      <div data-command-history="${escapeHtml(address)}" class="command-history-section">
+        <p class="muted">Loading command history...</p>
+      </div>
     </div>
   `;
 }
@@ -123,47 +148,52 @@ function renderDevAutoCard({ address, status }: DeviceEntry): string {
         ${connectedBadge}
       </div>
       <form class="auto-setting-form" data-address="${escapeHtml(address)}"${datasetAttr}>
-        <div class="form-row">
-          <div class="form-field">
-            <label>
-              <span>Sunrise</span>
-              <div class="time-input">
-                <input type="number" name="sunriseHour" min="0" max="23" value="8" required />
-                <span>:</span>
-                <input type="number" name="sunriseMinute" min="0" max="59" value="0" required />
+        <div class="auto-form-columns">
+          <div class="auto-form-left">
+            <div class="form-field">
+              <label><span>Sunrise & Sunset</span></label>
+              <div class="sunrise-sunset-row">
+                <div class="time-group">
+                  <span class="time-label">Sunrise</span>
+                  <div class="time-input">
+                    <input type="number" name="sunriseHour" min="0" max="23" value="8" required />
+                    <span>:</span>
+                    <input type="number" name="sunriseMinute" min="0" max="59" value="0" required />
+                  </div>
+                </div>
+                <div class="time-group">
+                  <span class="time-label">Sunset</span>
+                  <div class="time-input">
+                    <input type="number" name="sunsetHour" min="0" max="23" value="20" required />
+                    <span>:</span>
+                    <input type="number" name="sunsetMinute" min="0" max="59" value="0" required />
+                  </div>
+                </div>
               </div>
-            </label>
-          </div>
-          <div class="form-field">
-            <label>
-              <span>Sunset</span>
-              <div class="time-input">
-                <input type="number" name="sunsetHour" min="0" max="23" value="20" required />
-                <span>:</span>
-                <input type="number" name="sunsetMinute" min="0" max="59" value="0" required />
+            </div>
+            <div class="form-field">
+              <label>
+                <span>Ramp (min)</span>
+                <input type="number" name="ramp" min="0" max="120" value="30" required />
+              </label>
+            </div>
+            <div class="form-field">
+              <label><span>Days</span></label>
+              <div class="weekday-checkboxes">
+                <label><input type="checkbox" name="weekday" value="everyday" checked /> All</label>
+                <label><input type="checkbox" name="weekday" value="monday" /> Mon</label>
+                <label><input type="checkbox" name="weekday" value="tuesday" /> Tue</label>
+                <label><input type="checkbox" name="weekday" value="wednesday" /> Wed</label>
+                <label><input type="checkbox" name="weekday" value="thursday" /> Thu</label>
+                <label><input type="checkbox" name="weekday" value="friday" /> Fri</label>
+                <label><input type="checkbox" name="weekday" value="saturday" /> Sat</label>
+                <label><input type="checkbox" name="weekday" value="sunday" /> Sun</label>
               </div>
-            </label>
+            </div>
           </div>
-          <div class="form-field">
-            <label>
-              <span>Ramp (min)</span>
-              <input type="number" name="ramp" min="0" max="120" value="30" required />
-            </label>
-          </div>
-        </div>
-        ${channelCountControl}
-        <div data-role="auto-channel-fields" class="channel-fields"></div>
-        <div class="form-field">
-          <label><span>Days</span></label>
-          <div class="weekday-checkboxes">
-            <label><input type="checkbox" name="weekday" value="everyday" checked /> Everyday</label>
-            <label><input type="checkbox" name="weekday" value="monday" /> Mon</label>
-            <label><input type="checkbox" name="weekday" value="tuesday" /> Tue</label>
-            <label><input type="checkbox" name="weekday" value="wednesday" /> Wed</label>
-            <label><input type="checkbox" name="weekday" value="thursday" /> Thu</label>
-            <label><input type="checkbox" name="weekday" value="friday" /> Fri</label>
-            <label><input type="checkbox" name="weekday" value="saturday" /> Sat</label>
-            <label><input type="checkbox" name="weekday" value="sunday" /> Sun</label>
+          <div class="auto-form-right">
+            ${channelCountControl}
+            <div data-role="auto-channel-fields" class="channel-fields"></div>
           </div>
         </div>
         <div class="form-actions">
@@ -331,8 +361,22 @@ function setupManualCommandForms(container: HTMLElement): void {
       if (feedback) feedback.textContent = "Sending command…";
 
       try {
-        await sendManualBrightnessCommands(address, payloads);
-        if (feedback) feedback.textContent = "Command sent successfully.";
+        const commands = await sendManualBrightnessCommands(address, payloads);
+
+        // Check command results and provide detailed feedback
+        const successCount = commands.filter(cmd => cmd.status === "success").length;
+        const failedCommands = commands.filter(cmd => cmd.status === "failed" || cmd.status === "timed_out");
+
+        if (failedCommands.length === 0) {
+          if (feedback) feedback.textContent = `${successCount} command(s) sent successfully.`;
+        } else {
+          const errorMsg = failedCommands[0]?.error || "Unknown error";
+          if (feedback) feedback.textContent = `${successCount}/${commands.length} successful. Error: ${errorMsg}`;
+        }
+
+        // Update command history display if present
+        await updateCommandHistoryDisplay(address, container);
+
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to send command.";
         if (feedback) feedback.textContent = message;
@@ -350,6 +394,52 @@ function setupManualCommandForms(container: HTMLElement): void {
       }
     });
   });
+}
+
+// Command History Functions
+async function updateCommandHistoryDisplay(address: string, container: HTMLElement): Promise<void> {
+  const historyContainer = container.querySelector(`[data-command-history="${address}"]`);
+  if (!historyContainer) return;
+
+  try {
+    const commands = await getCommandHistory(address, 5);
+    historyContainer.innerHTML = renderCommandHistory(commands);
+  } catch (err) {
+    historyContainer.innerHTML = `<p class="error">Failed to load command history</p>`;
+  }
+}
+
+function renderCommandHistory(commands: CommandRecord[]): string {
+  if (commands.length === 0) {
+    return `<p class="muted">No recent commands</p>`;
+  }
+
+  return `
+    <div class="command-history">
+      <h4>Recent Commands</h4>
+      ${commands.map(cmd => `
+        <div class="command-entry status-${cmd.status}">
+          <div class="command-action">${escapeHtml(cmd.action)}</div>
+          <div class="command-status">
+            <span class="badge ${getStatusBadgeClass(cmd.status)}">${cmd.status}</span>
+            ${cmd.error ? `<span class="error-text">${escapeHtml(cmd.error.substring(0, 100))}</span>` : ''}
+          </div>
+          <div class="command-time">${new Date(cmd.created_at * 1000).toLocaleTimeString()}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function getStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "success": return "success";
+    case "failed":
+    case "timed_out": return "error";
+    case "running": return "warning";
+    case "pending": return "info";
+    default: return "default";
+  }
 }
 
 function setupAutoSettingForms(container: HTMLElement): void {
@@ -395,12 +485,16 @@ function setupAutoSettingForms(container: HTMLElement): void {
 
     function buildFromChannels(channels: LightChannel[]): void {
       if (!channelFields) return;
+      const channelNames = ["Red", "Green", "Blue", "White", "Channel 5", "Channel 6"];
       channelFields.innerHTML = channels
         .map((channel) => {
+          // Use proper capitalized names based on channel index, or capitalize the provided name
+          const displayName = channelNames[channel.index] ||
+                             (channel.name.charAt(0).toUpperCase() + channel.name.slice(1).toLowerCase());
           return `
             <div class="form-field">
               <label>
-                <span>${escapeHtml(channel.name)} Max Brightness (${channel.index})</span>
+                <span>${escapeHtml(displayName)}</span>
                 <input type="number" name="autoBrightness" min="0" max="100" value="75" data-channel-index="${channel.index}" required />
               </label>
             </div>
@@ -411,11 +505,13 @@ function setupAutoSettingForms(container: HTMLElement): void {
 
     function buildFromCount(count: number): void {
       if (!channelFields) return;
+      const channelNames = ["Red", "Green", "Blue", "White", "Channel 5", "Channel 6"];
       const inputs = Array.from({ length: count }, (_, idx) => {
+        const channelName = channelNames[idx] || `Channel ${idx + 1}`;
         return `
           <div class="form-field">
             <label>
-              <span>Channel ${idx + 1} Max Brightness</span>
+              <span>${channelName}</span>
               <input type="number" name="autoBrightness" min="0" max="100" value="75" data-channel-index="${idx}" required />
             </label>
           </div>
@@ -472,7 +568,7 @@ function setupAutoSettingForms(container: HTMLElement): void {
       });
     });
 
-    async function triggerAutoAction(endpoint: string, button?: HTMLButtonElement) {
+    async function triggerAutoAction(action: string, button?: HTMLButtonElement) {
       const prev = button?.textContent ?? null;
       if (button) {
         button.disabled = true;
@@ -484,9 +580,35 @@ function setupAutoSettingForms(container: HTMLElement): void {
         if (button) button.disabled = false;
         return;
       }
+
       try {
-        await postJson(`/api/lights/${encodeURIComponent(address)}/${endpoint}`, {});
-        if (feedback) feedback.textContent = "Command sent.";
+        let command: CommandRecord;
+
+        switch (action) {
+          case "auto/enable":
+            command = await enableAutoMode(address);
+            break;
+          case "auto/manual":
+            command = await setManualMode(address);
+            break;
+          case "auto/reset":
+            command = await resetAutoSettings(address);
+            break;
+          default:
+            throw new Error(`Unknown action: ${action}`);
+        }
+
+        if (command.status === "success") {
+          if (feedback) feedback.textContent = "Command completed successfully.";
+        } else if (command.status === "failed" || command.status === "timed_out") {
+          if (feedback) feedback.textContent = `Command ${command.status}: ${command.error || 'Unknown error'}`;
+        } else {
+          if (feedback) feedback.textContent = `Command ${command.status}.`;
+        }
+
+        // Update command history
+        await updateCommandHistoryDisplay(address, container);
+
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Failed to send command.";
         if (feedback) feedback.textContent = msg;

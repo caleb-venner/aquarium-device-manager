@@ -19,6 +19,7 @@ from fastapi.responses import HTMLResponse, Response
 # then reload this module expecting the constant to reflect the env var).
 from . import ble_service as _ble_impl
 from . import spa
+from .api.routes_commands import router as commands_router
 from .api.routes_devices import router as devices_router
 from .api.routes_dosers import router as dosers_router
 from .api.routes_lights import router as lights_router
@@ -87,10 +88,11 @@ async def serve_spa() -> Response:
 
 # Startup/shutdown handled by lifespan above
 
-# Include API routers for devices, dosers, and lights.
+# Include API routers for devices, dosers, lights, and commands.
 app.include_router(devices_router)
 app.include_router(dosers_router)
 app.include_router(lights_router)
+app.include_router(commands_router)
 
 
 @app.get("/{spa_path:path}", include_in_schema=False)

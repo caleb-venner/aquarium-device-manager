@@ -395,6 +395,78 @@ code {
   gap: 0.5rem;
 }
 
+/* Auto form styling */
+.auto-setting-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auto-form-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+.auto-form-left,
+.auto-form-right {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auto-form-left .form-field,
+.auto-form-right .form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.time-input {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.time-input input {
+  width: 60px;
+  text-align: center;
+}
+
+.time-input span {
+  font-weight: bold;
+  color: #94a3b8;
+}
+
+/* Sunrise & Sunset row styling */
+.sunrise-sunset-row {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.time-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.time-label {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Responsive layout for smaller screens */
+@media (max-width: 768px) {
+  .auto-form-columns {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
 .channel-fields {
   display: grid;
   gap: 0.75rem;
@@ -443,4 +515,82 @@ code {
 .error h1 {
   margin: 0;
   font-size: 2.5rem;
+}
+
+/* Command History Styles */
+.command-history-section {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.command-history h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.command-entry {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 0.375rem;
+  border-left: 3px solid transparent;
+  font-size: 0.875rem;
+}
+
+.command-entry.status-success {
+  border-left-color: #10b981;
+}
+
+.command-entry.status-failed,
+.command-entry.status-timed_out {
+  border-left-color: #ef4444;
+}
+
+.command-entry.status-running {
+  border-left-color: #f59e0b;
+}
+
+.command-entry.status-pending {
+  border-left-color: #3b82f6;
+}
+
+.command-action {
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.command-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.command-time {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.error-text {
+  font-size: 0.75rem;
+  color: #fca5a5;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge.default {
+  background: rgba(75, 85, 99, 0.3);
+  color: #9ca3af;
 }
