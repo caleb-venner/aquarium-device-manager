@@ -117,11 +117,11 @@
         <button class="btn" onclick="calculateWattage()">Calculate Wattage</button>
 
         <div id="result" class="result" style="display: none;">
-            <h3>Comparison: Both Calculation Methods</h3>
+            <h3>Wattage Calculation Results</h3>
 
-            <!-- Original Step-Based Method -->
+            <!-- Step-Based Method (Correct Algorithm) -->
             <div style="background: rgba(15, 23, 42, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Original Method (Step + Embedded/Shared Base)</h4>
+                <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Step + Embedded/Shared Base Algorithm</h4>
                 <div id="original-total-wattage" style="font-size: 1.2em; font-weight: bold; margin-bottom: 0.5rem;"></div>
                 <div id="original-efficiency"></div>
                 <div id="original-power-limiting" style="display: none; color: #f59e0b; margin: 0.5rem 0;"></div>
@@ -145,35 +145,9 @@
                 </div>
             </div>
 
-            <!-- New Efficiency-Based Method -->
-            <div style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border: 1px solid rgba(34, 197, 94, 0.3);">
-                <h4 style="color: #22c55e; margin-bottom: 0.5rem;">New Method (Efficiency-Based) ⭐</h4>
-                <div id="efficiency-total-wattage" style="font-size: 1.2em; font-weight: bold; margin-bottom: 0.5rem;"></div>
-                <div id="efficiency-details"></div>
-                <div id="efficiency-power-limiting" style="display: none; color: #f59e0b; margin: 0.5rem 0;"></div>
-
-                <div style="margin-top: 1rem;">
-                    <h5 style="margin-bottom: 0.5rem; color: #22d3ee;">Calculation Breakdown</h5>
-                    <div class="channel-breakdown">
-                        <div class="channel-result">
-                            <div style="color: #fbbf24; font-weight: bold;">Raw Power Sum</div>
-                            <div id="raw-power-sum"></div>
-                        </div>
-                        <div class="channel-result">
-                            <div style="color: #a78bfa; font-weight: bold;">Active Channels</div>
-                            <div id="active-channels"></div>
-                        </div>
-                        <div class="channel-result">
-                            <div style="color: #34d399; font-weight: bold;">Efficiency</div>
-                            <div id="efficiency-factor"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Channel Breakdown (shared) -->
+            <!-- Channel Breakdown -->
             <div style="background: rgba(15, 23, 42, 0.3); padding: 1rem; border-radius: 0.5rem;">
-                <h4 style="margin-bottom: 0.5rem; color: #22d3ee;">Individual Channel Powers (from lookup tables)</h4>
+                <h4 style="margin-bottom: 0.5rem; color: #22d3ee;">Individual Channel Wattages</h4>
                 <div class="channel-breakdown">
                     <div class="channel-result">
                         <div style="color: #ef4444; font-weight: bold;">Red</div>
@@ -235,11 +209,10 @@
     </div>
 
     <script type="module">
-        import { calculateLightWattage, calculateEfficiencyBasedPower, getMaxWattage, getTheoreticalMaxWattage, formatWattage } from './src/wattage-calculator.ts';
+        import { calculateLightWattage, getMaxWattage, getTheoreticalMaxWattage, formatWattage } from './src/wattage-calculator.ts';
 
         // Make functions globally available
         window.calculateWattageFunc = calculateLightWattage;
-        window.calculateEfficiencyFunc = calculateEfficiencyBasedPower;
         window.getMaxWattageFunc = getMaxWattage;
         window.getTheoreticalMaxWattageFunc = getTheoreticalMaxWattage;
         window.formatWattageFunc = formatWattage;
@@ -271,54 +244,35 @@
             const blue = parseInt(document.getElementById('blue').value);
             const white = parseInt(document.getElementById('white').value);
 
-            if (typeof window.calculateWattageFunc === 'function' && typeof window.calculateEfficiencyFunc === 'function') {
-                // Calculate using both methods
-                const originalResult = window.calculateWattageFunc({ red, green, blue, white });
-                const efficiencyResult = window.calculateEfficiencyFunc({ red, green, blue, white });
+            if (typeof window.calculateWattageFunc === 'function') {
+                // Calculate using the correct method
+                const result = window.calculateWattageFunc({ red, green, blue, white });
 
                 document.getElementById('result').style.display = 'block';
 
-                // Original method results
-                document.getElementById('original-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(originalResult.totalWattage)}</strong>`;
-                document.getElementById('original-efficiency').innerHTML = `Efficiency: ${originalResult.efficiency}% of rated power`;
+                // Display results
+                document.getElementById('original-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(result.totalWattage)}</strong>`;
+                document.getElementById('original-efficiency').innerHTML = `Efficiency: ${result.efficiency}% of rated power`;
 
-                // Original power limiting
-                const originalPowerLimitingDiv = document.getElementById('original-power-limiting');
-                if (originalResult.powerLimited) {
-                    originalPowerLimitingDiv.style.display = 'block';
-                    originalPowerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Requested ${window.formatWattageFunc(originalResult.requestedWattage)} but limited to ${window.formatWattageFunc(originalResult.totalWattage)}`;
+                // Power limiting
+                const powerLimitingDiv = document.getElementById('original-power-limiting');
+                if (result.powerLimited) {
+                    powerLimitingDiv.style.display = 'block';
+                    powerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Requested ${window.formatWattageFunc(result.requestedWattage)} but limited to ${window.formatWattageFunc(result.totalWattage)}`;
                 } else {
-                    originalPowerLimitingDiv.style.display = 'none';
+                    powerLimitingDiv.style.display = 'none';
                 }
 
-                // Original breakdown
-                document.getElementById('step-sum').textContent = window.formatWattageFunc(originalResult.stepSum);
-                document.getElementById('embedded-base-sum').textContent = window.formatWattageFunc(originalResult.embeddedBaseSum);
-                document.getElementById('shared-base').textContent = window.formatWattageFunc(originalResult.sharedBase);
+                // Calculation breakdown
+                document.getElementById('step-sum').textContent = window.formatWattageFunc(result.stepSum);
+                document.getElementById('embedded-base-sum').textContent = window.formatWattageFunc(result.embeddedBaseSum);
+                document.getElementById('shared-base').textContent = window.formatWattageFunc(result.sharedBase);
 
-                // Efficiency method results
-                document.getElementById('efficiency-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(efficiencyResult.deviceDraw)}</strong>`;
-                document.getElementById('efficiency-details').innerHTML = `${efficiencyResult.activeChannels} channels active, ${(efficiencyResult.efficiency * 100).toFixed(0)}% efficiency`;
-
-                // Efficiency power limiting
-                const efficiencyPowerLimitingDiv = document.getElementById('efficiency-power-limiting');
-                if (efficiencyResult.powerLimited) {
-                    efficiencyPowerLimitingDiv.style.display = 'block';
-                    efficiencyPowerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Calculated ${window.formatWattageFunc(Math.round(efficiencyResult.rawPowerSum * efficiencyResult.efficiency))} but capped at 138W`;
-                } else {
-                    efficiencyPowerLimitingDiv.style.display = 'none';
-                }
-
-                // Efficiency breakdown
-                document.getElementById('raw-power-sum').textContent = window.formatWattageFunc(efficiencyResult.rawPowerSum);
-                document.getElementById('active-channels').textContent = efficiencyResult.activeChannels.toString();
-                document.getElementById('efficiency-factor').textContent = (efficiencyResult.efficiency * 100).toFixed(0) + '%';
-
-                // Individual channel powers (from efficiency result since it uses lookup tables directly)
-                document.getElementById('red-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.red);
-                document.getElementById('green-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.green);
-                document.getElementById('blue-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.blue);
-                document.getElementById('white-wattage').textContent = window.formatWattageFunc(efficiencyResult.channelPowers.white);
+                // Individual channel wattages (proportional to total)
+                document.getElementById('red-wattage').textContent = window.formatWattageFunc(result.channelWattages.red);
+                document.getElementById('green-wattage').textContent = window.formatWattageFunc(result.channelWattages.green);
+                document.getElementById('blue-wattage').textContent = window.formatWattageFunc(result.channelWattages.blue);
+                document.getElementById('white-wattage').textContent = window.formatWattageFunc(result.channelWattages.white);
             }
         }
 

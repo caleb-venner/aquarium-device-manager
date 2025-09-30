@@ -82,46 +82,11 @@ function calculateSharedBase(redOn: boolean, greenOn: boolean, blueOn: boolean, 
 }
 
 /**
- * Efficiency factors based on total raw power level and number of channels
- * Derived from real device measurements - efficiency INCREASES with more channels/power
- */
-function calculatePowerBasedEfficiency(rawPowerSum: number, activeChannels: number, channels: ChannelPercentages): number {
-  if (activeChannels === 0) return 1.0;
-  if (activeChannels === 1) return 1.0; // Single channel always matches lookup table
-
-  if (activeChannels === 2) {
-    // Two channel efficiency: Fine-tuned to match R75%+W75%=49W case
-    return 0.838; // Adjusted from 0.82 to get exactly 49W from ~58.5W raw
-  }
-
-  if (activeChannels === 3) {
-    // Three channel efficiency varies significantly based on which channels and power levels
-    // Need to account for channel-specific efficiency effects
-    return calculateThreeChannelEfficiency(rawPowerSum, channels);
-  }
-
-  if (activeChannels >= 4) {
-    // Multi-channel efficiency INCREASES with power level (more efficient operation)
-    if (rawPowerSum <= 100) {
-      return 0.713; // 50% all channels: 67W from 94W raw
-    } else if (rawPowerSum <= 150) {
-      // 75% all channels: need 100W from ~128W raw = ~78% efficiency
-      return 0.781; // Medium power efficiency (increased from low power)
-    } else {
-      // 100% all channels: 138W from 167W raw = 82.6% efficiency
-      return 0.826; // High power efficiency (highest efficiency at full power)
-    }
-  }
-
-  return 0.71; // Default fallback
-}
-
-/**
  * Calculates efficiency for 3-channel cases based on which channels are active
  * Different channel combinations have different efficiency characteristics
  * The step data is the true source - efficiency accounts for device power management
  */
-function calculateThreeChannelEfficiency(rawPowerSum: number, channels: ChannelPercentages): number {
+/* function calculateThreeChannelEfficiency(rawPowerSum: number, channels: ChannelPercentages): number {
   const hasHighGreen = channels.green >= 140; // Green at 140% creates high efficiency
   const hasHighBlue = channels.blue >= 140;   // Blue at 140% creates lower efficiency
 
@@ -137,54 +102,7 @@ function calculateThreeChannelEfficiency(rawPowerSum: number, channels: ChannelP
     // Default 3-channel efficiency for balanced scenarios
     return 0.783; // Previous calibrated value for balanced 3-channel cases
   }
-}
-
-/**
- * Calculates device power using efficiency-based algorithm
- * 1. Look up individual channel powers from tables
- * 2. Sum all active channel powers
- * 3. Apply efficiency factor based on number of active channels
- * 4. Cap result at 138W maximum
- */
-export function calculateEfficiencyBasedPower(channels: ChannelPercentages): {
-  deviceDraw: number;
-  rawPowerSum: number;
-  activeChannels: number;
-  efficiency: number;
-  channelPowers: { red: number; green: number; blue: number; white: number };
-  powerLimited: boolean;
-} {
-  // Calculate individual channel powers from lookup tables
-  const channelPowers = {
-    red: channels.red >= 1 ? calculateChannelStepWattage(channels.red, WRGB_PRO_II_WATTAGE_DATA.Red) : 0,
-    green: channels.green >= 1 ? calculateChannelStepWattage(channels.green, WRGB_PRO_II_WATTAGE_DATA.Green) : 0,
-    blue: channels.blue >= 1 ? calculateChannelStepWattage(channels.blue, WRGB_PRO_II_WATTAGE_DATA.Blue) : 0,
-    white: channels.white >= 1 ? calculateChannelStepWattage(channels.white, WRGB_PRO_II_WATTAGE_DATA.White) : 0
-  };
-
-  // Sum raw power and count active channels
-  const rawPowerSum = channelPowers.red + channelPowers.green + channelPowers.blue + channelPowers.white;
-  const activeChannels = [channels.red, channels.green, channels.blue, channels.white]
-    .filter(percentage => percentage >= 1).length;
-
-  // Apply efficiency factor based on raw power level and active channels
-  const efficiency = calculatePowerBasedEfficiency(rawPowerSum, activeChannels, channels);
-  const calculatedPower = rawPowerSum * efficiency;
-
-  // Cap at 138W maximum
-  const MAX_POWER = 138;
-  const deviceDraw = Math.min(calculatedPower, MAX_POWER);
-  const powerLimited = calculatedPower > MAX_POWER;
-
-  return {
-    deviceDraw: Math.round(deviceDraw),
-    rawPowerSum: Math.round(rawPowerSum),
-    activeChannels,
-    efficiency,
-    channelPowers,
-    powerLimited
-  };
-}
+} */
 
 /**
  * Calculates the total wattage output for WRGB Pro II based on channel percentages
