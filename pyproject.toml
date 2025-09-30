@@ -41,7 +41,6 @@ where = [
 [tool.setuptools_scm]
 
 [project.scripts]
-chihirosctl = "chihirosctl:app"
 chihiros-service = "chihiros_device_manager.service:main"
 
 [tool.black]
@@ -55,9 +54,6 @@ line_length = 80
 max-line-length = 80
 extend-ignore = [
     "E203",
-]
-per-file-ignores = [
-    "src/chihiros_device_manager/chihirosctl.py:F401,F841",
 ]
 extend-exclude = [
     "archive",

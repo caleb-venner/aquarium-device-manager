@@ -12,7 +12,7 @@ Guidance:
   importing them from production code.
 
 Files:
-- `chihirosctl.py` - interactive CLI for talking to lights and dosers.
+
 - `manual_doser_test.py` - ad-hoc script to manually program and inspect a
   dosing pump.
 - `analyze_doser_log.py` - helper to decode PacketLogger RAW exports.

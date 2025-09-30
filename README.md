@@ -33,49 +33,11 @@ Chihiros Device Manager currently contains the historically shipped python **CLI
 python -m venv venv
 source venv/bin/activate
 pip install -e .
-
-# show help
-chihirosctl --help
-
-# discover devices and their address
-chihirosctl list-devices
-
-# turn on the device
-chihirosctl turn-on <device-address>
-
-# turn off the device
-chihirosctl turn-off <device-address>
-
-# manually set the brightness to 100
-chihirosctl set-brightness <device-address> 100
-
-# create an automatic timed setting that turns on the light from 8:00 to 18:00
-chihirosctl add-setting <device-address> 8:00 18:00
-
-# create a setting for specific weekdays with maximum brightness of 75 and ramp up time of 30 minutes
-chihirosctl add-setting <device-address> 9:00 18:00 --weekdays monday --weekdays tuesday --ramp-up-in-minutes 30 --max-brightness 75
-
-# on RGB models, use the RGB versions of the above commands
-
-# manually set the brightness to 60 red, 80 green, 100 blue on RGB models
-chihirosctl set-rgb-brightness <device-address> 60 80 100
-
-# create an automatic timed setting that turns on the light from 8:00 to 18:00
-chihirosctl add-rgb-setting <device-address> 8:00 18:00
-
-# create a setting for specific weekdays with maximum brightness of 35, 55, 75 and ramp up time of 30 minutes
-chihirosctl add-rgb-setting <device-address> 9:00 18:00 --weekdays monday --weekdays tuesday --ramp-up-in-minutes 30 --max-brightness 35 55 75
-
-# enable auto mode to activate the created timed settings
-chihirosctl enable-auto-mode <device-address>
-
-# delete a created setting
-chihirosctl delete-setting <device-address> 8:00 18:00
-
-# reset all created settings
-chihirosctl reset-settings <device-address>
-
 ```
+
+## Usage
+
+This project provides a web-based interface for controlling Chihiros devices through a FastAPI backend and TypeScript frontend. The CLI tool has been deprecated in favor of the web interface.
 
 ## Running the BLE web service
 

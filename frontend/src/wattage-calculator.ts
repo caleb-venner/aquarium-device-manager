@@ -82,66 +82,6 @@ function calculateSharedBase(redOn: boolean, greenOn: boolean, blueOn: boolean, 
 }
 
 /**
- * Calculates true device power draw using the correct algorithm:
- * 1. For each active channel: lookup wattage from percentage, then subtract its embedded base
- * 2. Sum all step values (after subtracting embedded bases)
- * 3. Add the shared base to get final device power
- */
-function calculateTrueDeviceDraw(channels: ChannelPercentages): {
-  deviceDraw: number;
-  stepSum: number;
-  embeddedBaseSum: number;
-  sharedBase: number;
-  stepWattages: { red: number; green: number; blue: number; white: number };
-} {
-  // Determine which channels are on (>= 1%)
-  const redOn = channels.red >= 1;
-  const greenOn = channels.green >= 1;
-  const blueOn = channels.blue >= 1;
-  const whiteOn = channels.white >= 1;
-
-  // Get raw step wattages from lookup tables
-  const rawStepWattages = {
-    red: redOn ? calculateChannelStepWattage(channels.red, WRGB_PRO_II_WATTAGE_DATA.Red) : 0,
-    green: greenOn ? calculateChannelStepWattage(channels.green, WRGB_PRO_II_WATTAGE_DATA.Green) : 0,
-    blue: blueOn ? calculateChannelStepWattage(channels.blue, WRGB_PRO_II_WATTAGE_DATA.Blue) : 0,
-    white: whiteOn ? calculateChannelStepWattage(channels.white, WRGB_PRO_II_WATTAGE_DATA.White) : 0
-  };
-
-  // Calculate step values (subtract embedded base from each active channel)
-  const stepValues = {
-    red: redOn ? rawStepWattages.red - EMBEDDED_BASE_VALUES.Red : 0,
-    green: greenOn ? rawStepWattages.green - EMBEDDED_BASE_VALUES.Green : 0,
-    blue: blueOn ? rawStepWattages.blue - EMBEDDED_BASE_VALUES.Blue : 0,
-    white: whiteOn ? rawStepWattages.white - EMBEDDED_BASE_VALUES.White : 0
-  };
-
-  // Sum all step values
-  const stepSum = stepValues.red + stepValues.green + stepValues.blue + stepValues.white;
-
-  // Calculate embedded base sum (only for active channels)
-  let embeddedBaseSum = 0;
-  if (redOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Red;
-  if (greenOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Green;
-  if (blueOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Blue;
-  if (whiteOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.White;
-
-  // Calculate shared base
-  const sharedBase = calculateSharedBase(redOn, greenOn, blueOn, whiteOn);
-
-  // Final device power = step sum + shared base
-  const deviceDraw = stepSum + sharedBase;
-
-  return {
-    deviceDraw,
-    stepSum,
-    embeddedBaseSum,
-    sharedBase,
-    stepWattages: rawStepWattages
-  };
-}
-
-/**
  * Efficiency factors based on total raw power level and number of channels
  * Derived from real device measurements - efficiency INCREASES with more channels/power
  */
@@ -254,23 +194,58 @@ export function calculateEfficiencyBasedPower(channels: ChannelPercentages): {
  * @returns Detailed wattage calculation results with power limiting applied
  */
 export function calculateLightWattage(channels: ChannelPercentages): WattageCalculationResult {
-  // Calculate true device power draw using the embedded base algorithm
-  const trueCalc = calculateTrueDeviceDraw(channels);
+  // Determine which channels are on (>= 1%)
+  const redOn = channels.red >= 1;
+  const greenOn = channels.green >= 1;
+  const blueOn = channels.blue >= 1;
+  const whiteOn = channels.white >= 1;
+
+  // Get raw step wattages from lookup tables
+  const rawStepWattages = {
+    red: redOn ? calculateChannelStepWattage(channels.red, WRGB_PRO_II_WATTAGE_DATA.Red) : 0,
+    green: greenOn ? calculateChannelStepWattage(channels.green, WRGB_PRO_II_WATTAGE_DATA.Green) : 0,
+    blue: blueOn ? calculateChannelStepWattage(channels.blue, WRGB_PRO_II_WATTAGE_DATA.Blue) : 0,
+    white: whiteOn ? calculateChannelStepWattage(channels.white, WRGB_PRO_II_WATTAGE_DATA.White) : 0
+  };
+
+  // Calculate step values (subtract embedded base from each active channel)
+  const stepValues = {
+    red: redOn ? rawStepWattages.red - EMBEDDED_BASE_VALUES.Red : 0,
+    green: greenOn ? rawStepWattages.green - EMBEDDED_BASE_VALUES.Green : 0,
+    blue: blueOn ? rawStepWattages.blue - EMBEDDED_BASE_VALUES.Blue : 0,
+    white: whiteOn ? rawStepWattages.white - EMBEDDED_BASE_VALUES.White : 0
+  };
+
+  // Sum all step values
+  const stepSum = stepValues.red + stepValues.green + stepValues.blue + stepValues.white;
+
+  // Calculate embedded base sum (only for active channels)
+  let embeddedBaseSum = 0;
+  if (redOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Red;
+  if (greenOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Green;
+  if (blueOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.Blue;
+  if (whiteOn) embeddedBaseSum += EMBEDDED_BASE_VALUES.White;
+
+  // Calculate shared base
+  const sharedBase = calculateSharedBase(redOn, greenOn, blueOn, whiteOn);
+
+  // Final device power = step sum + shared base
+  const deviceDraw = stepSum + sharedBase;
 
   // For backward compatibility, also calculate individual channel contributions
   // These represent the "apparent" wattage each channel contributes to the total
-  const totalStepWattage = trueCalc.stepWattages.red + trueCalc.stepWattages.green +
-                          trueCalc.stepWattages.blue + trueCalc.stepWattages.white;
+  const totalStepWattage = rawStepWattages.red + rawStepWattages.green +
+                          rawStepWattages.blue + rawStepWattages.white;
 
   // Calculate proportional channel contributions based on step wattages
   const channelWattages = {
-    red: totalStepWattage > 0 ? Math.round((trueCalc.stepWattages.red / totalStepWattage) * trueCalc.deviceDraw) : 0,
-    green: totalStepWattage > 0 ? Math.round((trueCalc.stepWattages.green / totalStepWattage) * trueCalc.deviceDraw) : 0,
-    blue: totalStepWattage > 0 ? Math.round((trueCalc.stepWattages.blue / totalStepWattage) * trueCalc.deviceDraw) : 0,
-    white: totalStepWattage > 0 ? Math.round((trueCalc.stepWattages.white / totalStepWattage) * trueCalc.deviceDraw) : 0
+    red: totalStepWattage > 0 ? Math.round((rawStepWattages.red / totalStepWattage) * deviceDraw) : 0,
+    green: totalStepWattage > 0 ? Math.round((rawStepWattages.green / totalStepWattage) * deviceDraw) : 0,
+    blue: totalStepWattage > 0 ? Math.round((rawStepWattages.blue / totalStepWattage) * deviceDraw) : 0,
+    white: totalStepWattage > 0 ? Math.round((rawStepWattages.white / totalStepWattage) * deviceDraw) : 0
   };
 
-  const requestedWattage = trueCalc.deviceDraw;
+  const requestedWattage = deviceDraw;
 
   // Apply 138W power limiting
   const MAX_TOTAL_WATTAGE = 138;
@@ -297,9 +272,9 @@ export function calculateLightWattage(channels: ChannelPercentages): WattageCalc
   return {
     totalWattage,
     channelWattages: finalChannelWattages,
-    stepSum: trueCalc.stepSum,
-    embeddedBaseSum: trueCalc.embeddedBaseSum,
-    sharedBase: trueCalc.sharedBase,
+    stepSum,
+    embeddedBaseSum,
+    sharedBase,
     requestedWattage,
     powerLimited,
     efficiency
