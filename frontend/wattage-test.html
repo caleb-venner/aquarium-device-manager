@@ -123,7 +123,6 @@
             <div style="background: rgba(15, 23, 42, 0.3); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
                 <h4 style="color: #fbbf24; margin-bottom: 0.5rem;">Step + Embedded/Shared Base Algorithm</h4>
                 <div id="original-total-wattage" style="font-size: 1.2em; font-weight: bold; margin-bottom: 0.5rem;"></div>
-                <div id="original-efficiency"></div>
                 <div id="original-power-limiting" style="display: none; color: #f59e0b; margin: 0.5rem 0;"></div>
 
                 <div style="margin-top: 1rem;">
@@ -209,24 +208,48 @@
     </div>
 
     <script type="module">
+        // Import functions from the wattage calculator
         import { calculateLightWattage, getMaxWattage, getTheoreticalMaxWattage, formatWattage } from './src/wattage-calculator.ts';
 
-        // Make functions globally available
-        window.calculateWattageFunc = calculateLightWattage;
-        window.getMaxWattageFunc = getMaxWattage;
-        window.getTheoreticalMaxWattageFunc = getTheoreticalMaxWattage;
-        window.formatWattageFunc = formatWattage;
+        // Initialize the page when everything is loaded
+        function initializePage() {
+            // Make functions globally available
+            window.calculateWattageFunc = calculateLightWattage;
+            window.getMaxWattageFunc = getMaxWattage;
+            window.getTheoreticalMaxWattageFunc = getTheoreticalMaxWattage;
+            window.formatWattageFunc = formatWattage;
 
-        // Display device specifications
-        document.body.insertAdjacentHTML('beforeend', `
-            <div class="calculator">
-                <h2>Device Specifications</h2>
-                <p><strong>Actual Maximum Wattage:</strong> ${formatWattage(getMaxWattage())} (power supply limited)</p>
-                <p><strong>Theoretical Maximum:</strong> ${formatWattage(getTheoreticalMaxWattage())} (if no power limiting)</p>
-                <p><strong>Model:</strong> WRGB Pro II</p>
-                <p><strong>Power Limiting:</strong> Channels scaled down proportionally when total exceeds 138W</p>
-            </div>
-        `);
+            // Display device specifications
+            document.body.insertAdjacentHTML('beforeend', `
+                <div class="calculator">
+                    <h2>Device Specifications</h2>
+                    <p><strong>Actual Maximum Wattage:</strong> ${formatWattage(getMaxWattage())} (power supply limited)</p>
+                    <p><strong>Theoretical Maximum:</strong> ${formatWattage(getTheoreticalMaxWattage())} (if no power limiting)</p>
+                    <p><strong>Model:</strong> WRGB Pro II</p>
+                    <p><strong>Power Limiting:</strong> Channels scaled down proportionally when total exceeds 138W</p>
+                </div>
+            `);
+
+            // Setup event listeners
+            ['red', 'green', 'blue', 'white'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('input', calculateWattage);
+                }
+            });
+
+            // Trigger initial calculation
+            calculateWattage();
+
+            console.log('Page initialized successfully with wattage calculator functions');
+        }
+
+        // Wait for DOM to be ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializePage);
+        } else {
+            initializePage();
+        }
     </script>
 
     <script>
@@ -239,50 +262,54 @@
         }
 
         function calculateWattage() {
-            const red = parseInt(document.getElementById('red').value);
-            const green = parseInt(document.getElementById('green').value);
-            const blue = parseInt(document.getElementById('blue').value);
-            const white = parseInt(document.getElementById('white').value);
+            const red = parseInt(document.getElementById('red').value) || 0;
+            const green = parseInt(document.getElementById('green').value) || 0;
+            const blue = parseInt(document.getElementById('blue').value) || 0;
+            const white = parseInt(document.getElementById('white').value) || 0;
+
+            console.log('Calculating wattage for:', { red, green, blue, white });
 
             if (typeof window.calculateWattageFunc === 'function') {
-                // Calculate using the correct method
-                const result = window.calculateWattageFunc({ red, green, blue, white });
+                try {
+                    // Calculate using the correct method
+                    const result = window.calculateWattageFunc({ red, green, blue, white });
+                    console.log('Calculation result:', result);
 
-                document.getElementById('result').style.display = 'block';
+                    document.getElementById('result').style.display = 'block';
 
-                // Display results
-                document.getElementById('original-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(result.totalWattage)}</strong>`;
-                document.getElementById('original-efficiency').innerHTML = `Efficiency: ${result.efficiency}% of rated power`;
+                    // Display results
+                    document.getElementById('original-total-wattage').innerHTML = `<strong>Total: ${window.formatWattageFunc(result.totalWattage)}</strong>`;
 
-                // Power limiting
-                const powerLimitingDiv = document.getElementById('original-power-limiting');
-                if (result.powerLimited) {
-                    powerLimitingDiv.style.display = 'block';
-                    powerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Requested ${window.formatWattageFunc(result.requestedWattage)} but limited to ${window.formatWattageFunc(result.totalWattage)}`;
-                } else {
-                    powerLimitingDiv.style.display = 'none';
+                    // Power limiting
+                    const powerLimitingDiv = document.getElementById('original-power-limiting');
+                    if (result.powerLimited) {
+                        powerLimitingDiv.style.display = 'block';
+                        powerLimitingDiv.innerHTML = `⚠️ <strong>Power Limited:</strong> Requested ${window.formatWattageFunc(result.requestedWattage)} but limited to ${window.formatWattageFunc(result.totalWattage)}`;
+                    } else {
+                        powerLimitingDiv.style.display = 'none';
+                    }
+
+                    // Calculation breakdown
+                    document.getElementById('step-sum').textContent = window.formatWattageFunc(result.stepSum);
+                    document.getElementById('embedded-base-sum').textContent = window.formatWattageFunc(result.embeddedBaseSum);
+                    document.getElementById('shared-base').textContent = window.formatWattageFunc(result.sharedBase);
+
+                    // Individual channel wattages (proportional to total)
+                    document.getElementById('red-wattage').textContent = window.formatWattageFunc(result.channelWattages.red);
+                    document.getElementById('green-wattage').textContent = window.formatWattageFunc(result.channelWattages.green);
+                    document.getElementById('blue-wattage').textContent = window.formatWattageFunc(result.channelWattages.blue);
+                    document.getElementById('white-wattage').textContent = window.formatWattageFunc(result.channelWattages.white);
+                } catch (error) {
+                    console.error('Error calculating wattage:', error);
+                    document.getElementById('result').innerHTML = `<div style="color: red;">Error: ${error.message}</div>`;
+                    document.getElementById('result').style.display = 'block';
                 }
-
-                // Calculation breakdown
-                document.getElementById('step-sum').textContent = window.formatWattageFunc(result.stepSum);
-                document.getElementById('embedded-base-sum').textContent = window.formatWattageFunc(result.embeddedBaseSum);
-                document.getElementById('shared-base').textContent = window.formatWattageFunc(result.sharedBase);
-
-                // Individual channel wattages (proportional to total)
-                document.getElementById('red-wattage').textContent = window.formatWattageFunc(result.channelWattages.red);
-                document.getElementById('green-wattage').textContent = window.formatWattageFunc(result.channelWattages.green);
-                document.getElementById('blue-wattage').textContent = window.formatWattageFunc(result.channelWattages.blue);
-                document.getElementById('white-wattage').textContent = window.formatWattageFunc(result.channelWattages.white);
+            } else {
+                console.error('calculateWattageFunc is not available:', typeof window.calculateWattageFunc);
+                document.getElementById('result').innerHTML = '<div style="color: red;">Wattage calculation functions not loaded yet. Please wait...</div>';
+                document.getElementById('result').style.display = 'block';
             }
         }
-
-        // Auto-calculate on input change
-        ['red', 'green', 'blue', 'white'].forEach(id => {
-            document.getElementById(id).addEventListener('input', calculateWattage);
-        });
-
-        // Initial calculation
-        setTimeout(calculateWattage, 100);
     </script>
 </body>
 </html>

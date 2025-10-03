@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Percentages.txt Test Suite</title>
+    <style>
+        body {
+            font-family: monospace;
+            margin: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .test {
+            margin: 10px 0;
+            padding: 10px;
+            background: #2a2a2a;
+            border-radius: 5px;
+        }
+        .exact { background-color: #0f4f0f; }
+        .close1 { background-color: #2a4f0f; }
+        .close2 { background-color: #4f4f0f; }
+        .close5 { background-color: #4f2f0f; }
+        .far { background-color: #4f0f0f; }
+        .summary {
+            background: #333;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-size: 1.1em;
+        }
+        .controls {
+            background: #333;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+        button:hover {
+            background: #357abd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Percentages.txt Test Suite</h1>
+    <p>Testing all 16 test cases from Percentages.txt against the current algorithm</p>
+
+    <div class="controls">
+        <button onclick="runAllTests()">Run All Tests</button>
+        <button onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div id="summary" class="summary" style="display: none;"></div>
+    <div id="results"></div>
+
+    <script type="module">
+        import { calculateLightWattage } from './src/wattage-calculator.ts';
+
+        // Test cases directly from Percentages.txt
+        const testCases = [
+            { red: 50, green: 50, blue: 50, white: 50, expected: 67, name: "Test 1: 50% All Channels" },
+            { red: 75, green: 75, blue: 75, white: 75, expected: 100, name: "Test 2: 75% All Channels" },
+            { red: 100, green: 100, blue: 100, white: 100, expected: 138, name: "Test 3: 100% All Channels" },
+            { red: 100, green: 100, blue: 100, white: 0, expected: 117, name: "Test 4: RGB (no White)" },
+            { red: 100, green: 100, blue: 0, white: 100, expected: 118, name: "Test 5: RGW (no Blue)" },
+            { red: 100, green: 0, blue: 100, white: 100, expected: 87, name: "Test 6: RBW (no Green)" },
+            { red: 0, green: 100, blue: 100, white: 100, expected: 104, name: "Test 7: GBW (no Red)" },
+            { red: 136, green: 88, blue: 110, white: 55, expected: 138, name: "Test 8: Mixed High (Power Limited)" },
+            { red: 76, green: 127, blue: 103, white: 65, expected: 138, name: "Test 9: Mixed High (Power Limited)" },
+            { red: 120, green: 113, blue: 121, white: 0, expected: 138, name: "Test 10: RGB High (Power Limited)" },
+            { red: 130, green: 88, blue: 126, white: 50, expected: 138, name: "Test 11: Mixed High (Power Limited)" },
+            { red: 127, green: 88, blue: 136, white: 46, expected: 138, name: "Test 12: Mixed High (Power Limited)" },
+            { red: 140, green: 0, blue: 140, white: 0, expected: 92, name: "Test 13: Red+Blue 140%" },
+            { red: 140, green: 0, blue: 0, white: 140, expected: 104, name: "Test 14: Red+White 140%" },
+            { red: 136, green: 140, blue: 0, white: 0, expected: 138, name: "Test 15: Red+Green High (Power Limited)" },
+            { red: 39, green: 61, blue: 105, white: 52, expected: 82, name: "Test 16: Mixed Low-Medium" }
+        ];
+
+        // Make functions available globally
+        window.runAllTests = runAllTests;
+        window.clearResults = clearResults;
+
+        function runAllTests() {
+            let exactMatches = 0;
+            let within1W = 0;
+            let within2W = 0;
+            let within5W = 0;
+            let results = '';
+
+            testCases.forEach((testCase, index) => {
+                // Use the ACTUAL algorithm - no external calculations
+                const result = calculateLightWattage({
+                    red: testCase.red,
+                    green: testCase.green,
+                    blue: testCase.blue,
+                    white: testCase.white
+                });
+
+                // Use requestedWattage (before power limiting) for more accurate test assessment
+                const actual = result.requestedWattage;
+                const powerLimited = result.powerLimited;
+                const finalWattage = result.totalWattage;
+                const expected = testCase.expected;
+                const diff = actual - expected;
+                const absDiff = Math.abs(diff);
+
+                let status = 'far';
+                let statusText = '❌ OFF';
+
+                if (absDiff === 0) {
+                    exactMatches++;
+                    within1W++;
+                    within2W++;
+                    within5W++;
+                    status = 'exact';
+                    statusText = '✅ EXACT';
+                } else if (absDiff <= 1) {
+                    within1W++;
+                    within2W++;
+                    within5W++;
+                    status = 'close1';
+                    statusText = '🟡 ±1W';
+                } else if (absDiff <= 2) {
+                    within2W++;
+                    within5W++;
+                    status = 'close2';
+                    statusText = '🟠 ±2W';
+                } else if (absDiff <= 5) {
+                    within5W++;
+                    status = 'close5';
+                    statusText = '🔶 ±5W';
+                }
+
+                results += `<div class="test ${status}">
+                    <strong>${testCase.name}</strong><br>
+                    Input: R:${testCase.red}% G:${testCase.green}% B:${testCase.blue}% W:${testCase.white}%<br>
+                    Expected: ${expected}W | Calculated: ${actual}W | Difference: ${diff > 0 ? '+' : ''}${diff}W ${statusText}<br>
+                    <small>Step: ${result.stepSum}W | Embedded: ${result.embeddedBaseSum}W | Shared: ${result.sharedBase}W | ${powerLimited ? `Power Limited: ${actual}W → ${finalWattage}W` : 'No Power Limiting'}</small>
+                </div>`;
+            });
+
+            const summary = `
+                <h2>Test Results Summary</h2>
+                <p><strong>Total Tests:</strong> ${testCases.length}</p>
+                <p><strong>Exact Matches:</strong> ${exactMatches}/${testCases.length} (${Math.round(exactMatches/testCases.length*100)}%)</p>
+                <p><strong>Within ±1W:</strong> ${within1W}/${testCases.length} (${Math.round(within1W/testCases.length*100)}%)</p>
+                <p><strong>Within ±2W:</strong> ${within2W}/${testCases.length} (${Math.round(within2W/testCases.length*100)}%)</p>
+                <p><strong>Within ±5W:</strong> ${within5W}/${testCases.length} (${Math.round(within5W/testCases.length*100)}%)</p>
+
+                <h3>Algorithm Status</h3>
+                <p>Testing algorithm calculations (before power limiting) vs expected values.</p>
+                <p><strong>Note:</strong> Power-limited tests show calculated value → final limited value.</p>
+            `;
+
+            document.getElementById('results').innerHTML = results;
+            document.getElementById('summary').innerHTML = summary;
+            document.getElementById('summary').style.display = 'block';
+
+            console.log('Test Results:');
+            console.log(`Exact matches: ${exactMatches}/${testCases.length}`);
+            console.log(`Within 1W: ${within1W}/${testCases.length}`);
+            console.log(`Within 2W: ${within2W}/${testCases.length}`);
+            console.log(`Within 5W: ${within5W}/${testCases.length}`);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('summary').style.display = 'none';
+        }
+
+        // Auto-run tests on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(runAllTests, 500);
+        });
+    </script>
+</body>
+</html>

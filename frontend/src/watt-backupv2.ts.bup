@@ -35,76 +35,82 @@ function parsePercentage(percentageStr: string): number {
  * Uses floor lookup: finds the largest percentage in step table ≤ input percentage
  */
 function calculateChannelStepWattage(channel: 'Red' | 'Green' | 'Blue' | 'White', percentage: number): number {
-  if (percentage === 0) return 0;
+    if (percentage === 0) return 0;
 
-  const data = WRGB_PRO_II_WATTAGE_DATA[channel];
-  if (!data) return 0;
+    const data = WRGB_PRO_II_WATTAGE_DATA[channel];
+    if (!data) return 0;
 
-  // Find exact match first
-  for (let i = 0; i < data.Percentage.length; i++) {
-    const stepPercentage = parseInt(data.Percentage[i].replace('%', ''));
-    if (stepPercentage === percentage) {
-      return data.Wattage[i];
+    // Find exact match first
+    for (let i = 0; i < data.Percentage.length; i++) {
+        const stepPercentage = parseInt(data.Percentage[i].replace('%', ''));
+        if (stepPercentage === percentage) {
+            return data.Wattage[i];
+        }
     }
-  }
 
-  // Find the floor step (largest step <= percentage)
-  let floorIndex = -1;
-  for (let i = 0; i < data.Percentage.length; i++) {
-    const stepPercentage = parseInt(data.Percentage[i].replace('%', ''));
-    if (stepPercentage <= percentage) {
-      floorIndex = i;
-    } else {
-      break; // Stop when we exceed the target percentage
+    // Find the floor step (largest step <= percentage)
+    let floorIndex = -1;
+    for (let i = 0; i < data.Percentage.length; i++) {
+        const stepPercentage = parseInt(data.Percentage[i].replace('%', ''));
+        if (stepPercentage <= percentage) {
+            floorIndex = i;
+        } else {
+            break; // Stop when we exceed the target percentage
+        }
     }
-  }
 
-  // Handle edge cases
-  if (floorIndex === -1) {
-    return data.Wattage[0]; // Below first point, use first value
-  }
+    // Handle edge cases
+    if (floorIndex === -1) {
+        return data.Wattage[0]; // Below first point, use first value
+    }
 
-  return data.Wattage[floorIndex]; // Use floor step value
-}
-
-/**
+    return data.Wattage[floorIndex]; // Use floor step value
+}/**
  * Determines shared base value based on which channels are ON
  * Calibrated against real-world measurements from Percentages.txt
  */
 
 // Embedded base values for each channel (constants)
 const EMBEDDED_BASE_VALUES = {
-  Red: 7.59,
-  Green: 8.64,
-  Blue: 6.67,
-  White: 7.09,
-  Total: 30
+  Red: 10,
+  Green: 9,
+  Blue: 10,
+  White: 9
 };
 
-// No white - 23 base; No green 21.5 -- R&B, 14.26; 2.1 -- R&W, 14.68;
 function calculateSharedBase(red: number, green: number, blue: number, white: number): number {
-  const intensityFactor = 2.9;
+  const intensityFactor = 3;
   const redOn = red > 0;
   const greenOn = green > 0;
   const blueOn = blue > 0;
   const whiteOn = white > 0;
   const numOn = (redOn ? 1 : 0) + (greenOn ? 1 : 0) + (blueOn ? 1 : 0) + (whiteOn ? 1 : 0);
-  const avgIntensity = 1.5 - ((red + green + blue + white) / (4 * 100));
-  const intensityAdjustment = (intensityFactor * avgIntensity);
-
-  const baseRatio =  EMBEDDED_BASE_VALUES.Total / ((!redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (!greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
-    (!blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (!whiteOn ? EMBEDDED_BASE_VALUES.White : 0));
-
-  const trueBase =  ((!redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (!greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
-    (!blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (!whiteOn ? EMBEDDED_BASE_VALUES.White : 0)) / (EMBEDDED_BASE_VALUES.Total/4) ;
-
-
-  if( numOn < 4 ) {
-    return intensityAdjustment + (4 - numOn)*trueBase;
+  let sharedBase: number = 8;
+  if (numOn <= 3) {
+    sharedBase += 1;
+  }
+  if (numOn === 2 ) {
+    sharedBase += 2;
+  }
+  if (whiteOn) {
+    sharedBase += 1;
+  }
+  if (!whiteOn && numOn > 2) {
+    sharedBase += 0;
+  }
+  if (!greenOn && numOn > 2) {
+    sharedBase += -1;
   } else {
-    return (intensityAdjustment);
+    sharedBase += 0;
   }
 
+  // Need to factor in active channels affecting intensity.
+  const avgIntensity =  1 - ((red + green + blue + white) / (numOn * 100));
+  const intensityAdjustment = (intensityFactor*avgIntensity);
+/*   if ((red + green + blue + white) / (numOn * 100) >=1 && numOn >= 4 ) {
+    sharedBase -= 1;
+  } */
+  return sharedBase + intensityAdjustment;
 
 }
 
@@ -212,6 +218,7 @@ export function calculateLightWattage(channels: ChannelPercentages): WattageCalc
     else if (white > 0) channelWattages.white += diff;
   }
 
+
   return {
     totalWattage,
     channelWattages,
@@ -238,6 +245,8 @@ export function getTheoreticalMaxWattage(): number {
   // Calculate theoretical max: Red:45W + Green:60W + Blue:31W + White:31W = 167W
   return 45 + 60 + 31 + 31;
 }
+
+
 
 /**
  * Formats wattage for display
