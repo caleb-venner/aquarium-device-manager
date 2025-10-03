@@ -83,29 +83,29 @@ const EMBEDDED_BASE_VALUES = {
 
 // No white - 23 base; No green 21.5 -- R&B, 14.26; 2.1 -- R&W, 14.68;
 function calculateSharedBase(red: number, green: number, blue: number, white: number): number {
-  const intensityFactor = 2.9;
+  const intensityFactor = 2.451;
   const redOn = red > 0;
   const greenOn = green > 0;
   const blueOn = blue > 0;
   const whiteOn = white > 0;
   const numOn = (redOn ? 1 : 0) + (greenOn ? 1 : 0) + (blueOn ? 1 : 0) + (whiteOn ? 1 : 0);
-  const avgIntensity = 1.5 - ((red + green + blue + white) / (4 * 100));
+  const avgIntensity = 1.6 - ((red + green + blue + white) / (4 * 100));
   const intensityAdjustment = (intensityFactor * avgIntensity);
 
-  const baseRatio =  EMBEDDED_BASE_VALUES.Total / ((!redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (!greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
-    (!blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (!whiteOn ? EMBEDDED_BASE_VALUES.White : 0));
+  //  if 3 -> 2; 2 -> 1
+  const excessBase =  EMBEDDED_BASE_VALUES.Total - ((!redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (!greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
+                      (!blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (!whiteOn ? EMBEDDED_BASE_VALUES.White : 0));
 
-  const trueBase =  ((!redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (!greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
-    (!blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (!whiteOn ? EMBEDDED_BASE_VALUES.White : 0)) / (EMBEDDED_BASE_VALUES.Total/4) ;
+  const baseRatio =  excessBase/(numOn) - 7.6;
 
+  const trueBase =  ((redOn ? EMBEDDED_BASE_VALUES.Red : 0) + (greenOn ? EMBEDDED_BASE_VALUES.Green : 0) +
+    (blueOn ? EMBEDDED_BASE_VALUES.Blue : 0) + (whiteOn ? EMBEDDED_BASE_VALUES.White : 0)) / (EMBEDDED_BASE_VALUES.Total) ;
 
-  if( numOn < 4 ) {
-    return intensityAdjustment + (4 - numOn)*trueBase;
+  if( numOn < 4 ) { // logically we want to 'remove' a portion of the excess base.
+    return (5 - numOn)*intensityAdjustment + trueBase*baseRatio + numOn*baseRatio;
   } else {
-    return (intensityAdjustment);
+    return intensityAdjustment;// + (4 - numOn)*trueBase;
   }
-
-
 }
 
 
