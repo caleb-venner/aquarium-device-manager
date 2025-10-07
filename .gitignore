@@ -1,10 +1,22 @@
 .DS_Store
 
+# Backup and temporary files
+*.bak
+*.backup
+*.bup
+*.orig
+*.tmp
+*~
+\#*\#
+.#*
+
 # Node / frontend builds
 node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
+.eslintcache
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
