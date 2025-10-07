@@ -15,9 +15,7 @@
 
 ## Legacy CLI Status
 
-- **DEPRECATED**: The CLI (`tools/chihirosctl.py`) is now a developer-only debugging tool.
-- ~~Begin refactoring legacy CLI to call REST endpoints~~ - CLI will remain as direct BLE tool for debugging.
-- ~~Provide CLI shim that delegates to the service API~~ - Not planned, use REST API directly.
+- **REMOVED**: The legacy CLI and developer tools directory has been completely removed.
 - For production integrations, use the FastAPI service endpoints at `/api/*`.
 
 ## Persistence & State

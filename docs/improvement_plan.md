@@ -2,12 +2,14 @@
 
 ## ✅ Completed Actions
 
-### 1. Removed Deprecated CLI Tool
+### 1. Removed Deprecated CLI Tool & Developer Tools
+
 - **Removed**: `tools/chihirosctl.py` file completely
+- **Removed**: Entire `tools/` directory including `manual_doser_test.py` and `analyze_doser_log.py`
 - **Updated**: `pyproject.toml` to remove CLI script entry point and flake8 ignores
 - **Updated**: `README.md` to focus on web service instead of CLI usage examples
-- **Updated**: Documentation in `tools/README.md` and commands package docstring
-- **Impact**: Eliminated ~1000 lines of deprecated code, simplified deployment
+- **Impact**: Eliminated ~1400+ lines of deprecated/unused code, simplified deployment
+
 
 ### 2. Simplified Wattage Calculator
 - **Removed**: Redundant `calculateTrueDeviceDraw()` function
