@@ -5,6 +5,7 @@ import { createNotificationSystem } from "./ui/notifications";
 import { setupModernDashboard, renderModernDashboard } from "./ui/modernDashboard";
 import { setupStateSubscriptions } from "./ui/stateSubscriptions";
 import { useActions } from "./stores/deviceStore";
+import { renderHeaderNavigation, renderFooterNavigation } from "./ui/pageNavigation";
 
 // Debug function to update status
 function updateDebugStatus(message: string): void {
@@ -107,12 +108,7 @@ function initializeModernLayout(): void {
             <span class="version">Modern Dashboard v2.0</span>
           </div>
           <div class="header-actions">
-            <a class="btn btn-sm btn-secondary" href="/dev" title="Open Developer Tools">
-              Dev Tools
-            </a>
-            <a class="btn btn-sm btn-secondary" href="/test" title="Open Testing Utilities">
-              Test Tools
-            </a>
+            ${renderHeaderNavigation("modern")}
           </div>
         </div>
       </header>
@@ -130,7 +126,9 @@ function initializeModernLayout(): void {
         <div class="footer-content">
           <span class="footer-info">Modern Dashboard • Real-time Updates • TypeScript</span>
           <div class="footer-links">
-            <a href="https://github.com/caleb-venner/chihiros-device-manager" target="_blank">GitHub</a>
+            ${renderFooterNavigation("modern")}
+            <span>•</span>
+            <a href="https://github.com/caleb-venner/chihiros-device-manager" target="_blank" rel="noreferrer">GitHub</a>
             <span>•</span>
             <button class="link-button" onclick="showKeyboardShortcuts()">Shortcuts</button>
           </div>

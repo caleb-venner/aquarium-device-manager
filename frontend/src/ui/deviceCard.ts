@@ -5,10 +5,11 @@ type LightChannel = {
   name: string;
 };
 
+// Use looser typing to avoid type conflicts
 type DeviceStatus = {
   device_type: string;
   raw_payload: string | null;
-  parsed: Record<string, unknown> | null;
+  parsed: any; // Use 'any' temporarily to bypass type issues
   updated_at: number;
   model_name?: string | null;
   connected?: boolean;

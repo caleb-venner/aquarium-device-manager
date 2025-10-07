@@ -18,6 +18,9 @@ FRONTEND_DIST = Path(
 )
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
 
+PRIMARY_ENTRY = "modern.html"
+LEGACY_ENTRY = "index.html"
+
 SPA_UNAVAILABLE_MESSAGE = (
     "The TypeScript dashboard is unavailable. "
     "Build the SPA (npm run build) or start the dev server (npm run dev) "
@@ -62,13 +65,20 @@ def mount_assets(app) -> None:
             )
 
 
+def _read_entry(name: str) -> HTMLResponse | None:
+    entry_path = FRONTEND_DIST / name
+    if entry_path.exists():
+        return HTMLResponse(entry_path.read_text(encoding="utf-8"))
+    return None
+
+
 async def serve_index_or_proxy() -> Response:
     """Serve built index.html or proxy to a running dev server."""
     if SPA_DIST_AVAILABLE:
-        index_path = FRONTEND_DIST / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-    proxied = await _proxy_dev_server("/")
+        entry_response = _read_entry(PRIMARY_ENTRY) or _read_entry(LEGACY_ENTRY)
+        if entry_response is not None:
+            return entry_response
+    proxied = await _proxy_dev_server(f"/{PRIMARY_ENTRY}")
     if proxied is not None:
         return proxied
     return Response(
@@ -102,12 +112,17 @@ async def serve_spa_asset(spa_path: str) -> Response:
     if asset_path.is_file():
         return FileResponse(asset_path)
 
+    if asset_path.is_dir():
+        index_path = asset_path / "index.html"
+        if index_path.is_file():
+            return FileResponse(index_path)
+
     if "." in spa_path:
         raise HTTPException(status_code=404)
 
-    index_path = FRONTEND_DIST / "index.html"
-    if index_path.exists():
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+    entry_response = _read_entry(PRIMARY_ENTRY) or _read_entry(LEGACY_ENTRY)
+    if entry_response is not None:
+        return entry_response
 
     raise HTTPException(status_code=404)
 

@@ -10,6 +10,53 @@ export default defineConfig({
       "/api": "http://localhost:8000"
     }
   },
+  plugins: [
+    {
+      name: 'custom-routes',
+      configureServer(server) {
+        const rewrite = (url?: string) => {
+          if (!url) return undefined;
+          const [pathname, search = ""] = url.split("?");
+          if (pathname === "/dev" || pathname === "/dev/") {
+            return `/dev/index.html${search ? `?${search}` : ""}`;
+          }
+          if (pathname === "/test" || pathname === "/test/") {
+            return `/test/index.html${search ? `?${search}` : ""}`;
+          }
+          return undefined;
+        };
+
+        server.middlewares.use((req, _res, next) => {
+          const rewritten = rewrite(req.url);
+          if (rewritten) {
+            req.url = rewritten;
+          }
+          next();
+        });
+      },
+      configurePreviewServer(server) {
+        const rewrite = (url?: string) => {
+          if (!url) return undefined;
+          const [pathname, search = ""] = url.split("?");
+          if (pathname === "/dev" || pathname === "/dev/") {
+            return `/dev/index.html${search ? `?${search}` : ""}`;
+          }
+          if (pathname === "/test" || pathname === "/test/") {
+            return `/test/index.html${search ? `?${search}` : ""}`;
+          }
+          return undefined;
+        };
+
+        server.middlewares.use((req, _res, next) => {
+          const rewritten = rewrite(req.url);
+          if (rewritten) {
+            req.url = rewritten;
+          }
+          next();
+        });
+      }
+    }
+  ],
   build: {
     outDir: "dist",
     sourcemap: true,

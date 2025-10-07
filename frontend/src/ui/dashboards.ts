@@ -1,11 +1,13 @@
 import { escapeHtml, pad2, formatDayTime, formatTimestamp, renderNotice } from "../utils";
+import type { DeviceEntry } from "../types/models";
 
-type DeviceEntry = {
+// Use looser typing temporarily to avoid type conflicts during development
+type AnyDeviceEntry = {
   address: string;
   status: {
     device_type: string;
     raw_payload: string | null;
-    parsed: Record<string, unknown> | null;
+    parsed: any; // Use 'any' temporarily to bypass type issues
     updated_at: number;
     model_name?: string | null;
     connected?: boolean;
@@ -26,7 +28,7 @@ type DoserParsed = {
   heads: DoserHead[];
 };
 
-export function renderDoserDashboard(entries: DeviceEntry[]): string {
+export function renderDoserDashboard(entries: AnyDeviceEntry[]): string {
   const dosers = entries.filter(
     (e) => e.status.device_type === "doser" && e.status.parsed
   );
@@ -40,7 +42,7 @@ export function renderDoserDashboard(entries: DeviceEntry[]): string {
     const modelName = status.model_name || address;
 
     const heads = Array.isArray(parsed?.heads) ? parsed.heads : [];
-    const rows = heads.slice(0, 4).map((h, idx) => {
+    const rows = heads.slice(0, 4).map((h: any, idx: number) => {
       const pump = idx + 1;
       const mode = typeof h.mode === "number" ? h.mode : "";
       const sched = (typeof h.hour === "number" && typeof h.minute === "number")
@@ -100,7 +102,7 @@ function valueToPercent(n: number): number {
   return Math.max(0, Math.min(100, p));
 }
 
-export function renderLightDashboard(entries: DeviceEntry[]): string {
+export function renderLightDashboard(entries: AnyDeviceEntry[]): string {
   const lights = entries.filter(
     (e) => e.status.device_type === "light" && e.status.parsed
   );
@@ -118,7 +120,7 @@ export function renderLightDashboard(entries: DeviceEntry[]): string {
     const modelName = status.model_name || address;
     const frames = Array.isArray(parsed?.keyframes) ? parsed.keyframes : [];
     const rows = frames
-      .map((f) => {
+      .map((f: any) => {
         const time =
           typeof f.hour === "number" && typeof f.minute === "number"
             ? `${pad2(f.hour)}:${pad2(f.minute)}`

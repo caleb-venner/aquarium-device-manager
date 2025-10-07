@@ -57,6 +57,8 @@ app = FastAPI(title="Chihiros BLE Service", lifespan=lifespan)
 SPA_UNAVAILABLE_MESSAGE = getattr(spa, "SPA_UNAVAILABLE_MESSAGE")
 SPA_DIST_AVAILABLE = getattr(spa, "SPA_DIST_AVAILABLE")
 FRONTEND_DIST = getattr(spa, "FRONTEND_DIST")
+PRIMARY_ENTRY = getattr(spa, "PRIMARY_ENTRY", "modern.html")
+LEGACY_ENTRY = getattr(spa, "LEGACY_ENTRY", "index.html")
 
 
 async def _proxy_dev_server(path: str) -> Response | None:
@@ -72,10 +74,13 @@ async def serve_spa() -> Response:
     """Serve SPA index or proxy to dev server; mirrors legacy behavior for tests."""
     # Use local constants to support monkeypatching in tests
     if SPA_DIST_AVAILABLE:
-        index_path = FRONTEND_DIST / "index.html"
-        if index_path.exists():
-            return HTMLResponse(index_path.read_text(encoding="utf-8"))
-    proxied = await _proxy_dev_server("/")
+        primary_path = FRONTEND_DIST / PRIMARY_ENTRY
+        if primary_path.exists():
+            return HTMLResponse(primary_path.read_text(encoding="utf-8"))
+        legacy_path = FRONTEND_DIST / LEGACY_ENTRY
+        if legacy_path.exists():
+            return HTMLResponse(legacy_path.read_text(encoding="utf-8"))
+    proxied = await _proxy_dev_server(f"/{PRIMARY_ENTRY}")
     if proxied is not None:
         return proxied
     return Response(
@@ -118,11 +123,20 @@ async def serve_spa_assets(spa_path: str) -> Response:
         from fastapi.responses import FileResponse as _FileResponse
 
         return _FileResponse(asset_path)
+    if asset_path.is_dir():
+        index_path = asset_path / "index.html"
+        if index_path.is_file():
+            from fastapi.responses import FileResponse as _FileResponse
+
+            return _FileResponse(index_path)
     if "." in spa_path:
         raise HTTPException(status_code=404)
-    index_path = FRONTEND_DIST / "index.html"
-    if index_path.exists():
-        return HTMLResponse(index_path.read_text(encoding="utf-8"))
+    primary_path = FRONTEND_DIST / PRIMARY_ENTRY
+    if primary_path.exists():
+        return HTMLResponse(primary_path.read_text(encoding="utf-8"))
+    legacy_path = FRONTEND_DIST / LEGACY_ENTRY
+    if legacy_path.exists():
+        return HTMLResponse(legacy_path.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404)
 
 

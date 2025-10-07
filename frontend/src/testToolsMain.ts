@@ -3,6 +3,7 @@ import "./ui/modernDashboard.css";
 
 import { renderWattageTest } from "./testTools/wattageTest";
 import { renderPercentagesTest } from "./testTools/percentagesTest";
+import { renderHeaderNavigation, renderFooterNavigation } from "./ui/pageNavigation";
 
 type TabId = "wattage" | "percentages";
 
@@ -30,8 +31,7 @@ function buildLayout(): void {
             <span class="version">Wattage and percentage validation suites</span>
           </div>
           <div class="header-actions">
-            <a class="btn btn-sm btn-secondary" href="/" title="Open Modern Dashboard">Modern Dashboard</a>
-            <a class="btn btn-sm btn-secondary" href="/dev" title="Open Dev Tools">Dev Tools</a>
+            ${renderHeaderNavigation("test")}
           </div>
         </div>
       </header>
@@ -78,9 +78,7 @@ function buildLayout(): void {
         <div class="footer-content">
           <span class="footer-info">Chihiros Device Manager • Testing utilities</span>
           <div class="footer-links">
-            <a href="/">Modern Dashboard</a>
-            <span>•</span>
-            <a href="/dev">Dev Tools</a>
+            ${renderFooterNavigation("test")}
           </div>
         </div>
       </footer>

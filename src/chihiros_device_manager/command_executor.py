@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import time
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -60,23 +61,25 @@ class CommandExecutor:
             self.validate_command_args(request.action, request.args)
         except ValueError as exc:
             record = CommandRecord(
-                id=request.id or "",
                 address=address,
                 action=request.action,
                 args=request.args,
                 timeout=request.timeout or 10.0,
             )
+            if request.id is not None:
+                record.id = request.id
             record.mark_failed(str(exc))
             return record
 
         # Create command record
         record = CommandRecord(
-            id=request.id or "",
             address=address,
             action=request.action,
             args=request.args,
             timeout=request.timeout or 10.0,
         )
+        if request.id is not None:
+            record.id = request.id
 
         # Acquire device lock to prevent concurrent operations
         lock = self._get_device_lock(address)
@@ -167,10 +170,19 @@ class CommandExecutor:
             return cached_status_to_dict(self.ble_service, status)
 
         elif action == "add_auto_setting":
+            # Convert string times to datetime.time objects
+            sunrise_str = args["sunrise"]
+            sunset_str = args["sunset"]
+
+            def parse_time(time_str: str) -> time:
+                """Convert HH:MM string to datetime.time object."""
+                hours, minutes = time_str.split(":")
+                return time(int(hours), int(minutes))
+
             status = await self.ble_service.add_light_auto_setting(
                 address,
-                sunrise=args["sunrise"],
-                sunset=args["sunset"],
+                sunrise=parse_time(sunrise_str),
+                sunset=parse_time(sunset_str),
                 brightness=args["brightness"],
                 ramp_up_minutes=args.get("ramp_up_minutes", 0),
                 weekdays=args.get("weekdays", []),

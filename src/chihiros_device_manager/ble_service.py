@@ -415,7 +415,6 @@ class BLEService:
             self._auto_reconnect,
             STATUS_CAPTURE_WAIT_SECONDS,
         )
-        auto_discovered = False
         discover_scheduled = False
         if not self._cache and self._auto_discover_on_start:
             try:
@@ -433,19 +432,13 @@ class BLEService:
                     "Auto-reconnect enabled; will be decided by auto-discover worker"
                 )
             else:
-                if auto_discovered:
-                    logger.info(
-                        "Auto-reconnect skipped; devices were already connected via "
-                        "auto-discover"
-                    )
-                else:
-                    logger.info(
-                        "Auto-reconnect enabled; attempting reconnect to cached devices"
-                    )
-                    self._reconnect_task = asyncio.create_task(
-                        self._reconnect_and_refresh()
-                    )
-                    logger.info("Reconnect worker scheduled in background")
+                logger.info(
+                    "Auto-reconnect enabled; attempting reconnect to cached devices"
+                )
+                self._reconnect_task = asyncio.create_task(
+                    self._reconnect_and_refresh()
+                )
+                logger.info("Reconnect worker scheduled in background")
 
     async def _auto_discover_worker(self) -> None:
         """Background worker that auto-discovers and connects devices."""

@@ -5,6 +5,7 @@ import { statusResponseToEntries } from "./types/models";
 import { renderNotice } from "./utils";
 import { fetchJson, postJson } from "./api";
 import { renderDoserDashboard, renderLightDashboard } from "./ui/dashboards";
+import { renderHeaderNavigation, renderFooterNavigation } from "./ui/pageNavigation";
 
 // Simple caching to prevent excessive API calls during navigation
 let dashboardLoaded = false;
@@ -26,8 +27,7 @@ export function renderLayout(): void {
             <span class="version">Legacy dashboard utilities & diagnostics</span>
           </div>
           <div class="header-actions">
-            <a class="btn btn-sm btn-secondary" href="/" title="Open Modern Dashboard">Modern Dashboard</a>
-            <a class="btn btn-sm btn-secondary" href="/test" title="Open Testing Utilities">Test Tools</a>
+            ${renderHeaderNavigation("dev")}
           </div>
         </div>
       </header>
@@ -59,9 +59,7 @@ export function renderLayout(): void {
         <div class="footer-content">
           <span class="footer-info">Developer diagnostics • Legacy dashboard utilities</span>
           <div class="footer-links">
-            <a href="/">Modern Dashboard</a>
-            <span>•</span>
-            <a href="/test">Test Tools</a>
+            ${renderFooterNavigation("dev")}
           </div>
         </div>
       </footer>

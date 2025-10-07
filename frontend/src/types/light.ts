@@ -1,4 +1,5 @@
-type Weekday = 'Mon'|'Tue'|'Wed'|'Thu'|'Fri'|'Sat'|'Sun';
+import type { Weekday } from './doser';
+
 type Interp = 'step' | 'linear';
 
 export interface ChannelDef {
@@ -37,7 +38,7 @@ export interface CustomPoint {
 
 export interface CustomProfile {
   mode: 'custom';
-  interpolation: Interp;  // 'linear' approximates “ramp”; 'step' holds
+  interpolation: Interp;  // 'linear' approximates "ramp"; 'step' holds
   points: CustomPoint[];  // ≤ 24, strictly increasing times
 }
 
@@ -50,7 +51,7 @@ export interface AutoProgram {
   sunrise: string;        // "HH:mm"
   sunset: string;         // "HH:mm" (must be after sunrise)
   rampMinutes: number;    // e.g., 0, 30, 60, ...
-  levels: ChannelLevels;  // peak levels during “day”
+  levels: ChannelLevels;  // peak levels during "day"
 }
 
 export interface AutoProfile {
@@ -59,3 +60,4 @@ export interface AutoProfile {
 }
 
 export type Profile = ManualProfile | CustomProfile | AutoProfile;
+export type { Interp };
