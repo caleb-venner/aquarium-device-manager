@@ -1,6 +1,6 @@
 """Persistent storage models and helpers for Chihiros dosing pumps.
 
-This module mirrors the structure defined in ``doser_structure.ts`` so that the
+This module mirrors the structure defined in ``tests/doser_structure.ts`` so that the
 backend can validate and persist dosing pump configurations exactly as the
 frontend expects them.
 """
@@ -25,7 +25,13 @@ def _now_iso() -> str:
 
 
 def _ensure_unique(values: Sequence[str], what: str) -> None:
-    duplicates = {value for value in values if values.count(value) > 1}
+    seen = set()
+    duplicates = set()
+    for value in values:
+        if value in seen:
+            duplicates.add(value)
+        else:
+            seen.add(value)
     if duplicates:
         plural = "s" if len(duplicates) > 1 else ""
         raise ValueError(f"Duplicate {what}{plural}: {sorted(duplicates)}")
