@@ -30,7 +30,7 @@ function showError(error: any): void {
           <pre>${error.stack}</pre>
         </details>
         <p>
-          <a href="/index.html">← Back to Legacy Dashboard</a> |
+          <a href="/legacy.html">← Back to Legacy Dashboard</a> |
           <button onclick="location.reload()">Retry</button>
         </p>
       </div>
@@ -107,7 +107,7 @@ function initializeModernLayout(): void {
             <span class="version">Modern Dashboard v2.0</span>
           </div>
           <div class="header-actions">
-            <a class="btn btn-sm btn-secondary" href="/index.html" title="Open Legacy Dashboard">
+            <a class="btn btn-sm btn-secondary" href="/dev" title="Open Developer Tools">
               Dev Tools
             </a>
             <a class="btn btn-sm btn-secondary" href="/test" title="Open Testing Utilities">
