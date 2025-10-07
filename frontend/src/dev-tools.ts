@@ -6,8 +6,8 @@ import type {
   ManualBrightnessPayload,
   StatusResponse,
   CommandRecord
-} from "./types";
-import { statusResponseToEntries } from "./types";
+} from "./types/models";
+import { statusResponseToEntries } from "./types/models";
 import { escapeHtml, pad2, renderNotice } from "./utils";
 import {
   postJson,

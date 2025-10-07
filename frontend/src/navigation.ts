@@ -1,7 +1,7 @@
 // Tab navigation and view management
 
-import type { DeviceEntry, StatusResponse } from "./types";
-import { statusResponseToEntries } from "./types";
+import type { DeviceEntry, StatusResponse } from "./types/models";
+import { statusResponseToEntries } from "./types/models";
 import { renderNotice } from "./utils";
 import { fetchJson, postJson } from "./api";
 import { renderDoserDashboard, renderLightDashboard } from "./ui/dashboards";
@@ -18,28 +18,54 @@ export function renderLayout(): void {
   if (!app) return;
 
   app.innerHTML = `
-    <header class="app-header">
-      <h1>Chihiros Device Manager</h1>
-    </header>
+    <div class="modern-app legacy-app">
+      <header class="modern-header">
+        <div class="header-content">
+          <div class="brand">
+            <h1>🛠️ Dev Tools</h1>
+            <span class="version">Legacy dashboard utilities & diagnostics</span>
+          </div>
+          <div class="header-actions">
+            <a class="btn btn-sm btn-secondary" href="/" title="Open Modern Dashboard">Modern Dashboard</a>
+            <a class="btn btn-sm btn-secondary" href="/test-tools.html" title="Open Testing Utilities">Test Tools</a>
+          </div>
+        </div>
+      </header>
 
-    <nav class="tabs" role="tablist" aria-label="Views">
-      <button class="tab active" role="tab" id="tab-dashboard" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
-      <button class="tab" role="tab" id="tab-overview" aria-selected="false" aria-controls="panel-overview">Overview</button>
-      <button class="tab" role="tab" id="tab-dev" aria-selected="false" aria-controls="panel-dev">Dev</button>
-      <div class="spacer"></div>
-    </nav>
+      <div class="modern-main legacy-main">
+        <div class="legacy-content">
+          <nav class="tabs" role="tablist" aria-label="Views">
+            <button class="tab active" role="tab" id="tab-dashboard" aria-selected="true" aria-controls="panel-dashboard">Dashboard</button>
+            <button class="tab" role="tab" id="tab-overview" aria-selected="false" aria-controls="panel-overview">Overview</button>
+            <button class="tab" role="tab" id="tab-dev" aria-selected="false" aria-controls="panel-dev">Dev</button>
+            <div class="spacer"></div>
+          </nav>
 
-    <main>
-      <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
-        <div id="dashboard-content">${renderNotice("Loading dashboard…")}</div>
-      </section>
-      <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
-        <div id="overview-content">${renderNotice("Loading overview…")}</div>
-      </section>
-      <section id="panel-dev" role="tabpanel" aria-labelledby="tab-dev" hidden>
-        <div id="dev-content">${renderNotice("Preparing developer tools…")}</div>
-      </section>
-    </main>
+          <div class="legacy-panels">
+            <section id="panel-dashboard" role="tabpanel" aria-labelledby="tab-dashboard">
+              <div id="dashboard-content">${renderNotice("Loading dashboard…")}</div>
+            </section>
+            <section id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
+              <div id="overview-content">${renderNotice("Loading overview…")}</div>
+            </section>
+            <section id="panel-dev" role="tabpanel" aria-labelledby="tab-dev" hidden>
+              <div id="dev-content">${renderNotice("Preparing developer tools…")}</div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <footer class="modern-footer">
+        <div class="footer-content">
+          <span class="footer-info">Developer diagnostics • Legacy dashboard utilities</span>
+          <div class="footer-links">
+            <a href="/">Modern Dashboard</a>
+            <span>•</span>
+            <a href="/test-tools.html">Test Tools</a>
+          </div>
+        </div>
+      </footer>
+    </div>
   `;
 }
 
@@ -145,7 +171,7 @@ function setupScanPanel(container: HTMLElement): void {
     scanBtn.disabled = true;
     scanBtn.textContent = "Scanning…";
     try {
-      const found = await fetchJson<import("./types").ScanDevice[]>("/api/scan");
+      const found = await fetchJson<import("./types/models").ScanDevice[]>("/api/scan");
       if (found.length === 0) {
         resultsDiv.innerHTML = renderNotice("No supported devices found.", "warning");
       } else {
@@ -271,8 +297,8 @@ async function loadOverview(force = false): Promise<void> {
 
   container.innerHTML = renderNotice("Loading overview…");
   try {
-    const response = await postJson<import("./types").LiveStatusResponse>("/api/debug/live-status");
-    const { debugStatusesToEntries } = await import("./types");
+    const response = await postJson<import("./types/models").LiveStatusResponse>("/api/debug/live-status");
+    const { debugStatusesToEntries } = await import("./types/models");
     const entries = debugStatusesToEntries(response.statuses);
     const errorNotices = response.errors.map((error) =>
       renderNotice(error, "error")
