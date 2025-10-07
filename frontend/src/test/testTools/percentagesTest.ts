@@ -1,4 +1,4 @@
-import { calculateLightWattage } from "../wattage-calculator";
+import { calculateLightWattage } from "../../wattage-calculator";
 
 type TestCase = {
   red: number;

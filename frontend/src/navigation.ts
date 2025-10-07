@@ -399,7 +399,7 @@ async function loadDevView(): Promise<void> {
   if (!container) return;
 
   try {
-    const devToolsModule = await import("./dev-tools");
+    const devToolsModule = await import("./dev/dev-tools");
     await devToolsModule.loadDevTools();
   } catch (err) {
     container.innerHTML = renderNotice(

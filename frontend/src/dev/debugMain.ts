@@ -17,22 +17,22 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   try {
     updateDebugStatus("Testing device store import...");
-    const storeModule = await import("./stores/deviceStore");
+    const storeModule = await import("../stores/deviceStore");
     updateDebugStatus("✅ Store imported successfully");
 
     const { useActions, useDevices } = storeModule;
     updateDebugStatus(`Store functions: useActions=${typeof useActions}, useDevices=${typeof useDevices}`);
 
     updateDebugStatus("Testing notifications import...");
-    const notificationsModule = await import("./ui/notifications");
+    const notificationsModule = await import("../ui/notifications");
     updateDebugStatus("✅ Notifications imported successfully");
 
     updateDebugStatus("Testing dashboard import...");
-    const dashboardModule = await import("./ui/modernDashboard");
+    const dashboardModule = await import("../ui/modernDashboard");
     updateDebugStatus("✅ Dashboard imported successfully");
 
     updateDebugStatus("Testing state subscriptions import...");
-    const subscriptionsModule = await import("./ui/stateSubscriptions");
+    const subscriptionsModule = await import("../ui/stateSubscriptions");
     updateDebugStatus("✅ Subscriptions imported successfully");
 
     updateDebugStatus("All imports successful! Testing store...");

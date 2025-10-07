@@ -1,9 +1,9 @@
-import "./style.css";
-import "./ui/modernDashboard.css";
+import "../style.css";
+import "../ui/modernDashboard.css";
 
 import { renderWattageTest } from "./testTools/wattageTest";
 import { renderPercentagesTest } from "./testTools/percentagesTest";
-import { renderHeaderNavigation, renderFooterNavigation } from "./ui/pageNavigation";
+import { renderHeaderNavigation, renderFooterNavigation } from "../ui/pageNavigation";
 
 type TabId = "wattage" | "percentages";
 

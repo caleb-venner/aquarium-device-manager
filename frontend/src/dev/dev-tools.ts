@@ -6,9 +6,9 @@ import type {
   ManualBrightnessPayload,
   StatusResponse,
   CommandRecord
-} from "./types/models";
-import { statusResponseToEntries } from "./types/models";
-import { escapeHtml, pad2, renderNotice } from "./utils";
+} from "../types/models";
+import { statusResponseToEntries } from "../types/models";
+import { escapeHtml, pad2, renderNotice } from "../utils";
 import {
   postJson,
   sendManualBrightnessCommands,
@@ -20,7 +20,7 @@ import {
   setManualMode,
   resetAutoSettings,
   addAutoSetting
-} from "./api";
+} from "../api";
 
 export async function loadDevTools(): Promise<void> {
   const container = document.getElementById("dev-content");

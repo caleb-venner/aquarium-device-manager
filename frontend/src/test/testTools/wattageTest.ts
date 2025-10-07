@@ -3,7 +3,7 @@ import {
   getMaxWattage,
   getTheoreticalMaxWattage,
   formatWattage,
-} from "../wattage-calculator";
+} from "../../wattage-calculator";
 
 type ChannelValues = {
   red: number;
