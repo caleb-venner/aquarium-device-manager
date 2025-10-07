@@ -6,19 +6,52 @@
     <title>WRGB Pro II Wattage Calculator Test</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
+            font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            max-width: 960px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #0f172a;
-            color: #e2e8f0;
+            padding: 32px 24px 48px;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        body.embedded {
+            padding: 24px;
+            max-width: 100%;
+            margin: 0;
+        }
+        .global-nav {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        body.embedded .global-nav {
+            display: none;
+        }
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 999px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            color: #2563eb;
+            text-decoration: none;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .nav-link:hover {
+            background: #eff6ff;
+            color: #1d4ed8;
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.15);
         }
         .calculator {
-            background: rgba(15, 23, 42, 0.55);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            border-radius: 1rem;
-            padding: 2rem;
-            margin-bottom: 2rem;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 28px;
+            margin-bottom: 32px;
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.08);
         }
         .input-group {
             display: grid;
@@ -35,18 +68,24 @@
             font-weight: 600;
         }
         .input-field input {
-            padding: 0.5rem;
-            border: 1px solid rgba(148, 163, 184, 0.3);
-            border-radius: 0.5rem;
-            background: rgba(30, 41, 59, 0.4);
-            color: #e2e8f0;
+            padding: 10px 14px;
+            border: 1px solid #cbd5f5;
+            border-radius: 10px;
+            background: #f8fafc;
+            color: #0f172a;
+            font-size: 15px;
+        }
+        .input-field input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
         }
         .result {
-            background: rgba(34, 211, 238, 0.1);
-            border: 1px solid rgba(34, 211, 238, 0.3);
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-top: 1rem;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 16px;
+            padding: 20px;
+            margin-top: 20px;
         }
         .channel-breakdown {
             display: grid;
@@ -56,21 +95,25 @@
         }
         .channel-result {
             text-align: center;
-            padding: 0.5rem;
-            background: rgba(15, 23, 42, 0.3);
-            border-radius: 0.5rem;
+            padding: 0.75rem;
+            background: #f1f5f9;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
         }
         .btn {
-            background: rgba(34, 211, 238, 0.2);
-            color: #22d3ee;
-            border: 1px solid rgba(34, 211, 238, 0.3);
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.5rem;
+            background: #3b82f6;
+            color: #ffffff;
+            border: none;
+            padding: 0.75rem 1.75rem;
+            border-radius: 999px;
             cursor: pointer;
             font-weight: 600;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
         }
         .btn:hover {
-            background: rgba(34, 211, 238, 0.3);
+            background: #2563eb;
+            transform: translateY(-1px);
+            box-shadow: 0 12px 24px rgba(59, 130, 246, 0.2);
         }
         .test-cases {
             display: grid;
@@ -79,18 +122,26 @@
             margin-top: 1rem;
         }
         .test-case {
-            background: rgba(15, 23, 42, 0.3);
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
             padding: 1rem;
-            border-radius: 0.5rem;
+            border-radius: 12px;
+            box-shadow: 0 12px 20px rgba(15, 23, 42, 0.05);
             cursor: pointer;
-            border: 1px solid transparent;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
         }
         .test-case:hover {
-            border-color: rgba(34, 211, 238, 0.3);
+            border-color: #bfdbfe;
+            box-shadow: 0 16px 30px rgba(59, 130, 246, 0.15);
         }
     </style>
 </head>
 <body>
+    <nav class="global-nav">
+        <a class="nav-link" href="/">🏠 Modern Dashboard</a>
+        <a class="nav-link" href="/dev">🛠️ Dev Tools</a>
+        <a class="nav-link" href="/test">🧪 Test Hub</a>
+    </nav>
     <h1>WRGB Pro II Wattage Calculator</h1>
 
     <div class="calculator">
@@ -206,6 +257,12 @@
             </div>
         </div>
     </div>
+
+    <script>
+        if (window.top !== window.self) {
+            document.body.classList.add('embedded');
+        }
+    </script>
 
     <script type="module">
         // Import functions from the wattage calculator

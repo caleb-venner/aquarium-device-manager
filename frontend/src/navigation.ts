@@ -27,7 +27,7 @@ export function renderLayout(): void {
           </div>
           <div class="header-actions">
             <a class="btn btn-sm btn-secondary" href="/" title="Open Modern Dashboard">Modern Dashboard</a>
-            <a class="btn btn-sm btn-secondary" href="/test-tools.html" title="Open Testing Utilities">Test Tools</a>
+            <a class="btn btn-sm btn-secondary" href="/test" title="Open Testing Utilities">Test Tools</a>
           </div>
         </div>
       </header>
@@ -61,7 +61,7 @@ export function renderLayout(): void {
           <div class="footer-links">
             <a href="/">Modern Dashboard</a>
             <span>•</span>
-            <a href="/test-tools.html">Test Tools</a>
+            <a href="/test">Test Tools</a>
           </div>
         </div>
       </footer>
