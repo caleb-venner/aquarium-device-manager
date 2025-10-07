@@ -23,7 +23,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: 1240px;
+  max-width: var(--layout-max-width, 1240px);
   margin: 0 auto;
   padding: 20px 28px;
   gap: 24px;
@@ -134,7 +134,7 @@
 /* Modern Dashboard Styles */
 
 .modern-dashboard {
-  max-width: 1240px;
+  max-width: var(--layout-max-width, 1240px);
   margin: 0 auto;
   display: flex;
   flex-direction: column;

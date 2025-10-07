@@ -5,6 +5,7 @@
   font-weight: 400;
   background-color: #f8fafc;
   color: #0f172a;
+  --layout-max-width: 1240px;
 }
 
 body {
@@ -27,7 +28,7 @@ body {
 }
 
 .legacy-content {
-  max-width: 1240px;
+  max-width: var(--layout-max-width);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -35,8 +36,13 @@ body {
 }
 
 .legacy-app .header-content {
-  max-width: 1240px;
+  max-width: var(--layout-max-width);
   padding: 20px 28px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
 }
 
 .legacy-app .brand h1 {

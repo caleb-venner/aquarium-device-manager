@@ -11,8 +11,8 @@ const NAV_ITEMS: NavItem[] = [
   {
     id: "modern",
     href: "/",
-    label: "Modern Dashboard",
-    title: "Open Modern Dashboard"
+    label: "Dashboard",
+    title: "Open Dashboard"
   },
   {
     id: "dev",

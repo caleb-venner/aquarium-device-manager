@@ -1,4 +1,4 @@
-// Modern Dashboard - Standalone Entry Point
+// Dashboard - Standalone Entry Point
 // This is completely separate from the legacy dashboard system
 
 import { createNotificationSystem } from "./ui/notifications";
@@ -14,7 +14,7 @@ function updateDebugStatus(message: string): void {
     const stepCount = parseInt(debug.textContent?.match(/Step (\d+):/)?.[1] || '0') + 1;
     debug.textContent = `Step ${stepCount}: ${message}`;
   }
-  console.log(`🚀 Modern Dashboard: ${message}`);
+  console.log(`🚀 Dashboard: ${message}`);
 }
 
 // Error handling function
@@ -24,14 +24,14 @@ function showError(error: any): void {
   if (app) {
     app.innerHTML = `
       <div class="error">
-        <h2>Failed to Load Modern Dashboard</h2>
+        <h2>Failed to Load Dashboard</h2>
         <p><strong>Error:</strong> ${error.message}</p>
         <details>
           <summary>Technical Details</summary>
           <pre>${error.stack}</pre>
         </details>
         <p>
-          <a href="/legacy.html">← Back to Legacy Dashboard</a> |
+          <a href="/dev">← Back to Dev Tools</a> |
           <button onclick="location.reload()">Retry</button>
         </p>
       </div>
@@ -77,7 +77,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateDebugStatus("Rendering dashboard...");
     renderDashboard();
 
-    updateDebugStatus("🎉 Modern Dashboard ready!");
+    updateDebugStatus("🎉 Dashboard ready!");
 
     // Hide debug status after success
     setTimeout(() => {
@@ -86,7 +86,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }, 2000);
 
   } catch (error) {
-    console.error("❌ Failed to initialize Modern Dashboard:", error);
+    console.error("❌ Failed to initialize Dashboard:", error);
     showError(error);
   }
 });
@@ -105,7 +105,7 @@ function initializeModernLayout(): void {
         <div class="header-content">
           <div class="brand">
             <h1>🏠 Chihiros Device Manager</h1>
-            <span class="version">Modern Dashboard v2.0</span>
+            <span class="version">Dashboard v2.0</span>
           </div>
           <div class="header-actions">
             ${renderHeaderNavigation("modern")}
@@ -124,7 +124,7 @@ function initializeModernLayout(): void {
 
       <footer class="modern-footer">
         <div class="footer-content">
-          <span class="footer-info">Modern Dashboard • Real-time Updates • TypeScript</span>
+          <span class="footer-info">Dashboard • Real-time Updates • TypeScript</span>
           <div class="footer-links">
             ${renderFooterNavigation("modern")}
             <span>•</span>

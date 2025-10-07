@@ -4,7 +4,8 @@ import type { DeviceEntry, StatusResponse } from "./types/models";
 import { statusResponseToEntries } from "./types/models";
 import { renderNotice } from "./utils";
 import { fetchJson, postJson } from "./api";
-import { renderDoserDashboard, renderLightDashboard } from "./ui/dashboards";
+import { renderModernDashboard } from "./ui/modernDashboard";
+import { renderDeviceCard as renderModernDeviceCard } from "./ui/modernDeviceCard";
 import { renderHeaderNavigation, renderFooterNavigation } from "./ui/pageNavigation";
 
 // Simple caching to prevent excessive API calls during navigation
@@ -226,10 +227,55 @@ function renderDashboardContent(entries: DeviceEntry[], container: HTMLElement):
   const dosers = entries.filter((entry) => entry.status.device_type === "doser");
   const lights = entries.filter((entry) => entry.status.device_type === "light");
 
+  // Convert legacy DeviceEntry format to modern DeviceState format for modern components
+  const convertToDeviceState = (entry: DeviceEntry): any => ({
+    address: entry.address,
+    status: entry.status,
+    isLoading: false,
+    error: null,
+    lastUpdated: entry.status.updated_at * 1000, // Convert to milliseconds
+    commandHistory: [],
+  });
+
+  const modernLights = lights.map(convertToDeviceState);
+  const modernDosers = dosers.map(convertToDeviceState);
+
+  // Use modern dashboard rendering with adapted data
   container.innerHTML = `
     <div class="tab-content">
-      ${dosers.length > 0 ? `<section>${renderDoserDashboard(dosers)}</section>` : ""}
-      ${lights.length > 0 ? `<section>${renderLightDashboard(lights)}</section>` : ""}
+      ${modernLights.length > 0 || modernDosers.length > 0 ? `
+        <div class="device-grid">
+          ${modernLights.length > 0 ? `
+            <section class="device-section">
+              <h2 class="section-title">
+                <span class="device-icon">💡</span>
+                Light Devices
+                <span class="device-badge">${modernLights.length}</span>
+              </h2>
+              <div class="device-cards">
+                ${modernLights.map(device => renderModernDeviceCard(device)).join('')}
+              </div>
+            </section>
+          ` : ''}
+          ${modernDosers.length > 0 ? `
+            <section class="device-section">
+              <h2 class="section-title">
+                <span class="device-icon">💊</span>
+                Doser Devices
+                <span class="device-badge">${modernDosers.length}</span>
+              </h2>
+              <div class="device-cards">
+                ${modernDosers.map(device => renderModernDeviceCard(device)).join('')}
+              </div>
+            </section>
+          ` : ''}
+        </div>
+      ` : `
+        <div class="no-devices">
+          <h3>No devices connected</h3>
+          <p>Scan for devices to get started</p>
+        </div>
+      `}
     </div>
   `;
 
@@ -302,10 +348,32 @@ async function loadOverview(force = false): Promise<void> {
       renderNotice(error, "error")
     );
 
-    const deviceCardModule = await import("./ui/deviceCard");
-    const deviceSection = entries.length > 0
-      ? deviceCardModule.renderDeviceSection(entries, "No devices connected.")
-      : renderNotice("No device statuses available.", "info");
+    // Convert legacy DeviceEntry format to modern DeviceState format
+    const convertToDeviceState = (entry: DeviceEntry): any => ({
+      address: entry.address,
+      status: entry.status,
+      isLoading: false,
+      error: null,
+      lastUpdated: entry.status.updated_at * 1000, // Convert to milliseconds
+      commandHistory: [],
+    });
+
+    const modernDevices = entries.map(convertToDeviceState);
+
+    const deviceSection = entries.length > 0 ? `
+      <div class="device-grid">
+        <section class="device-section">
+          <h2 class="section-title">
+            <span class="device-icon">🔍</span>
+            Debug Overview
+            <span class="device-badge">${entries.length}</span>
+          </h2>
+          <div class="device-cards">
+            ${modernDevices.map(device => renderModernDeviceCard(device)).join('')}
+          </div>
+        </section>
+      </div>
+    ` : renderNotice("No device statuses available.", "info");
 
     container.innerHTML = `
       <div class="tab-content">

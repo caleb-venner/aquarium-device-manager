@@ -1,4 +1,4 @@
-// Simplified Modern Dashboard - Debug Version
+// Simplified Dashboard - Debug Version
 // Test each import individually to find the issue
 
 // Debug function to update status
@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const notificationsModule = await import("./ui/notifications");
     updateDebugStatus("✅ Notifications imported successfully");
 
-    updateDebugStatus("Testing modern dashboard import...");
+    updateDebugStatus("Testing dashboard import...");
     const dashboardModule = await import("./ui/modernDashboard");
     updateDebugStatus("✅ Dashboard imported successfully");
 
@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       app.innerHTML = `
         <div style="padding: 20px; background: #e6ffe6; border: 1px solid green;">
           <h2>✅ All Tests Passed!</h2>
-          <p>Modern dashboard is working. Dashboard HTML length: ${html.length} characters</p>
+          <p>The dashboard is working. Dashboard HTML length: ${html.length} characters</p>
           <button onclick="location.href='/'">Go to Full Dashboard</button>
         </div>
       `;

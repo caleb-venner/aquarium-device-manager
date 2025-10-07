@@ -1,6 +1,5 @@
 import "../style.css";
-import { renderDeviceSection } from "./deviceCard";
-import { renderDoserDashboard, renderLightDashboard } from "./dashboards";
+import { renderDeviceCard as renderModernDeviceCard } from "./modernDeviceCard";
 
 const root = document.getElementById("dev-root") ?? document.body;
 
@@ -45,20 +44,44 @@ const sampleEntries = [
   },
 ];
 
+// Convert sample entries to modern format
+const convertToModernFormat = (entries: any[]): any[] =>
+  entries.map(entry => ({
+    address: entry.address,
+    status: entry.status,
+    isLoading: false,
+    error: null,
+    lastUpdated: entry.status.updated_at * 1000,
+    commandHistory: [],
+  }));
+
+const modernEntries = convertToModernFormat(sampleEntries);
+const lightEntries = modernEntries.filter(e => e.status.device_type === "light");
+const doserEntries = modernEntries.filter(e => e.status.device_type === "doser");
+
 root.innerHTML = `
   <main style="padding: 1rem;">
     <h1>UI Module Smoke Test</h1>
     <section>
-      <h2>Device Section</h2>
-      ${renderDeviceSection(sampleEntries, "No devices")}
-    </section>
-    <section>
-      <h2>Doser Dashboard</h2>
-      ${renderDoserDashboard(sampleEntries)}
-    </section>
-    <section>
-      <h2>Light Dashboard</h2>
-      ${renderLightDashboard(sampleEntries)}
+      <h2>Modern Device Cards</h2>
+      <div class="device-grid">
+        ${lightEntries.length > 0 ? `
+          <section class="device-section">
+            <h3>Light Devices</h3>
+            <div class="device-cards">
+              ${lightEntries.map(device => renderModernDeviceCard(device)).join('')}
+            </div>
+          </section>
+        ` : ''}
+        ${doserEntries.length > 0 ? `
+          <section class="device-section">
+            <h3>Doser Devices</h3>
+            <div class="device-cards">
+              ${doserEntries.map(device => renderModernDeviceCard(device)).join('')}
+            </div>
+          </section>
+        ` : ''}
+      </div>
     </section>
   </main>
 `;
