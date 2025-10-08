@@ -16,6 +16,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
 FRONTEND_DIST = Path(
     get_env_with_fallback("AQUA_BLE_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
+    or str(DEFAULT_FRONTEND_DIST)
 )
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
 
@@ -29,7 +30,9 @@ SPA_UNAVAILABLE_MESSAGE = (
 )
 
 
-_DEV_SERVER_ENV = get_env_with_fallback("AQUA_BLE_FRONTEND_DEV", "").strip()
+_DEV_SERVER_ENV = (
+    get_env_with_fallback("AQUA_BLE_FRONTEND_DEV", "") or ""
+).strip()
 if _DEV_SERVER_ENV == "0":
     DEV_SERVER_CANDIDATES: tuple[httpx.URL, ...] = ()
 elif _DEV_SERVER_ENV:

@@ -2,10 +2,9 @@
 
 import inspect
 import sys
-from typing import Callable
+from typing import Type
 
 from bleak import BleakScanner
-from bleak.backends.device import BLEDevice
 
 from ..exception import DeviceNotFound
 from ..light_status import ParsedLightStatus
@@ -33,7 +32,7 @@ for name, obj in inspect.getmembers(sys.modules[__name__]):
 
 def get_model_class_from_name(
     device_name: str,
-) -> Callable[[BLEDevice], BaseDevice]:
+) -> Type[BaseDevice]:
     """Get device class name from device name."""
     model_class = CODE2MODEL.get(device_name[:-12])
     if model_class is None:

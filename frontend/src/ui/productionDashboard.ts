@@ -4,30 +4,38 @@
  * This is the main dashboard UI that provides:
  * - Overview of connected device status
  * - Configuration management interface
- * - Tabs for different views (Overview, Configurations, Dosers, Lights)
+ * - Tabs for different views (Overview, Devices, Dev)
  */
 
 import {
   getDoserConfigurations,
   getLightConfigurations,
   getConfigurationSummary,
-  getSystemTimezone,
   type DoserDevice,
   type LightDevice,
   type ConfigurationSummary,
-  type SystemTimezone,
 } from "../api/configurations";
-import { getDeviceStatus, scanDevices } from "../api/devices";
-import type { StatusResponse, CachedStatus } from "../types/models";
+import { getDeviceStatus, scanDevices, connectDevice } from "../api/devices";
+import type { StatusResponse, CachedStatus, ScanDevice } from "../types/models";
+import {
+  calculateLightWattage,
+  formatWattage,
+  getMaxWattage,
+  getTheoreticalMaxWattage,
+  type ChannelPercentages,
+  type WattageCalculationResult
+} from "../utils/wattage-calculator";
 
 // Dashboard state
-let currentTab: "overview" | "configurations" | "dosers" | "lights" = "overview";
+let currentTab: "overview" | "devices" | "dev" = "overview";
 let doserConfigs: DoserDevice[] = [];
 let lightConfigs: LightDevice[] = [];
 let summary: ConfigurationSummary | null = null;
 let deviceStatus: StatusResponse | null = null;
 let isLoading = false;
 let error: string | null = null;
+let scanResults: ScanDevice[] = [];
+let isScanning = false;
 
 /**
  * Main render function for the production dashboard
@@ -62,9 +70,9 @@ function renderHeader(): string {
             <span>🔄</span>
             Refresh All
           </button>
-          <button class="btn btn-primary" onclick="window.handleScanDevices()">
+          <button class="btn btn-primary" onclick="window.handleScanDevices()" ${isScanning ? 'disabled' : ''}>
             <span>📡</span>
-            Scan Devices
+            ${isScanning ? 'Scanning...' : 'Scan Devices'}
           </button>
         </div>
       </div>
@@ -90,25 +98,17 @@ function renderNavigation(): string {
           Overview
         </button>
         <button
-          class="nav-tab ${currentTab === "configurations" ? "active" : ""}"
-          onclick="window.switchTab('configurations')"
+          class="nav-tab ${currentTab === "devices" ? "active" : ""}"
+          onclick="window.switchTab('devices')"
         >
-          Configurations
+          Devices
           <span class="nav-badge">${totalConfigs}</span>
         </button>
         <button
-          class="nav-tab ${currentTab === "dosers" ? "active" : ""}"
-          onclick="window.switchTab('dosers')"
+          class="nav-tab ${currentTab === "dev" ? "active" : ""}"
+          onclick="window.switchTab('dev')"
         >
-          Dosers
-          <span class="nav-badge">${doserCount}</span>
-        </button>
-        <button
-          class="nav-tab ${currentTab === "lights" ? "active" : ""}"
-          onclick="window.switchTab('lights')"
-        >
-          Lights
-          <span class="nav-badge">${lightCount}</span>
+          Dev
         </button>
       </div>
     </nav>
@@ -143,14 +143,11 @@ function renderContent(): string {
     <div class="tab-panel ${currentTab === "overview" ? "active" : ""}" id="overview-panel">
       ${renderOverviewTab()}
     </div>
-    <div class="tab-panel ${currentTab === "configurations" ? "active" : ""}" id="configurations-panel">
-      ${renderConfigurationsTab()}
+    <div class="tab-panel ${currentTab === "devices" ? "active" : ""}" id="devices-panel">
+      ${renderDevicesTab()}
     </div>
-    <div class="tab-panel ${currentTab === "dosers" ? "active" : ""}" id="dosers-panel">
-      ${renderDosersTab()}
-    </div>
-    <div class="tab-panel ${currentTab === "lights" ? "active" : ""}" id="lights-panel">
-      ${renderLightsTab()}
+    <div class="tab-panel ${currentTab === "dev" ? "active" : ""}" id="dev-panel">
+      ${renderDevTab()}
     </div>
   `;
 }
@@ -162,7 +159,6 @@ function renderOverviewTab(): string {
   if (!deviceStatus) {
     return `
       <div class="empty-state">
-        <div class="empty-state-icon">📊</div>
         <h2 class="empty-state-title">Loading Device Status...</h2>
         <p class="empty-state-text">Please wait while we check your connected devices.</p>
       </div>
@@ -176,42 +172,81 @@ function renderOverviewTab(): string {
   }));
 
   const connectedDevices = devices.filter(d => d.connected);
-  const lightDevices = devices.filter(d => d.device_type === "light");
-  const doserDevices = devices.filter(d => d.device_type === "doser");
 
   if (devices.length === 0) {
     return `
       <div class="empty-state">
-        <div class="empty-state-icon">🔍</div>
         <h2 class="empty-state-title">No Devices Found</h2>
         <p class="empty-state-text">
           Start by scanning for devices or connecting to a device.
         </p>
-        <button class="btn btn-primary" onclick="window.handleScanDevices()">
-          Scan for Devices
+        <button class="btn btn-primary" onclick="window.handleScanDevices()" ${isScanning ? 'disabled' : ''}>
+          ${isScanning ? 'Scanning...' : 'Scan for Devices'}
         </button>
       </div>
+
+      ${renderScanResults()}
     `;
   }
 
   return `
-    <div class="card">
+    ${renderScanResults()}
+
+    ${devices.length > 0 ? renderDeviceSection("Devices", devices) : ""}
+  `;
+}
+
+/**
+ * Render scan results section
+ */
+function renderScanResults(): string {
+  if (scanResults.length === 0) {
+    return '';
+  }
+
+  return `
+    <div class="card scan-results" style="margin-top: 24px;">
       <div class="card-header">
-        <h2 class="card-title">System Status</h2>
-        <div class="badge ${connectedDevices.length > 0 ? "badge-success" : "badge-gray"}">
-          ${connectedDevices.length} of ${devices.length} connected
+        <h2 class="card-title">Discovered Devices</h2>
+        <div class="badge badge-info">${scanResults.length}</div>
+      </div>
+      <div style="margin-top: 16px;">
+        <p style="margin: 0 0 16px 0; color: var(--gray-600); font-size: 14px;">
+          These devices were found during the last scan. Click "Connect" to add a device to your dashboard.
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 16px;">
+          ${scanResults.map(device => renderScanResultCard(device)).join("")}
         </div>
       </div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 20px;">
-        ${renderStatusCard("Total Devices", devices.length, "📱")}
-        ${renderStatusCard("Connected", connectedDevices.length, "✅")}
-        ${renderStatusCard("Light Devices", lightDevices.length, "💡")}
-        ${renderStatusCard("Doser Devices", doserDevices.length, "⚗️")}
+    </div>
+  `;
+}
+
+/**
+ * Render a single scan result card
+ */
+function renderScanResultCard(device: ScanDevice): string {
+  return `
+    <div class="card" style="padding: 20px; border: 1px solid var(--gray-200);">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="flex: 1;">
+          <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${device.name}</h3>
+          <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--gray-600); font-family: monospace;">${device.address}</p>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="badge badge-secondary" style="font-size: 11px;">${device.device_type}</span>
+            <span style="font-size: 12px; color: var(--gray-500);">${device.product}</span>
+          </div>
+        </div>
+        <button
+          class="btn btn-primary btn-sm"
+          onclick="window.handleConnectDevice('${device.address}')"
+          style="margin-left: 16px; min-width: 80px;"
+          title="Connect to this device and add it to your dashboard"
+        >
+          Add Device
+        </button>
       </div>
     </div>
-
-    ${lightDevices.length > 0 ? renderDeviceSection("Light Devices", lightDevices, "💡") : ""}
-    ${doserDevices.length > 0 ? renderDeviceSection("Doser Devices", doserDevices, "⚗️") : ""}
   `;
 }
 
@@ -233,16 +268,12 @@ function renderStatusCard(title: string, value: number, icon: string): string {
  */
 function renderDeviceSection(
   title: string,
-  devices: Array<CachedStatus & { address: string }>,
-  icon: string
+  devices: Array<CachedStatus & { address: string }>
 ): string {
   return `
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">
-          <span style="margin-right: 8px;">${icon}</span>
-          ${title}
-        </h2>
+        <h2 class="card-title">${title}</h2>
         <div class="badge badge-info">${devices.length}</div>
       </div>
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-top: 16px;">
@@ -258,13 +289,12 @@ function renderDeviceSection(
 function renderDeviceTile(device: CachedStatus & { address: string }): string {
   const statusColor = device.connected ? "var(--success)" : "var(--gray-400)";
   const statusText = device.connected ? "Connected" : "Disconnected";
-  const deviceIcon = device.device_type === "light" ? "💡" : "💊";
   const deviceName = device.model_name || "Unknown Device";
   const timeAgo = getTimeAgo(device.updated_at);
 
   return `
     <div class="card device-card ${device.device_type} ${device.connected ? 'connected' : 'disconnected'}" style="padding: 0; border-left: 4px solid ${statusColor};">
-      ${renderDeviceCardHeader(device, deviceIcon, deviceName, statusText, timeAgo)}
+      ${renderDeviceCardHeader(device, deviceName, statusText, timeAgo)}
       ${device.parsed && device.connected ? renderDeviceCardStatus(device) : renderNoDataStatus()}
       ${renderDeviceCardControls(device)}
     </div>
@@ -276,7 +306,6 @@ function renderDeviceTile(device: CachedStatus & { address: string }): string {
  */
 function renderDeviceCardHeader(
   device: CachedStatus & { address: string },
-  deviceIcon: string,
   deviceName: string,
   statusText: string,
   timeAgo: string
@@ -286,7 +315,6 @@ function renderDeviceCardHeader(
       <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
         <div style="flex: 1;">
           <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
-            <span style="font-size: 24px;">${deviceIcon}</span>
             <h3 style="font-size: 18px; font-weight: 600; margin: 0; color: var(--gray-900);">
               ${deviceName}
             </h3>
@@ -342,6 +370,12 @@ function renderLightCardStatus(device: CachedStatus & { address: string }): stri
     : 'Unknown';
 
   const weekdayName = parsed.weekday !== null ? getWeekdayName(parsed.weekday) : 'Unknown';
+
+  // Create combined date/time display
+  const dateTimeDisplay = currentTime !== 'Unknown' && weekdayName !== 'Unknown'
+    ? formatDateTime(parsed.current_hour, parsed.current_minute, parsed.weekday)
+    : 'Unknown';
+
   const keyframes = parsed.keyframes || [];
   const currentKeyframes = keyframes.filter((kf: any) => kf.value !== null);
   const maxBrightness = currentKeyframes.length > 0
@@ -353,14 +387,10 @@ function renderLightCardStatus(device: CachedStatus & { address: string }): stri
 
   return `
     <div style="padding: 16px; background: var(--gray-50);">
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Current Time</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--gray-900);">${currentTime}</div>
-        </div>
-        <div style="background: white; padding: 12px; border-radius: 6px;">
-          <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Day</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--gray-900);">${weekdayName}</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--gray-900);">${dateTimeDisplay}</div>
         </div>
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Max Brightness</div>
@@ -406,6 +436,12 @@ function renderDoserCardStatus(device: CachedStatus & { address: string }): stri
     : 'Unknown';
 
   const weekdayName = parsed.weekday !== null ? getWeekdayName(parsed.weekday) : 'Unknown';
+
+  // Create combined date/time display
+  const dateTimeDisplay = currentTime !== 'Unknown' && weekdayName !== 'Unknown'
+    ? formatDateTime(parsed.hour, parsed.minute, parsed.weekday)
+    : 'Unknown';
+
   const heads = parsed.heads || [];
 
   // Count active heads based on mode_label (not mode number)
@@ -413,60 +449,154 @@ function renderDoserCardStatus(device: CachedStatus & { address: string }): stri
     head.mode_label?.toLowerCase() !== 'disabled'
   ).length;
 
+  // Find the saved configuration for this device
+  const savedConfig = doserConfigs.find(config => config.id === device.address);
+
   return `
     <div style="padding: 16px; background: var(--gray-50);">
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;">
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Current Time</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--gray-900);">${currentTime}</div>
-        </div>
-        <div style="background: white; padding: 12px; border-radius: 6px;">
-          <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Day</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--gray-900);">${weekdayName}</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--gray-900);">${dateTimeDisplay}</div>
         </div>
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Active Heads</div>
           <div style="font-size: 20px; font-weight: 700; color: var(--primary);">${activeHeads}/${heads.length}</div>
         </div>
       </div>
-      ${renderPumpHeads(heads)}
+      ${renderPumpHeads(heads, savedConfig)}
     </div>
   `;
 }
 
 /**
+ * Format schedule days for display
+ */
+function formatScheduleDays(weekdays: number[] | undefined): string {
+  if (!weekdays || !Array.isArray(weekdays) || weekdays.length === 0) return 'Not Set';
+
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const validDays = weekdays.filter(day => typeof day === 'number' && day >= 0 && day <= 6);
+
+  if (validDays.length === 0) return 'Not Set';
+
+  const sortedDays = [...validDays].sort();
+
+  // Check for everyday (all 7 days)
+  if (sortedDays.length === 7) return 'Everyday';
+
+  // Check for weekdays (Mon-Fri)
+  if (sortedDays.length === 5 && sortedDays.every(day => day >= 1 && day <= 5)) {
+    return 'Weekdays';
+  }
+
+  // Check for weekends (Sat-Sun)
+  if (sortedDays.length === 2 && sortedDays.includes(0) && sortedDays.includes(6)) {
+    return 'Weekends';
+  }
+
+  // Otherwise, list the days
+  return sortedDays.map(day => dayNames[day]).join(', ');
+}
+
+/**
+ * Get configuration data for a specific head
+ */
+function getHeadConfigData(headIndex: number, savedConfig: DoserDevice | undefined): { setDose: string; schedule: string } {
+  if (!savedConfig || !savedConfig.configurations || savedConfig.configurations.length === 0) {
+    return { setDose: 'N/A', schedule: 'N/A' };
+  }
+
+  const activeConfig = savedConfig.configurations.find(c => c.id === savedConfig.activeConfigurationId);
+  if (!activeConfig || !activeConfig.revisions || activeConfig.revisions.length === 0) {
+    return { setDose: 'N/A', schedule: 'N/A' };
+  }
+
+  const latestRevision = activeConfig.revisions[activeConfig.revisions.length - 1];
+  const configHead = latestRevision.heads?.find((h: any) => h.index === headIndex);
+
+  if (!configHead) {
+    return { setDose: 'N/A', schedule: 'N/A' };
+  }
+
+  // Show configuration data even if head is not currently active on device
+  // This ensures configured heads always display their settings
+  let setDose = 'N/A';
+  const schedule = configHead.schedule;
+  if (schedule) {
+    switch (schedule.mode) {
+      case 'single':
+        setDose = `${(schedule.dailyDoseMl || 0).toFixed(1)}ml`;
+        break;
+      case 'timer':
+        const doses = schedule.doses || [];
+        const totalMl = doses.reduce((sum: number, dose: any) => sum + (dose.quantityMl || 0), 0);
+        setDose = `${totalMl.toFixed(1)}ml`;
+        break;
+      case 'every_hour':
+        setDose = `${(schedule.dailyDoseMl || 0).toFixed(1)}ml`;
+        break;
+      default:
+        setDose = 'N/A';
+    }
+  }
+
+  // Format schedule days
+  const scheduleText = formatScheduleDays(configHead.recurrence?.days);
+
+  return { setDose, schedule: scheduleText };
+}
+
+/**
  * Render pump heads grid
  */
-function renderPumpHeads(heads: any[]): string {
+function renderPumpHeads(heads: any[], savedConfig?: DoserDevice): string {
+  // Always show 4 heads (standard for doser devices)
+  // Combine device status data with configuration data
+  const allHeads = [];
+
+  for (let i = 0; i < 4; i++) {
+    const headIndex = i + 1; // 1-based indexing for display
+    // Device heads array is 0-based, so heads[i] corresponds to head number i+1
+    const deviceHead = heads[i] || {
+      mode_label: 'disabled',
+      hour: 0,
+      minute: 0,
+      dosed_tenths_ml: 0
+    };
+
+    const configData = getHeadConfigData(headIndex, savedConfig);
+
+    allHeads.push({ ...deviceHead, index: headIndex, configData });
+  }
+
   return `
     <div style="background: white; padding: 16px; border-radius: 6px;">
       <div style="font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px;">Pump Heads</div>
-      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
-        ${heads.map((head: any, index: number) => {
-          // Check if disabled based on mode_label, not mode number
-          const isDisabled = head.mode_label?.toLowerCase() === 'disabled';
-          const isActive = !isDisabled;
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        ${allHeads.map((head: any) => {
+          // Use the device status mode_label as the source of truth for head state
+          const displayMode = head.mode_label || 'disabled';
+          const isActive = displayMode?.toLowerCase() !== 'disabled';
 
           return `
             <div style="padding: 12px; background: ${isActive ? 'var(--success-light)' : 'var(--gray-50)'}; border: 1px solid ${isActive ? 'var(--success)' : 'var(--gray-200)'}; border-radius: 6px;">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: ${isDisabled ? '0' : '8px'};">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                 <div style="width: 28px; height: 28px; border-radius: 50%; background: ${isActive ? 'var(--success)' : 'var(--gray-300)'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">
-                  ${index + 1}
+                  ${head.index}
                 </div>
                 <div style="font-size: 12px; font-weight: 600; color: ${isActive ? 'var(--success)' : 'var(--gray-500)'}; text-transform: capitalize;">
-                  ${head.mode_label || 'Unknown'}
+                  ${displayMode}
                 </div>
               </div>
-              ${!isDisabled ? `
-                <div style="font-size: 13px; color: var(--gray-700);">
-                  <div style="margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                    <span style="color: var(--gray-500); font-size: 14px;">⏰</span>
-                    <span style="font-weight: 500;">${String(head.hour).padStart(2, '0')}:${String(head.minute).padStart(2, '0')}</span>
-                  </div>
-                  <div style="display: flex; align-items: center; gap: 6px;">
-                    <span style="color: var(--gray-500); font-size: 14px;">💧</span>
-                    <span style="font-weight: 500;">${(head.dosed_tenths_ml / 10).toFixed(1)}ml</span>
-                  </div>
+              ${isActive ? `
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--gray-600); margin-bottom: 4px;">
+                  <span>Time: <strong style="color: var(--gray-900);">${String(head.hour || 0).padStart(2, '0')}:${String(head.minute || 0).padStart(2, '0')}</strong></span>
+                  <span>Set: <strong style="color: var(--gray-900);">${head.configData.setDose}</strong></span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--gray-600);">
+                  <span>Dosed: <strong style="color: var(--gray-900);">${head.dosed_tenths_ml ? (head.dosed_tenths_ml / 10).toFixed(1) : '0.0'}ml</strong></span>
+                  <span>Schedule: <strong style="color: var(--gray-900);">${head.configData.schedule}</strong></span>
                 </div>
               ` : ''}
             </div>
@@ -534,6 +664,19 @@ function getWeekdayName(weekday: number): string {
 }
 
 /**
+ * Format time and weekday into a readable format like "2:42 PM Wednesday"
+ */
+function formatDateTime(hour: number, minute: number, weekday: number): string {
+  // Convert 24-hour to 12-hour format
+  const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const timeStr = `${hour12}:${String(minute).padStart(2, '0')} ${ampm}`;
+
+  const weekdayName = getWeekdayName(weekday);
+  return `${timeStr} ${weekdayName}`;
+}
+
+/**
  * Get human-readable time ago string
  */
 function getTimeAgo(timestamp: number): string {
@@ -571,8 +714,8 @@ function renderConfigurationsTab(): string {
         <p class="empty-state-text">
           Start by scanning for devices or connecting to a device to create a configuration.
         </p>
-        <button class="btn btn-primary" onclick="window.handleScanDevices()">
-          Scan for Devices
+        <button class="btn btn-primary" onclick="window.handleScanDevices()" ${isScanning ? 'disabled' : ''}>
+          ${isScanning ? 'Scanning...' : 'Scan for Devices'}
         </button>
       </div>
     `;
@@ -703,16 +846,17 @@ function renderLightPreview(light: LightDevice): string {
 }
 
 /**
- * Render the dosers tab
+ * Render the unified devices tab - shows both dosers and lights together
  */
-function renderDosersTab(): string {
-  if (doserConfigs.length === 0) {
+function renderDevicesTab(): string {
+  const totalDevices = doserConfigs.length + lightConfigs.length;
+
+  if (totalDevices === 0) {
     return `
       <div class="empty-state">
-        <div class="empty-state-icon">⚗️</div>
-        <h2 class="empty-state-title">No Doser Configurations</h2>
+        <h2 class="empty-state-title">No Device Profiles</h2>
         <p class="empty-state-text">
-          Connect to a doser device to automatically create a configuration profile.
+          Connect to doser or light devices to automatically create configuration profiles.
         </p>
       </div>
     `;
@@ -721,12 +865,13 @@ function renderDosersTab(): string {
   return `
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">Doser Configurations</h2>
-        <div class="badge badge-info">${doserConfigs.length}</div>
+        <h2 class="card-title">Device Profiles</h2>
+        <div class="badge badge-info">${totalDevices}</div>
       </div>
     </div>
     <div class="config-grid">
       ${doserConfigs.map(d => renderDoserCard(d)).join("")}
+      ${lightConfigs.map(l => renderLightCard(l)).join("")}
     </div>
   `;
 }
@@ -757,8 +902,8 @@ function renderDoserCard(doser: DoserDevice): string {
       <div class="card-header">
         <h3 class="card-title">${doser.name || "Doser Device"}</h3>
         <div class="card-actions">
-          <button class="btn-icon" title="Configure" onclick="window.handleConfigureDoser('${doser.id}')">⚙️</button>
-          <button class="btn-icon" title="Delete" onclick="window.handleDeleteDoser('${doser.id}')">🗑️</button>
+          <button class="btn-icon" title="Configure" onclick="window.handleConfigureDoser('${doser.id}')">Configure</button>
+          <button class="btn-icon" title="Delete" onclick="window.handleDeleteDoser('${doser.id}')">Delete</button>
         </div>
       </div>
       <div style="margin-bottom: 12px;">
@@ -784,34 +929,7 @@ function renderDoserCard(doser: DoserDevice): string {
   `;
 }
 
-/**
- * Render the lights tab
- */
-function renderLightsTab(): string {
-  if (lightConfigs.length === 0) {
-    return `
-      <div class="empty-state">
-        <div class="empty-state-icon">💡</div>
-        <h2 class="empty-state-title">No Light Profiles</h2>
-        <p class="empty-state-text">
-          Connect to a light device to automatically create a configuration profile.
-        </p>
-      </div>
-    `;
-  }
 
-  return `
-    <div class="card">
-      <div class="card-header">
-        <h2 class="card-title">Light Profiles</h2>
-        <div class="badge badge-info">${lightConfigs.length}</div>
-      </div>
-    </div>
-    <div class="config-grid">
-      ${lightConfigs.map(l => renderLightCard(l)).join("")}
-    </div>
-  `;
-}
 
 /**
  * Render a light configuration card
@@ -840,8 +958,8 @@ function renderLightCard(light: LightDevice): string {
       <div class="card-header">
         <h3 class="card-title">${light.name || "Light Device"}</h3>
         <div class="card-actions">
-          <button class="btn-icon" title="Edit" onclick="alert('Edit feature coming soon')">✏️</button>
-          <button class="btn-icon" title="Delete" onclick="window.handleDeleteLight('${light.id}')">🗑️</button>
+          <button class="btn-icon" title="Edit" onclick="alert('Edit feature coming soon')">Edit</button>
+          <button class="btn-icon" title="Delete" onclick="window.handleDeleteLight('${light.id}')">Delete</button>
         </div>
       </div>
       <div style="margin-bottom: 12px;">
@@ -863,6 +981,253 @@ function renderLightCard(light: LightDevice): string {
         </div>
         ${light.updatedAt ? `<div style="font-size: 12px; color: var(--gray-500);">Updated: ${formatDateTime(light.updatedAt)}</div>` : ''}
         ${light.createdAt && !light.updatedAt ? `<div style="font-size: 12px; color: var(--gray-500);">Created: ${formatDateTime(light.createdAt)}</div>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the dev tab - shows raw payload data for debugging
+ */
+function renderDevTab(): string {
+  const devices = deviceStatus ? Object.entries(deviceStatus).map(([address, status]) => ({
+    ...status,
+    address
+  })) : [];
+
+  return `
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      <!-- LED Wattage Calculator -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">WRGB Pro II Wattage Calculator</h2>
+          <div class="badge badge-info">Dev Tool</div>
+        </div>
+        <div style="padding: 20px;">
+          ${renderWattageCalculator()}
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--gray-200);">
+            <p style="margin: 0 0 8px 0; color: var(--gray-700);">
+              <strong>Advanced Testing:</strong> For comprehensive algorithm validation against 16 test cases
+            </p>
+            <a href="/percentages-test.html"
+               target="_blank"
+               style="display: inline-block; padding: 8px 16px; background: var(--blue-600); color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
+              🧪 Open Percentages Test Suite
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Raw Device Data -->
+      <div class="card">
+        <div class="card-header">
+          <h2 class="card-title">Raw Device Data</h2>
+          <div class="badge badge-info">${devices.length}</div>
+        </div>
+      </div>
+
+      ${devices.length === 0 ? `
+        <div class="empty-state">
+          <h2 class="empty-state-title">No Connected Devices</h2>
+          <p class="empty-state-text">Connect to devices to see raw payload data for debugging.</p>
+        </div>
+      ` : `
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          ${devices.map(device => renderDeviceRawData(device)).join("")}
+        </div>
+      `}
+    </div>
+  `;
+}
+
+/**
+ * Render raw data for a single device
+ */
+function renderDeviceRawData(device: CachedStatus & { address: string }): string {
+  const lastUpdate = device.updated_at ? new Date(device.updated_at * 1000).toLocaleString() : 'Unknown';
+
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3 class="card-title">
+          ${device.model_name || 'Unknown Device'}
+          <span style="font-weight: normal; color: var(--gray-500);">(${device.device_type})</span>
+        </h3>
+        <div class="badge ${device.connected ? 'badge-success' : 'badge-gray'}">
+          ${device.connected ? 'Connected' : 'Disconnected'}
+        </div>
+      </div>
+
+      <div style="padding: 20px;">
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 4px;">DEVICE ADDRESS</div>
+          <div style="font-family: monospace; font-size: 14px; color: var(--gray-900);">${device.address}</div>
+        </div>
+
+        <div style="margin-bottom: 16px;">
+          <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 4px;">LAST UPDATE</div>
+          <div style="font-size: 14px; color: var(--gray-900);">${lastUpdate}</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+          <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 8px;">RAW PAYLOAD (HEX)</div>
+          <div style="
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            word-break: break-all;
+            line-height: 1.4;
+            color: var(--gray-800);
+          ">
+            ${device.raw_payload || 'No raw payload data'}
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size: 12px; font-weight: 600; color: var(--gray-500); margin-bottom: 8px;">DECODED JSON</div>
+          <div style="
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            padding: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            color: var(--gray-800);
+          ">
+            <pre style="margin: 0; white-space: pre-wrap;">${JSON.stringify(device.parsed || {}, null, 2)}</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render LED wattage calculator for testing light configurations
+ */
+function renderWattageCalculator(): string {
+  return `
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <!-- Calculator Input -->
+      <div>
+        <h3 style="margin: 0 0 16px 0; color: var(--gray-900);">Channel Intensity</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 16px;">
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: var(--gray-700);">Red (%)</label>
+            <input type="number"
+                   id="watt-red"
+                   min="0" max="140"
+                   value="75"
+                   step="1"
+                   onchange="window.calculateWattageFromInputs()"
+                   style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px;">
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: var(--gray-700);">Green (%)</label>
+            <input type="number"
+                   id="watt-green"
+                   min="0" max="140"
+                   value="75"
+                   step="1"
+                   onchange="window.calculateWattageFromInputs()"
+                   style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px;">
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: var(--gray-700);">Blue (%)</label>
+            <input type="number"
+                   id="watt-blue"
+                   min="0" max="140"
+                   value="75"
+                   step="1"
+                   onchange="window.calculateWattageFromInputs()"
+                   style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px;">
+          </div>
+          <div>
+            <label style="display: block; margin-bottom: 4px; font-weight: 600; color: var(--gray-700);">White (%)</label>
+            <input type="number"
+                   id="watt-white"
+                   min="0" max="140"
+                   value="75"
+                   step="1"
+                   onchange="window.calculateWattageFromInputs()"
+                   style="width: 100%; padding: 8px; border: 1px solid var(--gray-300); border-radius: 6px;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="wattage-results" style="
+        background: var(--gray-50);
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        padding: 20px;
+      ">
+        <!-- Results will be populated by calculateWattageFromInputs() -->
+      </div>
+
+      <!-- Test Cases -->
+      <div>
+        <h3 style="margin: 0 0 16px 0; color: var(--gray-900);">Test Cases</h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+          <button onclick="window.setWattageTestCase(0, 0, 0, 0)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>Off</strong><br>
+            R:0% G:0% B:0% W:0%
+          </button>
+          <button onclick="window.setWattageTestCase(50, 50, 50, 50)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>50% All</strong><br>
+            R:50% G:50% B:50% W:50%
+          </button>
+          <button onclick="window.setWattageTestCase(100, 100, 100, 100)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>100% All</strong><br>
+            R:100% G:100% B:100% W:100%
+          </button>
+          <button onclick="window.setWattageTestCase(139, 139, 137, 140)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>Maximum</strong><br>
+            R:139% G:139% B:137% W:140%
+          </button>
+          <button onclick="window.setWattageTestCase(100, 0, 0, 0)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>Red Only</strong><br>
+            R:100% G:0% B:0% W:0%
+          </button>
+          <button onclick="window.setWattageTestCase(0, 100, 0, 0)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>Green Only</strong><br>
+            R:0% G:100% B:0% W:0%
+          </button>
+          <button onclick="window.setWattageTestCase(0, 0, 100, 0)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>Blue Only</strong><br>
+            R:0% G:0% B:100% W:0%
+          </button>
+          <button onclick="window.setWattageTestCase(0, 0, 0, 100)"
+                  style="padding: 12px; border: 1px solid var(--gray-300); border-radius: 6px; background: white; cursor: pointer;">
+            <strong>White Only</strong><br>
+            R:0% G:0% B:0% W:100%
+          </button>
+        </div>
+      </div>
+
+      <!-- Device Specifications -->
+      <div style="
+        background: var(--blue-50);
+        border: 1px solid var(--blue-200);
+        border-radius: 8px;
+        padding: 16px;
+      ">
+        <h4 style="margin: 0 0 8px 0; color: var(--blue-900);">Device Specifications</h4>
+        <p style="margin: 4px 0; color: var(--blue-800);"><strong>Actual Maximum Wattage:</strong> ${formatWattage(getMaxWattage())} (power supply limited)</p>
+        <p style="margin: 4px 0; color: var(--blue-800);"><strong>Theoretical Maximum:</strong> ${formatWattage(getTheoreticalMaxWattage())} (if no power limiting)</p>
+        <p style="margin: 4px 0; color: var(--blue-800);"><strong>Model:</strong> WRGB Pro II</p>
+        <p style="margin: 4px 0 0 0; color: var(--blue-800);"><strong>Power Limiting:</strong> Channels scaled down proportionally when total exceeds 138W</p>
       </div>
     </div>
   `;
@@ -966,7 +1331,7 @@ function refreshDashboard() {
 // ============================================================================
 
 // Initialize global handlers BEFORE loading data
-(window as any).switchTab = async (tab: "overview" | "configurations" | "dosers" | "lights") => {
+(window as any).switchTab = async (tab: "overview" | "devices" | "dev") => {
   currentTab = tab;
   refreshDashboard();
 };
@@ -976,50 +1341,49 @@ function refreshDashboard() {
 };
 
 (window as any).handleScanDevices = async () => {
-  const button = document.querySelector('button[onclick="window.handleScanDevices()"]') as HTMLButtonElement;
-  const originalText = button?.innerHTML;
+  if (isScanning) return; // Prevent double scan
 
   try {
-    // Show loading state
-    if (button) {
-      button.disabled = true;
-      button.innerHTML = '<span>🔍</span> Scanning...';
-    }
+    isScanning = true;
+    scanResults = []; // Clear previous results
+    refreshDashboard(); // Update UI to show scanning state
 
     const results = await scanDevices();
-    alert(`Device scan completed!\n\nFound ${results.length} device${results.length !== 1 ? 's' : ''}:\n${results.map(device => `• ${device.name} (${device.address})`).join('\n')}`);
+    scanResults = results;
+
+    // Show success message with results count
+    if (results.length > 0) {
+      // Scroll to scan results section if devices found
+      setTimeout(() => {
+        const scanSection = document.querySelector('.scan-results');
+        if (scanSection) {
+          scanSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
   } catch (err) {
+    // Clear scan results on error and show message
+    scanResults = [];
     alert(`Failed to scan for devices: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
-    // Restore button state
-    if (button && originalText) {
-      button.disabled = false;
-      button.innerHTML = originalText;
-    }
+    isScanning = false;
+    refreshDashboard(); // Update UI to remove scanning state
   }
 };
 
-(window as any).useSystemTimezone = async () => {
+(window as any).handleConnectDevice = async (address: string) => {
   try {
-    const timezoneInfo = await getSystemTimezone();
-    const timezoneInput = document.getElementById('device-timezone') as HTMLInputElement;
-    const hint = document.getElementById('timezone-hint');
+    await connectDevice(address);
 
-    if (timezoneInput) {
-      timezoneInput.value = timezoneInfo.default_for_new_devices;
+    // Clear scan results since we connected to one
+    scanResults = [];
 
-      // Update hint with detected timezone
-      if (hint) {
-        hint.textContent = `System timezone detected: ${timezoneInfo.system_timezone}`;
-        hint.style.color = '#28a745'; // green color for success
-      }
-    }
+    // Refresh device status to show the newly connected device
+    await loadAllConfigurations();
+
+    alert(`Successfully connected to device ${address}`);
   } catch (err) {
-    const hint = document.getElementById('timezone-hint');
-    if (hint) {
-      hint.textContent = `Failed to detect system timezone: ${err instanceof Error ? err.message : String(err)}`;
-      hint.style.color = '#dc3545'; // red color for error
-    }
+    alert(`Failed to connect to device ${address}: ${err instanceof Error ? err.message : String(err)}`);
   }
 };
 
@@ -1079,9 +1443,6 @@ function showDoserConfigurationModal(device: DoserDevice): void {
 
   document.body.appendChild(modal);
 
-  // Load system timezone info for the hint
-  loadTimezoneHint();
-
   // Close on background click
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
@@ -1089,26 +1450,6 @@ function showDoserConfigurationModal(device: DoserDevice): void {
       currentConfigDevice = null;
     }
   });
-}
-
-/**
- * Load timezone hint information for the modal
- */
-async function loadTimezoneHint(): Promise<void> {
-  try {
-    const timezoneInfo = await getSystemTimezone();
-    const hint = document.getElementById('timezone-hint');
-    if (hint) {
-      hint.textContent = `System timezone: ${timezoneInfo.system_timezone} (click Auto to use)`;
-      hint.style.color = '#666';
-    }
-  } catch (err) {
-    const hint = document.getElementById('timezone-hint');
-    if (hint) {
-      hint.textContent = 'Click Auto to detect system timezone';
-      hint.style.color = '#666';
-    }
-  }
 }
 
 /**
@@ -1136,25 +1477,13 @@ function renderDoserConfigurationForm(device: DoserDevice): string {
             <label>Name:</label>
             <input type="text" id="device-name" value="${device.name || ''}" placeholder="Enter device name">
           </div>
-          <div class="form-group">
-            <label>Timezone:</label>
-            <div style="display: flex; gap: 8px; align-items: center;">
-              <input type="text" id="device-timezone" value="${device.timezone}" placeholder="e.g., America/New_York" style="flex: 1;">
-              <button type="button" class="btn btn-secondary" onclick="window.useSystemTimezone()" title="Use system timezone">
-                🌍 Auto
-              </button>
-            </div>
-            <small style="color: #666; font-size: 12px;" id="timezone-hint">
-              Current system timezone will be detected automatically
-            </small>
-          </div>
         </div>
       </div>
 
       <div class="form-section">
         <h3>Dosing Heads Configuration</h3>
         <div class="heads-container">
-          ${heads.map((head, index) => renderHeadConfiguration(head, index)).join('')}
+          ${heads.map((head: any, index: number) => renderHeadConfiguration(head, index)).join('')}
         </div>
       </div>
 
@@ -1215,13 +1544,6 @@ function renderHeadConfiguration(head: any, index: number): string {
               </label>
             `).join('')}
           </div>
-        </div>
-
-        <div class="form-group">
-          <label>Calibration (mL/second):</label>
-          <input type="number" step="0.1" value="${head.calibration?.mlPerSecond || 1.0}"
-                 onchange="window.updateCalibration(${head.index}, this.value)"
-                 ${!head.active ? 'disabled' : ''}>
         </div>
       </div>
     </div>
@@ -1401,12 +1723,10 @@ function renderScheduleDetails(schedule: any, headIndex: number): string {
   if (!currentConfigDevice) return;
 
   try {
-    // Update device name and timezone from form
+    // Update device name from form
     const nameInput = document.getElementById('device-name') as HTMLInputElement;
-    const timezoneInput = document.getElementById('device-timezone') as HTMLInputElement;
 
     if (nameInput) currentConfigDevice.name = nameInput.value;
-    if (timezoneInput) currentConfigDevice.timezone = timezoneInput.value;
 
     const { updateDoserConfiguration } = await import("../api/configurations");
     await updateDoserConfiguration(deviceId, currentConfigDevice);
@@ -1554,5 +1874,120 @@ function convertRecurrenceToBLEWeekdays(recurrence: any): number[] | undefined {
 // Global state for the current configuration being edited
 let currentConfigDevice: DoserDevice | null = null;
 
+// ============================================================================
+// Wattage Calculator Global Functions
+// ============================================================================
+
+/**
+ * Calculate and display wattage results from input fields
+ */
+(window as any).calculateWattageFromInputs = () => {
+  try {
+    const red = parseInt((document.getElementById('watt-red') as HTMLInputElement)?.value || '0');
+    const green = parseInt((document.getElementById('watt-green') as HTMLInputElement)?.value || '0');
+    const blue = parseInt((document.getElementById('watt-blue') as HTMLInputElement)?.value || '0');
+    const white = parseInt((document.getElementById('watt-white') as HTMLInputElement)?.value || '0');
+
+    const result = calculateLightWattage({ red, green, blue, white });
+    displayWattageResults(result);
+  } catch (error) {
+    console.error('Error calculating wattage:', error);
+    const resultsEl = document.getElementById('wattage-results');
+    if (resultsEl) {
+      resultsEl.innerHTML = `<div style="color: red;">Error calculating wattage: ${error}</div>`;
+    }
+  }
+};
+
+/**
+ * Set test case values and calculate wattage
+ */
+(window as any).setWattageTestCase = (red: number, green: number, blue: number, white: number) => {
+  const redEl = document.getElementById('watt-red') as HTMLInputElement;
+  const greenEl = document.getElementById('watt-green') as HTMLInputElement;
+  const blueEl = document.getElementById('watt-blue') as HTMLInputElement;
+  const whiteEl = document.getElementById('watt-white') as HTMLInputElement;
+
+  if (redEl) redEl.value = red.toString();
+  if (greenEl) greenEl.value = green.toString();
+  if (blueEl) blueEl.value = blue.toString();
+  if (whiteEl) whiteEl.value = white.toString();
+
+  (window as any).calculateWattageFromInputs();
+};
+
+/**
+ * Display wattage calculation results
+ */
+function displayWattageResults(result: WattageCalculationResult) {
+  const resultsEl = document.getElementById('wattage-results');
+  if (!resultsEl) return;
+
+  resultsEl.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 20px;">
+      <!-- Total Wattage -->
+      <div style="text-align: center;">
+        <div style="font-size: 24px; font-weight: bold; color: var(--gray-900); margin-bottom: 8px;">
+          Total: ${formatWattage(result.totalWattage)}
+        </div>
+        ${result.powerLimited ? `
+          <div style="color: #f59e0b; font-weight: 600; background: #fef3c7; padding: 8px 12px; border-radius: 6px; display: inline-block;">
+            ⚠️ Power Limited: Requested ${formatWattage(result.requestedWattage)} but limited to ${formatWattage(result.totalWattage)}
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Calculation Breakdown -->
+      <div>
+        <h4 style="margin: 0 0 12px 0; color: var(--gray-900);">Calculation Breakdown</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px;">
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #fbbf24; font-weight: bold; margin-bottom: 4px;">Step Sum</div>
+            <div>${formatWattage(result.stepSum)}</div>
+          </div>
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #a78bfa; font-weight: bold; margin-bottom: 4px;">Embedded Base</div>
+            <div>${formatWattage(result.embeddedBaseSum)}</div>
+          </div>
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #34d399; font-weight: bold; margin-bottom: 4px;">Shared Base</div>
+            <div>${formatWattage(result.sharedBase)}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Individual Channel Wattages -->
+      <div>
+        <h4 style="margin: 0 0 12px 0; color: var(--gray-900);">Individual Channel Wattages</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px;">
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #ef4444; font-weight: bold; margin-bottom: 4px;">Red</div>
+            <div>${formatWattage(result.channelWattages.red)}</div>
+          </div>
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #22c55e; font-weight: bold; margin-bottom: 4px;">Green</div>
+            <div>${formatWattage(result.channelWattages.green)}</div>
+          </div>
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #3b82f6; font-weight: bold; margin-bottom: 4px;">Blue</div>
+            <div>${formatWattage(result.channelWattages.blue)}</div>
+          </div>
+          <div style="text-align: center; padding: 12px; background: white; border: 1px solid var(--gray-200); border-radius: 6px;">
+            <div style="color: #64748b; font-weight: bold; margin-bottom: 4px;">White</div>
+            <div>${formatWattage(result.channelWattages.white)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // Auto-load configurations on module load (after handlers are registered)
 loadAllConfigurations();
+
+// Initialize wattage calculator when dev tab is loaded
+setTimeout(() => {
+  if (document.getElementById('watt-red')) {
+    (window as any).calculateWattageFromInputs();
+  }
+}, 100);

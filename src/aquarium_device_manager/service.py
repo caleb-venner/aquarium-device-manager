@@ -142,8 +142,10 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
 
     from .config_migration import get_env_with_fallback
 
-    host = get_env_with_fallback("AQUA_BLE_SERVICE_HOST", "0.0.0.0")
-    port = int(get_env_with_fallback("AQUA_BLE_SERVICE_PORT", "8000"))
+    host = (
+        get_env_with_fallback("AQUA_BLE_SERVICE_HOST", "0.0.0.0") or "0.0.0.0"
+    )
+    port = int(get_env_with_fallback("AQUA_BLE_SERVICE_PORT", "8000") or "8000")
 
     uvicorn.run(
         "aquarium_device_manager.service:app",

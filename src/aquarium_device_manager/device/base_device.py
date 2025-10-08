@@ -1,9 +1,10 @@
 """Module defining a base device class."""
 
+import abc
 import asyncio
 import logging
-from abc import ABC, ABCMeta
-from typing import ClassVar, Optional, cast
+from abc import ABC
+from typing import ClassVar, Optional
 
 from bleak.backends.device import BLEDevice
 from bleak.backends.scanner import AdvertisementData
@@ -29,9 +30,16 @@ DISCONNECT_DELAY = 120
 BLEAK_BACKOFF_TIME = 0.25
 
 
-class _classproperty(property):
-    def __get__(self, owner_self: object, owner_cls: ABCMeta) -> str:
-        return cast(str, self.fget(owner_cls))
+class _classproperty:
+    """A descriptor that works like @property but for class attributes."""
+
+    def __init__(self, func):
+        self.func = func
+
+    def __get__(self, instance, owner):
+        if self.func is None:
+            raise AttributeError("classproperty has no getter")
+        return self.func(owner)
 
 
 class BaseDevice(ABC):
@@ -124,6 +132,13 @@ class BaseDevice(ABC):
         if self._advertisement_data:
             return self._advertisement_data.rssi
         return None
+
+    # Abstract methods for subclasses
+
+    @abc.abstractmethod
+    async def request_status(self) -> None:
+        """Send a request to the device to get its current status."""
+        pass
 
     # Command methods
 
@@ -309,10 +324,15 @@ class BaseDevice(ABC):
                 self.name,
                 self.rssi,
             )
-            await client.start_notify(
-                self._read_char,
-                self._notification_handler,  # type: ignore[arg-type]
-            )
+            if self._read_char is not None:
+                await client.start_notify(
+                    self._read_char,
+                    self._notification_handler,  # type: ignore[arg-type]
+                )
+            else:
+                raise CharacteristicMissingError(
+                    "Read characteristic not resolved"
+                )
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""

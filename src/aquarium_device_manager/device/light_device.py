@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import ClassVar, Optional
 
-from bleak.backends.service import BleakGATTCharacteristic
+from bleak.backends.characteristic import BleakGATTCharacteristic
 
 from ..commands import encoder as commands
 from ..light_status import ParsedLightStatus, parse_light_payload
@@ -15,7 +15,7 @@ class LightDevice(BaseDevice):
     """Base class for Chihiros lights that can request status updates."""
 
     device_kind: ClassVar[str] = "light"
-    status_serializer: ClassVar[str] = "serialize_light_status"
+    status_serializer: ClassVar[str | None] = "serialize_light_status"
     _last_status: Optional[ParsedLightStatus] = None
 
     async def request_status(self) -> None:

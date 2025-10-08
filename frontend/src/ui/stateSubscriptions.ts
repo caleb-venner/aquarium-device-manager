@@ -6,13 +6,18 @@ import { renderNotifications } from "./notifications";
 let unsubscribeCallbacks: (() => void)[] = [];
 
 export function setupStateSubscriptions(): void {
+  let previousDevicesSize = deviceStore.getState().devices.size;
+  let previousUI = deviceStore.getState().ui;
+  let previousQueueLength = deviceStore.getState().commandQueue.length;
+
   // Subscribe to device changes
   const unsubscribeDevices = deviceStore.subscribe(
-    (state) => state.devices,
-    (devices, prevDevices) => {
+    (state) => {
+      const devices = state.devices;
       // Only update if the device data actually changed
-      if (devices !== prevDevices) {
+      if (devices.size !== previousDevicesSize) {
         console.log(`Device state changed: ${devices.size} devices`);
+        previousDevicesSize = devices.size;
         updateDashboardView();
       }
     }
@@ -20,28 +25,31 @@ export function setupStateSubscriptions(): void {
 
   // Subscribe to UI state changes
   const unsubscribeUI = deviceStore.subscribe(
-    (state) => state.ui,
-    (ui, prevUI) => {
+    (state) => {
+      const ui = state.ui;
       // Update dashboard for loading/scanning state changes
-      if (ui.isScanning !== prevUI?.isScanning ||
-          ui.scanResults.length !== prevUI?.scanResults.length ||
-          ui.globalError !== prevUI?.globalError) {
+      if (ui.isScanning !== previousUI.isScanning ||
+          ui.scanResults.length !== previousUI.scanResults.length ||
+          ui.globalError !== previousUI.globalError) {
         updateDashboardView();
       }
 
       // Update notifications when they change
-      if (ui.notifications.length !== prevUI?.notifications.length) {
+      if (ui.notifications.length !== previousUI.notifications.length) {
         renderNotifications();
       }
+
+      previousUI = ui;
     }
   );
 
   // Subscribe to command queue changes
   const unsubscribeQueue = deviceStore.subscribe(
-    (state) => state.commandQueue,
-    (queue, prevQueue) => {
-      if (queue.length !== prevQueue?.length) {
+    (state) => {
+      const queue = state.commandQueue;
+      if (queue.length !== previousQueueLength) {
         console.log(`Command queue changed: ${queue.length} commands`);
+        previousQueueLength = queue.length;
         // Update any UI elements that show command queue status
         updateCommandQueueIndicator(queue.length);
       }

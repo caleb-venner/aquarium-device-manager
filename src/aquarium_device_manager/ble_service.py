@@ -13,42 +13,34 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, is_dataclass
-from typing import Any, Dict, Optional, Sequence, cast
+from datetime import time as _time
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    cast,
+)
 
+from bleak import BleakScanner
+from bleak.backends.device import BLEDevice
+from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
 from fastapi import HTTPException
 
+from . import serializers as _serializers
+from .commands import encoder as commands
+from .commands import encoder as doser_commands
+from .commands import ops as device_commands
 from .config_migration import (
     get_config_dir,
     get_env_bool,
     get_env_float,
     get_env_with_fallback,
 )
-
-try:
-    from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
-except ImportError:  # pragma: no cover - fallback if library changes
-
-    class BleakNotFoundError(Exception):
-        """Placeholder when bleak_retry_connector is unavailable."""
-
-        pass
-
-    class BleakConnectionError(Exception):
-        """Placeholder when bleak_retry_connector is unavailable."""
-
-        pass
-
-
-from datetime import time as _time
-from typing import AsyncIterator, Iterable, Tuple, Type
-
-from bleak import BleakScanner
-from bleak.backends.device import BLEDevice
-
-from . import serializers as _serializers
-from .commands import encoder as commands
-from .commands import encoder as doser_commands
-from .commands import ops as device_commands
 from .device import (
     Doser,
     LightDevice,
@@ -111,8 +103,11 @@ async def device_session(address: str) -> AsyncIterator[BaseDevice]:
 # Persistence and runtime configuration
 CONFIG_DIR = get_config_dir()
 STATE_PATH = CONFIG_DIR / "state.json"
-DOSER_CONFIG_PATH = CONFIG_DIR / "doser_configs.json"
-LIGHT_PROFILE_PATH = CONFIG_DIR / "light_profiles.json"
+DEVICE_CONFIG_PATH = (
+    CONFIG_DIR / "devices"
+)  # Unified directory for all device files
+DOSER_CONFIG_PATH = DEVICE_CONFIG_PATH  # Backward compatibility alias
+LIGHT_PROFILE_PATH = DEVICE_CONFIG_PATH  # Now uses same unified storage
 
 # Environment variable names (new naming)
 AUTO_RECONNECT_ENV = "AQUA_BLE_AUTO_RECONNECT"
@@ -131,7 +126,9 @@ def _get_env_bool(name: str, default: bool) -> bool:
 
 # Module logger
 logger = logging.getLogger("aquarium_device_manager.service")
-_default_level = get_env_with_fallback("AQUA_BLE_LOG_LEVEL", "INFO").upper()
+_default_level = (
+    get_env_with_fallback("AQUA_BLE_LOG_LEVEL", "INFO") or "INFO"
+).upper()
 if not logging.getLogger().handlers:
     logging.basicConfig(
         level=getattr(logging, _default_level, logging.INFO),
@@ -180,7 +177,7 @@ class BLEService:
         from .light_storage import LightStorage
 
         self._doser_storage = DoserStorage(DOSER_CONFIG_PATH)
-        self._light_storage = LightStorage(LIGHT_PROFILE_PATH)
+        self._light_storage = LightStorage(DEVICE_CONFIG_PATH)
         logger.info(
             "Configuration storage initialized: doser=%s, light=%s",
             DOSER_CONFIG_PATH,
@@ -347,6 +344,13 @@ class BLEService:
             )
             if serializer_name is None:
                 serializer_name = getattr(device, "status_serializer", None)
+
+        if serializer_name is None:
+            raise HTTPException(
+                status_code=500,
+                detail=f"No serializer defined for {normalized}",
+            )
+
         serializer = getattr(_serializers, serializer_name, None)
         if serializer is None:  # pragma: no cover - defensive guard
             raise HTTPException(

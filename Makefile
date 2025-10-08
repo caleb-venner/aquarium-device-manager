@@ -4,7 +4,7 @@
 AQUA_BLE_AUTO_DISCOVER ?= 0
 export AQUA_BLE_AUTO_DISCOVER
 
-.PHONY: help dev dev-front dev-back build front-build lint test precommit
+.PHONY: help dev dev-front dev-back build front-build lint test precommit clean
 
 help:
 	@echo "make dev        # run frontend (vite) and backend (uvicorn)"
@@ -15,6 +15,7 @@ help:
 	@echo "make lint       # run pre-commit on all files"
 	@echo "make test       # run pytest"
 	@echo "make precommit  # install and run pre-commit hooks"
+	@echo "make clean      # delete all saved device state and configs"
 
 VENV?=.venv
 PY?=python3
@@ -41,7 +42,7 @@ dev-back:
 dev:
 	@echo "Starting dev servers (frontend + backend)"
 	@echo "Tip: In VS Code, run the 'dev: full stack' task to launch both in background."
-	@$(MAKE) -j2 AQUA_BLE_AUTO_DISCOVER=1 dev-front dev-back
+	@$(MAKE) -j2 AQUA_BLE_AUTO_DISCOVER=0 dev-front dev-back
 
 # Build & quality
 
@@ -64,3 +65,19 @@ precommit:
 
 test:
 	pytest -q
+
+# Cleanup
+
+clean:
+	@echo "🧹 Cleaning aquarium device manager state and configs..."
+	@echo "📋 This will remove:"
+	@echo "   • Device connection state and cache"
+	@echo "   • Saved device configurations (dosers, lights)"
+	@echo "   • Command history and runtime data"
+	@if [ -d "$$HOME/.aqua-ble" ]; then \
+		echo "📁 Removing $$HOME/.aqua-ble directory..."; \
+		rm -rf "$$HOME/.aqua-ble"; \
+		echo "✅ Cleaned: All device state, configurations, and cache data removed"; \
+	else \
+		echo "✨ Already clean: No $$HOME/.aqua-ble directory found"; \
+	fi

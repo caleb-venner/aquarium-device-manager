@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import ClassVar, Sequence
 
-from bleak.backends.service import BleakGATTCharacteristic
+from bleak.backends.characteristic import BleakGATTCharacteristic
 
 from ..commands import encoder as doser_commands
 from ..doser_status import DoserStatus, parse_doser_payload
@@ -16,7 +16,7 @@ class Doser(BaseDevice):
     """Chihiros four-head dosing pump."""
 
     device_kind: ClassVar[str] = "doser"
-    status_serializer: ClassVar[str] = "serialize_doser_status"
+    status_serializer: ClassVar[str | None] = "serialize_doser_status"
     _model_name = "Dosing Pump"
     _model_codes = ["DYDOSE"]
     _colors: dict[str, int] = {}
@@ -93,7 +93,9 @@ class Doser(BaseDevice):
                 self.get_next_msg_id(), head_index, hour, minute
             ),
         ]
-        await self._send_command(command_batch, 3)
+        # Convert bytearray commands to bytes for _send_command
+        command_bytes = [bytes(cmd) for cmd in command_batch]
+        await self._send_command(command_bytes, 3)
 
         if not confirm:
             return None

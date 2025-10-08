@@ -11,7 +11,7 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..ble_service import DOSER_CONFIG_PATH, LIGHT_PROFILE_PATH
+from ..ble_service import DEVICE_CONFIG_PATH, DOSER_CONFIG_PATH
 from ..doser_storage import DoserDevice, DoserStorage
 from ..light_storage import LightDevice, LightStorage
 
@@ -27,7 +27,7 @@ def get_doser_storage() -> DoserStorage:
 
 def get_light_storage() -> LightStorage:
     """Get LightStorage instance."""
-    return LightStorage(LIGHT_PROFILE_PATH)
+    return LightStorage(DEVICE_CONFIG_PATH)
 
 
 # ============================================================================
@@ -304,7 +304,7 @@ async def get_configuration_summary(
             },
             "storage_paths": {
                 "doser_configs": str(DOSER_CONFIG_PATH),
-                "light_profiles": str(LIGHT_PROFILE_PATH),
+                "light_profiles": str(DEVICE_CONFIG_PATH),
             },
         }
     except Exception as e:

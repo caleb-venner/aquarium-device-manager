@@ -360,56 +360,118 @@ def _validate_profile_for_channels(
 
 
 class LightStorage:
-    """A lightweight JSON-backed store for light device profiles."""
+    """A lightweight JSON-backed store for light device profiles.
 
-    def __init__(self, path: Path | str):
-        """Initialize storage and load existing collection from disk if present."""
-        self._path = Path(path)
-        self._collection = self._read()
+    Utilises unified device storage.
+    """
+
+    def __init__(self, storage_dir: Path | str):
+        """Initialize storage with unified directory structure.
+
+        Args:
+            storage_dir: Directory containing individual device files
+        """
+        self._storage_dir = Path(storage_dir)
+        self._storage_dir.mkdir(parents=True, exist_ok=True)
+
+    def _get_device_file(self, device_id: str) -> Path:
+        """Get the file path for a specific device.
+
+        Args:
+            device_id: Device identifier (MAC address)
+
+        Returns:
+            Path to the device's configuration file
+        """
+        safe_id = device_id.replace(":", "_")
+        return self._storage_dir / f"{safe_id}.json"
+
+    def _read_device(self, device_id: str) -> LightDevice | None:
+        """Read a device configuration from its individual file."""
+        device_file = self._get_device_file(device_id)
+        if not device_file.exists():
+            return None
+
+        try:
+            raw = device_file.read_text(encoding="utf-8").strip()
+            if not raw:
+                return None
+
+            data = json.loads(raw)
+
+            # Validate device type for safety
+            if data.get("device_type") != "light":
+                return None
+
+            # Extract the device data (skip metadata)
+            device_data = data.get("device_data", data)
+            return LightDevice.model_validate(device_data)
+        except (json.JSONDecodeError, ValueError) as exc:
+            # Log error but don't crash
+            import logging
+
+            logging.getLogger(__name__).error(
+                f"Could not parse light device {device_id}: {exc}"
+            )
+            return None
+
+    def _write_device(self, device: LightDevice) -> None:
+        """Write a device configuration to its individual file."""
+        device_file = self._get_device_file(device.id)
+
+        # Wrap device data with metadata
+        data = {
+            "device_type": "light",
+            "device_id": device.id,
+            "last_updated": _now_iso(),
+            "device_data": device.model_dump(mode="json"),
+        }
+
+        tmp_path = device_file.with_suffix(".tmp")
+        tmp_path.write_text(
+            json.dumps(data, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        tmp_path.replace(device_file)
 
     def list_devices(self) -> list[LightDevice]:
         """Return all persisted light devices."""
-        return list(self._collection.devices)
+        devices = []
+        for device_file in self._storage_dir.glob("*.json"):
+            device = self._read_device(device_file.stem.replace("_", ":"))
+            if device:
+                devices.append(device)
+        return devices
 
     def get_device(self, device_id: str) -> LightDevice | None:
         """Return a light device by id or None if not found."""
-        return next(
-            (
-                device
-                for device in self._collection.devices
-                if device.id == device_id
-            ),
-            None,
-        )
+        return self._read_device(device_id)
 
     def upsert_device(self, device: LightDevice | dict) -> LightDevice:
-        """Insert or update a device and persist the collection."""
+        """Insert or update a device and persist it."""
         model = self._validate_device(device)
-        existing = self.get_device(model.id)
-        if existing is None:
-            self._collection.devices.append(model)
-        else:
-            idx = self._collection.devices.index(existing)
-            self._collection.devices[idx] = model
-        self._write()
+        self._write_device(model)
         return model
 
     def upsert_many(
         self, devices: Iterable[LightDevice | dict]
     ) -> list[LightDevice]:
-        """Replace the entire device collection with the provided devices."""
-        models = [self._validate_device(device) for device in devices]
-        self._collection = LightDeviceCollection(devices=models)
-        self._write()
+        """Insert or update multiple devices."""
+        models = []
+        for device in devices:
+            model = self._validate_device(device)
+            self._write_device(model)
+            models.append(model)
         return models
 
     def delete_device(self, device_id: str) -> bool:
-        """Remove a device by id from the collection, returning True if removed."""
-        for idx, device in enumerate(self._collection.devices):
-            if device.id == device_id:
-                del self._collection.devices[idx]
-                self._write()
+        """Remove a device by id, returning True if removed."""
+        device_file = self._get_device_file(device_id)
+        if device_file.exists():
+            try:
+                device_file.unlink()
                 return True
+            except OSError:
+                return False
         return False
 
     def list_configurations(self, device_id: str) -> list[LightConfiguration]:
@@ -474,7 +536,7 @@ class LightStorage:
         configuration.updatedAt = timestamp
         if set_active or device.activeConfigurationId is None:
             device.activeConfigurationId = configuration.id
-        self._write()
+        self._write_device(device)
         return configuration
 
     def add_revision(
@@ -510,7 +572,7 @@ class LightStorage:
         device.updatedAt = timestamp
         if set_active:
             device.activeConfigurationId = configuration.id
-        self._write()
+        self._write_device(device)
         return revision
 
     def set_active_configuration(
@@ -521,7 +583,7 @@ class LightStorage:
         configuration = device.get_configuration(configuration_id)
         device.activeConfigurationId = configuration.id
         device.updatedAt = _now_iso()
-        self._write()
+        self._write_device(device)
         return configuration
 
     def _validate_device(self, device: LightDevice | dict) -> LightDevice:
@@ -541,32 +603,6 @@ class LightStorage:
         if device is None:
             raise KeyError(device_id)
         return device
-
-    def _read(self) -> LightDeviceCollection:
-        if not self._path.exists():
-            return LightDeviceCollection()
-
-        raw = self._path.read_text(encoding="utf-8").strip()
-        if not raw:
-            return LightDeviceCollection()
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Could not parse light storage JSON: {exc}"
-            ) from exc
-
-        return LightDeviceCollection.model_validate(data)
-
-    def _write(self) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = self._collection.model_dump(mode="json")
-        tmp_path = self._path.with_suffix(".tmp")
-        tmp_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        tmp_path.replace(self._path)
 
 
 __all__ = [

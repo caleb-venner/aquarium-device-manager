@@ -56,7 +56,7 @@ def create_default_doser_config(
     default_heads = []
     for idx in range(1, 5):
         head = DoserHead(
-            index=idx,
+            index=idx,  # type: ignore[arg-type]
             label=f"Head {idx}",
             active=False,
             schedule=SingleSchedule(
@@ -132,7 +132,9 @@ def create_doser_config_from_status(
         is_active = head_snap.mode != 0x04  # 0x04 is disabled mode
 
         head = DoserHead(
-            index=head_snap.mode + 1 if head_snap.mode < 4 else 1,
+            index=(
+                head_snap.mode + 1 if head_snap.mode < 4 else 1
+            ),  # type: ignore[arg-type]
             active=is_active,
             schedule=SingleSchedule(
                 mode="single",
@@ -389,7 +391,8 @@ def update_light_manual_profile(
     from .light_storage import ManualProfile
 
     # Get active profile
-    active_profile = device.get_active_profile()
+    active_config = device.get_active_configuration()
+    active_profile = active_config.latest_revision()
 
     # Update or create manual profile
     if isinstance(active_profile.profile, ManualProfile):
@@ -400,7 +403,7 @@ def update_light_manual_profile(
         active_profile.profile = ManualProfile(mode="manual", levels=levels)
 
     timestamp = _now_iso()
-    active_profile.updatedAt = timestamp
+    active_config.updatedAt = timestamp
     device.updatedAt = timestamp
 
     logger.info(f"Updated light {device.id} manual profile: {levels}")
@@ -424,7 +427,8 @@ def update_light_brightness(
     from .light_storage import ManualProfile
 
     # Get active profile
-    active_profile = device.get_active_profile()
+    active_config = device.get_active_configuration()
+    active_profile = active_config.latest_revision()
 
     # Determine which channel to update
     if color < len(device.channels):
@@ -444,7 +448,7 @@ def update_light_brightness(
     active_profile.profile = ManualProfile(mode="manual", levels=levels)
 
     timestamp = _now_iso()
-    active_profile.updatedAt = timestamp
+    active_config.updatedAt = timestamp
     device.updatedAt = timestamp
 
     logger.info(
@@ -479,7 +483,8 @@ def add_light_auto_program(
 
     from .light_storage import AutoProfile, AutoProgram
 
-    active_profile = device.get_active_profile()
+    active_config = device.get_active_configuration()
+    active_profile = active_config.latest_revision()
 
     # Ensure we have an auto profile
     if not isinstance(active_profile.profile, AutoProfile):
@@ -492,11 +497,14 @@ def add_light_auto_program(
     levels = {ch.key: brightness for ch in device.channels}
 
     # Create new auto program
+    default_weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    program_days = weekdays or default_weekdays
+
     new_program = AutoProgram(
         id=str(uuid4()),
         label=f"Auto {sunrise}-{sunset}",
         enabled=True,
-        days=weekdays or ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        days=program_days,  # type: ignore[arg-type]
         sunrise=sunrise,
         sunset=sunset,
         rampMinutes=ramp_up_minutes,
@@ -507,7 +515,7 @@ def add_light_auto_program(
     active_profile.profile.programs.append(new_program)
 
     timestamp = _now_iso()
-    active_profile.updatedAt = timestamp
+    active_config.updatedAt = timestamp
     device.updatedAt = timestamp
 
     logger.info(f"Added auto program to light {device.id}: {sunrise}-{sunset}")

@@ -1,8 +1,7 @@
 """Persistent storage models and helpers for Chihiros dosing pumps.
 
-This module mirrors the structure defined in ``tests/doser_structure.ts`` so that the
-backend can validate and persist dosing pump configurations exactly as the
-frontend expects them.
+This module provides individual file-based storage for each device,
+with each device configuration saved as a separate JSON file named by MAC address.
 """
 
 from __future__ import annotations
@@ -296,46 +295,6 @@ class DoserDevice(BaseModel):
 
     """Top-level device model for a dosing pump, including configs."""
 
-    @model_validator(mode="before")
-    def migrate_legacy_heads(cls, data: object) -> object:
-        """Support legacy payloads that provide `heads` at the top level.
-
-        This migrates old payload shapes into the newer `configurations`
-        structure when necessary.
-        """
-        if not isinstance(data, dict):
-            return data
-
-        if "configurations" in data and data["configurations"]:
-            data.pop("heads", None)
-            return data
-
-        heads = data.pop("heads", None)
-        if not heads:
-            raise ValueError(
-                "Legacy doser payload must include heads when configurations are absent"
-            )
-
-        timestamp = data.get("updatedAt") or data.get("createdAt") or _now_iso()
-        config_id = data.get("activeConfigurationId") or "default"
-        configuration = {
-            "id": config_id,
-            "name": data.get("name") or "Default",
-            "createdAt": data.get("createdAt") or timestamp,
-            "updatedAt": timestamp,
-            "revisions": [
-                {
-                    "revision": 1,
-                    "savedAt": timestamp,
-                    "heads": heads,
-                }
-            ],
-        }
-
-        data["configurations"] = [configuration]
-        data["activeConfigurationId"] = config_id
-        return data
-
     @model_validator(mode="after")
     def validate_configurations(self) -> "DoserDevice":
         """Validate the device has configurations and an active selection."""
@@ -385,57 +344,128 @@ class DoserDeviceCollection(BaseModel):
 
 
 class DoserStorage:
-    """A lightweight JSON-backed store for dosing pump configurations."""
+    """A lightweight JSON-backed store for dosing pump configurations.
+
+    Each device is stored in its own JSON file named by MAC address.
+    For example: ~/.aqua-ble/doser_configs/58159AE1-5E0A-7915-3207-7868CBF2C600.json
+    """
 
     def __init__(self, path: Path | str):
-        """Initialize the storage backed by the given file path."""
-        self._path = Path(path)
-        self._collection = self._read()
+        """Initialize the storage backed by the given directory path."""
+        self._base_path = Path(path)
+
+        # Ensure the directory exists
+        self._base_path.mkdir(parents=True, exist_ok=True)
+
+    def _get_device_file_path(self, device_id: str) -> Path:
+        """Get the file path for a specific device."""
+        return self._base_path / f"{device_id}.json"
+
+    def _read_device_file(self, device_id: str) -> DoserDevice | None:
+        """Read a single device from its JSON file."""
+        device_file = self._get_device_file_path(device_id)
+        if not device_file.exists():
+            return None
+
+        try:
+            raw = device_file.read_text(encoding="utf-8").strip()
+            if not raw:
+                return None
+
+            data = json.loads(raw)
+
+            # Handle both old format (direct device data) and new format (with metadata)
+            if "device_type" in data:
+                # New format with metadata
+                if data.get("device_type") != "doser":
+                    return None  # Wrong device type
+                device_data = data.get("device_data", data)
+            else:
+                # Old format (direct device data) - backward compatibility
+                device_data = data
+
+            return DoserDevice.model_validate(device_data)
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise ValueError(
+                f"Could not parse device file {device_file}: {exc}"
+            ) from exc
+
+    def _write_device_file(
+        self, device_file: Path, device: DoserDevice
+    ) -> None:
+        """Write a single device to its JSON file atomically with metadata."""
+        device_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Wrap device data with metadata for unified storage
+        data = {
+            "device_type": "doser",
+            "device_id": device.id,
+            "last_updated": _now_iso(),
+            "device_data": device.model_dump(mode="json"),
+        }
+
+        tmp_file = device_file.with_suffix(".tmp")
+        tmp_file.write_text(
+            json.dumps(data, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        tmp_file.replace(device_file)
+
+    def _list_device_files(self) -> list[Path]:
+        """List all device JSON files in the storage directory."""
+        if not self._base_path.exists():
+            return []
+        return list(self._base_path.glob("*.json"))
 
     def list_devices(self) -> list[DoserDevice]:
         """Return all persisted devices."""
-        return list(self._collection.devices)
+        devices = []
+        for device_file in self._list_device_files():
+            try:
+                device_id = device_file.stem  # filename without .json
+                device = self._read_device_file(device_id)
+                if device:
+                    devices.append(device)
+            except ValueError as exc:
+                # Log error but continue with other devices
+                print(
+                    f"Warning: Could not load device from {device_file}: {exc}"
+                )
+        return devices
 
     def get_device(self, device_id: str) -> DoserDevice | None:
         """Return a device by id or None if not found."""
-        return next(
-            (
-                device
-                for device in self._collection.devices
-                if device.id == device_id
-            ),
-            None,
-        )
+        return self._read_device_file(device_id)
 
     def upsert_device(self, device: DoserDevice | dict) -> DoserDevice:
-        """Insert or update a device and persist the collection."""
+        """Insert or update a device and persist to its individual file."""
         model = self._validate_device(device)
-        existing = self.get_device(model.id)
-        if existing is None:
-            self._collection.devices.append(model)
-        else:
-            idx = self._collection.devices.index(existing)
-            self._collection.devices[idx] = model
-        self._write()
+        device_file = self._get_device_file_path(model.id)
+        self._write_device_file(device_file, model)
         return model
 
     def upsert_many(
         self, devices: Iterable[DoserDevice | dict]
     ) -> list[DoserDevice]:
-        """Replace the entire collection with the provided devices."""
+        """Replace all devices with the provided devices."""
         models = [self._validate_device(device) for device in devices]
-        # Replace collection with validated list to ensure consistency
-        self._collection = DoserDeviceCollection(devices=models)
-        self._write()
+
+        # Remove all existing device files
+        for device_file in self._list_device_files():
+            device_file.unlink()
+
+        # Write new devices
+        for model in models:
+            device_file = self._get_device_file_path(model.id)
+            self._write_device_file(device_file, model)
+
         return models
 
     def delete_device(self, device_id: str) -> bool:
         """Delete a device by id, returning True if removed."""
-        for idx, device in enumerate(self._collection.devices):
-            if device.id == device_id:
-                del self._collection.devices[idx]
-                self._write()
-                return True
+        device_file = self._get_device_file_path(device_id)
+        if device_file.exists():
+            device_file.unlink()
+            return True
         return False
 
     def list_configurations(self, device_id: str) -> list[DeviceConfiguration]:
@@ -476,10 +506,19 @@ class DoserStorage:
             )
 
         timestamp = saved_at or _now_iso()
+        # Convert heads to proper DoserHead objects
+        validated_heads = [
+            (
+                head
+                if isinstance(head, DoserHead)
+                else DoserHead.model_validate(head)
+            )
+            for head in heads
+        ]
         revision = ConfigurationRevision(
             revision=1,
             savedAt=timestamp,
-            heads=list(heads),
+            heads=validated_heads,
             note=note,
             savedBy=saved_by,
         )
@@ -496,7 +535,9 @@ class DoserStorage:
         configuration.updatedAt = timestamp
         if set_active or device.activeConfigurationId is None:
             device.activeConfigurationId = configuration.id
-        self._write()
+
+        # Save the updated device
+        self.upsert_device(device)
         return configuration
 
     def add_revision(
@@ -508,27 +549,39 @@ class DoserStorage:
         note: str | None = None,
         saved_by: str | None = None,
         saved_at: str | None = None,
-        set_active: bool = False,
     ) -> ConfigurationRevision:
-        """Append a new revision to an existing configuration."""
+        """Add a new revision to an existing configuration."""
         device = self._require_device(device_id)
         configuration = device.get_configuration(configuration_id)
 
+        # Get next revision number
+        latest_revision = max(rev.revision for rev in configuration.revisions)
+        next_revision = latest_revision + 1
+
         timestamp = saved_at or _now_iso()
-        next_revision_number = configuration.latest_revision().revision + 1
+        # Convert heads to proper DoserHead objects
+        validated_heads = [
+            (
+                head
+                if isinstance(head, DoserHead)
+                else DoserHead.model_validate(head)
+            )
+            for head in heads
+        ]
         revision = ConfigurationRevision(
-            revision=next_revision_number,
+            revision=next_revision,
             savedAt=timestamp,
-            heads=list(heads),
+            heads=validated_heads,
             note=note,
             savedBy=saved_by,
         )
+
         configuration.revisions.append(revision)
         configuration.updatedAt = timestamp
         device.updatedAt = timestamp
-        if set_active:
-            device.activeConfigurationId = configuration.id
-        self._write()
+
+        # Save the updated device
+        self.upsert_device(device)
         return revision
 
     def set_active_configuration(
@@ -539,10 +592,11 @@ class DoserStorage:
         configuration = device.get_configuration(configuration_id)
         device.activeConfigurationId = configuration.id
         device.updatedAt = _now_iso()
-        self._write()
+
+        # Save the updated device
+        self.upsert_device(device)
         return configuration
 
-    # Internal helpers -------------------------------------------------
     def _validate_device(self, device: DoserDevice | dict) -> DoserDevice:
         """Validate or coerce an input into a DoserDevice model."""
         if isinstance(device, DoserDevice):
@@ -555,34 +609,6 @@ class DoserStorage:
         if device is None:
             raise KeyError(device_id)
         return device
-
-    def _read(self) -> DoserDeviceCollection:
-        """Read and parse the storage file into a DoserDeviceCollection."""
-        if not self._path.exists():
-            return DoserDeviceCollection()
-
-        raw = self._path.read_text(encoding="utf-8").strip()
-        if not raw:
-            return DoserDeviceCollection()
-
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise ValueError(
-                f"Could not parse doser storage JSON: {exc}"
-            ) from exc
-
-        return DoserDeviceCollection.model_validate(data)
-
-    def _write(self) -> None:
-        """Write the current collection state atomically to the storage file."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        payload = self._collection.model_dump(mode="json")
-        tmp_path = self._path.with_suffix(".tmp")
-        tmp_path.write_text(
-            json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8"
-        )
-        tmp_path.replace(self._path)
 
 
 __all__ = [

@@ -10,22 +10,8 @@ from __future__ import annotations
 from datetime import time as _time
 from typing import TYPE_CHECKING, Any, Sequence
 
+from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
 from fastapi import HTTPException
-
-try:
-    from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
-except ImportError:  # pragma: no cover - fallback if library changes
-
-    class BleakNotFoundError(Exception):
-        """Raised when a BLE device cannot be found during connection attempts."""
-
-        pass
-
-    class BleakConnectionError(Exception):
-        """Raised when a BLE connection attempt fails irrecoverably."""
-
-        pass
-
 
 from ..commands import encoder as doser_commands
 from .encoder import LightWeekday
