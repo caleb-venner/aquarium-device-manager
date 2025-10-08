@@ -2,38 +2,31 @@
 
 Maintained by **Caleb Venner**. This project builds on the open-source work published as [Chihiros LED Control](https://github.com/TheMicDiet/chihiros-led-control) by Michael Dietrich. The original project is licensed under MIT; all redistributions of this codebase continue to honour that license and retain the upstream attribution.
 
-Aquarium BLE Device Manager currently contains the historically shipped python **CLI** tooling alongside a new FastAPI-based BLE service for managing aquarium Bluetooth devices. The near-term roadmap focuses on a standalone service and accompanying Docker packaging.
+## Legal Disclaimer
+
+**This project is not affiliated with, endorsed by, or approved by Chihiros Aquatic Living or any of its subsidiaries.** This is an independent, open-source software project developed through reverse engineering and community contributions.
+
+- We do not reproduce, distribute, or claim ownership of any proprietary Chihiros software code
+- Device compatibility is based on publicly available Bluetooth Low Energy protocol analysis
+- Use of this software with Chihiros devices is at your own risk
+- "Chihiros" is a trademark of Chihiros Aquatic Living and is used here solely for device identification purposes
+- This software is provided "as-is" without warranty of any kind
 
 ## Supported Devices
 
-- [Chihiros LED A2](https://www.chihirosaquaticstudio.com/products/chihiros-a-ii-built-in-bluetooth)
-- [Chihiros WRGB II](https://www.chihirosaquaticstudio.com/products/chihiros-wrgb-ii-led-built-in-bluetooth) (Regular, Pro, Slim)
+- Chihiros 4 Head Dosing Pump
+- Chihiros LED A2
+- Chihiros WRGB II
 - Chihiros Tiny Terrarium Egg
 - Chihiros C II (RGB, White)
 - Chihiros Universal WRGB
 - Chihiros Z Light TINY
 - other LED models might work as well but are not tested
 
-
 ## Requirements
 
 - a device with bluetooth LE support for sending the commands to the LED
 - [Python 3.10+](https://www.python.org/downloads/) with pip
-
-## Using the CLI
-
-> **DEPRECATED**: The CLI is now a developer-only diagnostic tool. It performs
-> direct BLE operations and is **not recommended for production use**. For
-> day-to-day control, use the `chihiros-service` FastAPI backend + SPA at
-> <http://localhost:8000/>. The CLI will remain available for debugging purposes
-> but will not be further developed or integrated with the REST API.
-
-```bash
-# setup the environment
-python -m venv venv
-source venv/bin/activate
-pip install -e .
-```
 
 ## Usage
 
@@ -69,8 +62,6 @@ Equivalent REST endpoints are available if you prefer scripts:
 
 Optional automation: set `AQUA_BLE_AUTO_DISCOVER=1` to perform a one-off scan at startup (only when there are no cached devices) and attempt to connect to supported devices automatically.
 
-Tip: `make dev` now enables this flag automatically to smooth first-run setup. Override it when needed:
-
 ```bash
 # Disable auto-discover when launching both servers
 make dev AQUA_BLE_AUTO_DISCOVER=0
@@ -84,7 +75,7 @@ make dev-back AQUA_BLE_AUTO_DISCOVER=1
 
 The project now ships with an experimental SPA scaffold under the
 `frontend/` directory. It consumes the same REST endpoints exposed by the
-FastAPI service and will ultimately replace the HTMX templates.
+FastAPI service.
 
 Install dependencies and launch the Vite dev server (proxying API requests to
 the Python backend running on port 8000):
@@ -179,25 +170,20 @@ Containerised BLE access often requires forwarding the host adapter or
 running with elevated capabilities; adjust the `docker run` flags to suit
 your environment.
 
-
 ## Protocol
 
 The vendor app uses Bluetooth LE to communicate with the LED. The LED advertises a UART service with the UUID `6E400001-B5A3-F393-E0A9-E50E24DCCA9E`. This service contains a RX characteristic with the UUID `6E400002-B5A3-F393-E0A9-E50E24DCCA9E`. This characteristic can be used to send commands to the LED. The LED will respond to commands by sending a notification to the corresponding TX service with the UUID `6E400003-B5A3-F393-E0A9-E50E24DCCA9E`.
 
-
 The commands are sent as a byte array with the following structure:
-
 
 | Command ID | 1 | Command Length | Message ID High | Message ID Low | Mode | Parameters | Checksum |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-
 
 The checksum is calculated by XORing all bytes of the command together. The checksum is then added to the command as the last byte.
 
 The message id is a 16 bit number that is incremented with each command. It is split into two bytes. The first byte is the high byte and the second byte is the low byte.
 
 The command length is the number of parameters + 5.
-
 
 ### Manual Mode
 
@@ -208,7 +194,6 @@ The LED can be set to a specific brightness by sending the following command wit
 - Parameters: [ **Color** (0-2), **Brightness** (0 - 100)]
 
 On non-RGB models, the color parameter should be set to 0 to indicate white. On RGB models, each color's brightness is sent as a separate command. Red is 0, green is 1, blue is 2.
-
 
 ### Auto Mode
 
@@ -230,7 +215,6 @@ On non-RGB models, the desired brightness should be set as the red brightness wh
 
 To deactivate a setting, the same command can be used but the brightness has to be set to **255**.
 
-
 #### Set Time
 
 The current time is required for auto mode and can be set by sending the following command:
@@ -240,7 +224,6 @@ The current time is required for auto mode and can be set by sending the followi
 - Parameters: [ **year - 2000**, **month**, **weekday**, **hour**, **minute**, **second** ]
 
 - Weekday is 1 - 7 for Monday - Sunday
-
 
 #### Reset Auto Mode Settings
 
