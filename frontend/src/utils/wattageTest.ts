@@ -167,6 +167,9 @@ export function renderWattageTest(container: HTMLElement): void {
   } as const;
 
   function readValues(): ChannelValues {
+    if (!redInput || !greenInput || !blueInput || !whiteInput) {
+      throw new Error("Input elements not found");
+    }
     return {
       red: clampPercent(Number(redInput.value)),
       green: clampPercent(Number(greenInput.value)),
@@ -176,6 +179,9 @@ export function renderWattageTest(container: HTMLElement): void {
   }
 
   function writeValues(values: ChannelValues): void {
+    if (!redInput || !greenInput || !blueInput || !whiteInput) {
+      throw new Error("Input elements not found");
+    }
     redInput.value = String(values.red);
     greenInput.value = String(values.green);
     blueInput.value = String(values.blue);
