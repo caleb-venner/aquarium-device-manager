@@ -10,7 +10,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.responses import HTMLResponse
 
-from chihiros_device_manager.service import (
+from aquarium_device_manager.service import (
     SPA_UNAVAILABLE_MESSAGE,
     serve_spa,
     serve_spa_assets,
@@ -22,10 +22,10 @@ def test_root_reports_missing_spa(
 ) -> None:
     """Expose a helpful 503 when neither SPA bundle nor dev server exist."""
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", False
     )
     monkeypatch.setattr(
-        "chihiros_device_manager.service._proxy_dev_server",
+        "aquarium_device_manager.service._proxy_dev_server",
         AsyncMock(return_value=None),
     )
 
@@ -41,10 +41,10 @@ def test_root_serves_spa_when_dist_present(
     index_file = tmp_path / "index.html"
     index_file.write_text("<html><body>spa</body></html>", encoding="utf-8")
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", True
     )
     monkeypatch.setattr(
-        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+        "aquarium_device_manager.service.FRONTEND_DIST", tmp_path
     )
     response = asyncio.run(serve_spa())
     assert response.status_code == 200
@@ -58,10 +58,10 @@ def test_spa_asset_route_serves_static_file(
     asset = tmp_path / "vite.svg"
     asset.write_text("svg", encoding="utf-8")
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", True
     )
     monkeypatch.setattr(
-        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+        "aquarium_device_manager.service.FRONTEND_DIST", tmp_path
     )
 
     response = asyncio.run(serve_spa_assets("vite.svg"))
@@ -76,10 +76,10 @@ def test_spa_asset_route_returns_index_for_client_paths(
     index_file = tmp_path / "index.html"
     index_file.write_text("<html><body>spa</body></html>", encoding="utf-8")
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", True
     )
     monkeypatch.setattr(
-        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+        "aquarium_device_manager.service.FRONTEND_DIST", tmp_path
     )
 
     response = asyncio.run(serve_spa_assets("dashboard"))
@@ -92,10 +92,10 @@ def test_spa_asset_route_404_for_missing_files(
 ) -> None:
     """Missing assets should not fall back to the SPA index."""
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", True
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", True
     )
     monkeypatch.setattr(
-        "chihiros_device_manager.service.FRONTEND_DIST", tmp_path
+        "aquarium_device_manager.service.FRONTEND_DIST", tmp_path
     )
 
     with pytest.raises(HTTPException) as excinfo:
@@ -107,12 +107,12 @@ def test_spa_asset_route_404_for_missing_files(
 def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
     """Serve the SPA from the dev server when no build artifacts exist."""
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", False
     )
     proxied = HTMLResponse("dev")
     helper = AsyncMock(return_value=proxied)
     monkeypatch.setattr(
-        "chihiros_device_manager.service._proxy_dev_server", helper
+        "aquarium_device_manager.service._proxy_dev_server", helper
     )
 
     response = asyncio.run(serve_spa())
@@ -125,12 +125,12 @@ def test_spa_asset_route_proxies_dev_server(
 ) -> None:
     """Proxy SPA asset requests to the Vite dev server when available."""
     monkeypatch.setattr(
-        "chihiros_device_manager.service.SPA_DIST_AVAILABLE", False
+        "aquarium_device_manager.service.SPA_DIST_AVAILABLE", False
     )
     proxied = HTMLResponse("console.log('dev')")
     helper = AsyncMock(return_value=proxied)
     monkeypatch.setattr(
-        "chihiros_device_manager.service._proxy_dev_server", helper
+        "aquarium_device_manager.service._proxy_dev_server", helper
     )
 
     response = asyncio.run(serve_spa_assets("src/main.ts"))

@@ -1,6 +1,6 @@
 """Tests for doser decode tolerance of ±1 minute header/body mismatch."""
 
-from chihiros_device_manager.doser_status import parse_doser_payload
+from aquarium_device_manager.doser_status import parse_doser_payload
 
 
 def test_doser_status_parsing_tolerates_one_minute_mismatch():

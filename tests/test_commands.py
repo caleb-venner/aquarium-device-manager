@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from chihiros_device_manager.ble_service import BLEService
-from chihiros_device_manager.command_executor import CommandExecutor
-from chihiros_device_manager.commands_model import CommandRecord, CommandRequest
+from aquarium_device_manager.ble_service import BLEService
+from aquarium_device_manager.command_executor import CommandExecutor
+from aquarium_device_manager.commands_model import CommandRecord, CommandRequest
 
 
 @pytest.fixture

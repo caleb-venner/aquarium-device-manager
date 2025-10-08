@@ -9,9 +9,8 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from chihiros_device_manager.ble_service import CachedStatus
-from chihiros_device_manager.commands import encoder as doser_commands
-from chihiros_device_manager.service import app, service
+from aquarium_device_manager.ble_service import CachedStatus
+from aquarium_device_manager.service import app, service
 
 
 def _cached(device_type: str = "doser") -> CachedStatus:
@@ -41,78 +40,6 @@ def test_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(service, "_load_state", AsyncMock())
     with TestClient(app) as client:
         yield client
-
-
-def test_api_doser_schedule_normalizes_weekdays(
-    test_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Ensure schedule endpoint coerces weekday payloads correctly via HTTP."""
-    mocked = AsyncMock(return_value=_cached("doser"))
-    monkeypatch.setattr(service, "set_doser_schedule", mocked)
-    body = {
-        "head_index": 1,
-        "volume_tenths_ml": 25,
-        "hour": 6,
-        "minute": 30,
-        "weekdays": ["monday", "wednesday"],
-        "confirm": True,
-        "wait_seconds": 2.0,
-    }
-    resp = test_client.post("/api/dosers/AA:AA:AA:AA:AA:AA/schedule", json=body)
-    assert resp.status_code == 200
-    mocked.assert_awaited_once()
-    call_kwargs = mocked.await_args.kwargs
-    assert call_kwargs["head_index"] == 1
-    assert call_kwargs["volume_tenths_ml"] == 25
-    assert call_kwargs["hour"] == 6
-    assert call_kwargs["minute"] == 30
-    assert call_kwargs["wait_seconds"] == 2.0
-    assert call_kwargs["confirm"] is True
-    assert call_kwargs["weekdays"] == [
-        doser_commands.PumpWeekday.monday,
-        doser_commands.PumpWeekday.wednesday,
-    ]
-
-
-def test_api_light_brightness_passes_payload(
-    test_client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Verify light brightness endpoint forwards arguments via HTTP."""
-    mocked = AsyncMock(return_value=_cached("light"))
-    monkeypatch.setattr(service, "set_light_brightness", mocked)
-    body = {"brightness": 75, "color": "1"}
-    resp = test_client.post(
-        "/api/lights/11:22:33:44:55:66/brightness", json=body
-    )
-    assert resp.status_code == 200
-    mocked.assert_awaited_once()
-    call_kwargs = mocked.await_args.kwargs
-    assert call_kwargs["brightness"] == 75
-    assert call_kwargs["color"] == "1"
-
-
-def test_service_set_light_brightness_coerces_numeric_color(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Convert numeric colour strings to integers before forwarding."""
-    fake_light = type("FakeLight", (), {})()
-    fake_light.set_color_brightness = AsyncMock()
-
-    cached = _cached("light")
-
-    monkeypatch.setattr(
-        service, "_ensure_device", AsyncMock(return_value=fake_light)
-    )
-    monkeypatch.setattr(
-        service, "_refresh_device_status", AsyncMock(return_value=cached)
-    )
-
-    result = asyncio.run(
-        service.set_light_brightness("AA:BB", brightness=80, color="2")
-    )
-
-    fake_light.set_color_brightness.assert_awaited_once_with(80, 2)
-    assert result is cached
 
 
 def test_api_debug_live_status_returns_payload(

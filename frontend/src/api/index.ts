@@ -27,5 +27,31 @@ export {
   refreshDeviceStatus
 } from "./devices";
 
-// Legacy endpoints (for backwards compatibility)
-export * from "./legacy";
+// Configuration management
+export {
+  getDoserConfigurations,
+  getDoserConfiguration,
+  updateDoserConfiguration,
+  deleteDoserConfiguration,
+  getLightConfigurations,
+  getLightConfiguration,
+  updateLightConfiguration,
+  deleteLightConfiguration,
+  getConfigurationSummary,
+  formatMacAddress,
+  getShortDeviceName,
+  isValidTimeFormat,
+  sortAutoSettings,
+  validateDoserConfig,
+  validateLightProfile,
+} from "./configurations";
+
+export type {
+  DoserHead,
+  DoserDevice,
+  LightChannel,
+  AutoSetting,
+  LightProfile,
+  LightDevice,
+  ConfigurationSummary,
+} from "./configurations";

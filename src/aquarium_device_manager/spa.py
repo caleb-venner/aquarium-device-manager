@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
@@ -11,10 +10,12 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .config_migration import get_env_with_fallback
+
 PACKAGE_ROOT = Path(__file__).resolve().parent
 DEFAULT_FRONTEND_DIST = PACKAGE_ROOT.parent.parent / "frontend" / "dist"
 FRONTEND_DIST = Path(
-    os.getenv("CHIHIROS_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
+    get_env_with_fallback("AQUA_BLE_FRONTEND_DIST", str(DEFAULT_FRONTEND_DIST))
 )
 SPA_DIST_AVAILABLE = FRONTEND_DIST.exists()
 
@@ -28,7 +29,7 @@ SPA_UNAVAILABLE_MESSAGE = (
 )
 
 
-_DEV_SERVER_ENV = os.getenv("CHIHIROS_FRONTEND_DEV_SERVER", "").strip()
+_DEV_SERVER_ENV = get_env_with_fallback("AQUA_BLE_FRONTEND_DEV", "").strip()
 if _DEV_SERVER_ENV == "0":
     DEV_SERVER_CANDIDATES: tuple[httpx.URL, ...] = ()
 elif _DEV_SERVER_ENV:

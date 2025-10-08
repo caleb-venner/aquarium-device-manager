@@ -8,7 +8,6 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from .commands import LightWeekday
-from .commands import encoder as doser_commands
 
 
 def _normalize_weekdays_generic(
@@ -58,31 +57,6 @@ class ConnectRequest(BaseModel):
     """Payload for connecting a device to the service."""
 
     address: str
-
-
-class DoserScheduleRequest(BaseModel):
-    """Request model for updating or creating a dosing schedule."""
-
-    head_index: int = Field(..., ge=0, le=3)
-    volume_tenths_ml: int = Field(..., ge=0, le=0xFF)
-    hour: int = Field(..., ge=0, le=23)
-    minute: int = Field(..., ge=0, le=59)
-    weekdays: list[doser_commands.PumpWeekday] | None = None
-    confirm: bool = False
-    wait_seconds: float = Field(1.5, ge=0.0, le=30.0)
-
-    @field_validator("weekdays", mode="before")
-    def _normalize_weekdays(cls, value: Any) -> Any:
-        return _normalize_weekdays_generic(
-            value, doser_commands.PumpWeekday, None
-        )
-
-
-class LightBrightnessRequest(BaseModel):
-    """Request model for setting light brightness or colour."""
-
-    brightness: int = Field(..., ge=0, le=100)
-    color: str | int = 0
 
 
 class LightAutoSettingRequest(BaseModel):

@@ -1,6 +1,6 @@
 """Tests for encoder sanitization and framing helpers."""
 
-from chihiros_device_manager.commands import encoder
+from aquarium_device_manager.commands import encoder
 
 
 def test_sanitization_replaces_0x5a_with_0x59():

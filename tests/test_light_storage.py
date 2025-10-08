@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from chihiros_device_manager.light_storage import LightStorage
+from aquarium_device_manager.light_storage import LightStorage
 
 
 @pytest.fixture

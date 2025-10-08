@@ -1,4 +1,4 @@
-export type PageId = "modern" | "dev" | "test";
+export type PageId = "modern" | "production";
 
 type NavItem = {
   id: PageId;
@@ -12,19 +12,13 @@ const NAV_ITEMS: NavItem[] = [
     id: "modern",
     href: "/",
     label: "Dashboard",
-    title: "Open Dashboard"
+    title: "Open Modern Dashboard"
   },
   {
-    id: "dev",
-    href: "/dev",
-    label: "Dev Tools",
-    title: "Open Developer Tools"
-  },
-  {
-    id: "test",
-    href: "/test",
-    label: "Test Tools",
-    title: "Open Testing Utilities"
+    id: "production",
+    href: "/production.html",
+    label: "Production",
+    title: "Open Production Dashboard"
   }
 ];
 

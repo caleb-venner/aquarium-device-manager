@@ -41,12 +41,12 @@
     {
       "label": "backend: uvicorn",
       "type": "shell",
-      "command": "uvicorn chihiros_device_manager.service:app --reload --host 0.0.0.0 --port 8000",
+      "command": "uvicorn aquarium_device_manager.service:app --reload --host 0.0.0.0 --port 8000",
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
           "PYTHONPATH": "${workspaceFolder}/src",
-          "CHIHIROS_AUTO_RECONNECT": "0"
+          "AQUA_BLE_AUTO_RECONNECT": "0"
         }
       },
       "isBackground": true,
@@ -72,12 +72,12 @@
     {
       "label": "backend: uvicorn (no reload)",
       "type": "shell",
-      "command": "uvicorn chihiros_device_manager.service:app --host 0.0.0.0 --port 8000",
+      "command": "uvicorn aquarium_device_manager.service:app --host 0.0.0.0 --port 8000",
       "options": {
         "cwd": "${workspaceFolder}",
         "env": {
           "PYTHONPATH": "${workspaceFolder}/src",
-          "CHIHIROS_AUTO_RECONNECT": "0"
+          "AQUA_BLE_AUTO_RECONNECT": "0"
         }
       },
       "isBackground": true,

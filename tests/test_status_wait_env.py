@@ -17,7 +17,7 @@ def patched_wait_env(monkeypatch: pytest.MonkeyPatch):
     """
     monkeypatch.setenv("CHIHIROS_STATUS_CAPTURE_WAIT", "0.01")
     # Reload the service module so the constant is re-evaluated from env
-    import chihiros_device_manager.service as service_mod
+    import aquarium_device_manager.service as service_mod
 
     importlib.reload(service_mod)
     return service_mod
@@ -61,7 +61,7 @@ def test_capture_wait_uses_env_override(
     service._doser.request_status = AsyncMock(side_effect=fake_request_status)
 
     # Patch serializer to avoid depending on full pump dataclass shape
-    from chihiros_device_manager import ble_service as ble_impl
+    from aquarium_device_manager import ble_service as ble_impl
 
     monkeypatch.setattr(
         ble_impl._serializers,

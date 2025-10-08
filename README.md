@@ -1,8 +1,8 @@
-# Chihiros Device Manager
+# Aquarium BLE Device Manager
 
 Maintained by **Caleb Venner**. This project builds on the open-source work published as [Chihiros LED Control](https://github.com/TheMicDiet/chihiros-led-control) by Michael Dietrich. The original project is licensed under MIT; all redistributions of this codebase continue to honour that license and retain the upstream attribution.
 
-Chihiros Device Manager currently contains the historically shipped python **CLI** tooling alongside a new FastAPI-based BLE service for managing Chihiros Bluetooth devices. The near-term roadmap focuses on a standalone service and accompanying Docker packaging.
+Aquarium BLE Device Manager currently contains the historically shipped python **CLI** tooling alongside a new FastAPI-based BLE service for managing aquarium Bluetooth devices. The near-term roadmap focuses on a standalone service and accompanying Docker packaging.
 
 ## Supported Devices
 
@@ -51,7 +51,7 @@ pip install -e .
 chihiros-service
 ```
 
-Environment variables `CHIHIROS_SERVICE_HOST` and `CHIHIROS_SERVICE_PORT`
+Environment variables `AQUA_BLE_SERVICE_HOST` and `AQUA_BLE_SERVICE_PORT`
 override the default listen address (`0.0.0.0:8000`). Once running, visit
 `http://localhost:8000/` for the TypeScript dashboard. If the SPA has not yet
 been built (or a Vite dev server is not running), the root route will return a
@@ -60,24 +60,24 @@ remain exposed under the `/api/*` endpoints.
 
 ### First run and device discovery
 
-On a fresh start (no cached devices in `~/.chihiros_state.json`), the dashboard shows a simple onboarding panel with a “Scan for devices” button. Use it to discover nearby supported devices and click “Connect” to add them to the service cache.
+On a fresh start (no cached devices), the dashboard shows a simple onboarding panel with a "Scan for devices" button. Use it to discover nearby supported devices and click "Connect" to add them to the service cache.
 
 Equivalent REST endpoints are available if you prefer scripts:
 
 - `GET /api/scan` → returns a list of nearby supported devices: address, name, product, device_type
 - `POST /api/devices/{address}/connect` → connects to the device and captures an initial status
 
-Optional automation: set `CHIHIROS_AUTO_DISCOVER_ON_START=1` to perform a one-off scan at startup (only when there are no cached devices) and attempt to connect to supported devices automatically.
+Optional automation: set `AQUA_BLE_AUTO_DISCOVER=1` to perform a one-off scan at startup (only when there are no cached devices) and attempt to connect to supported devices automatically.
 
 Tip: `make dev` now enables this flag automatically to smooth first-run setup. Override it when needed:
 
 ```bash
 # Disable auto-discover when launching both servers
-make dev CHIHIROS_AUTO_DISCOVER_ON_START=0
+make dev AQUA_BLE_AUTO_DISCOVER=0
 
 # Run just the backend with auto-discover disabled/enabled explicitly
-make dev-back CHIHIROS_AUTO_DISCOVER_ON_START=0
-make dev-back CHIHIROS_AUTO_DISCOVER_ON_START=1
+make dev-back AQUA_BLE_AUTO_DISCOVER=0
+make dev-back AQUA_BLE_AUTO_DISCOVER=1
 ```
 
 ## Frontend development (TypeScript SPA)
@@ -97,7 +97,7 @@ npm run dev
 
 With the development server running, visiting `http://localhost:8000/` will
 transparently proxy requests to Vite (listening on port 5173 by default).
-Point `CHIHIROS_FRONTEND_DEV_SERVER` at a different origin if the dev server is
+Point `AQUA_BLE_FRONTEND_DEV` at a different origin if the dev server is
 hosted elsewhere, or set it to `0` to disable the proxy. When both the proxy
 and compiled assets are unavailable the backend now returns a `503` response
 reminding you to start the SPA build.
@@ -113,7 +113,7 @@ npm run build
 
 By default the FastAPI app serves the compiled bundle from
 `frontend/dist`. If the assets live elsewhere, point the service at the
-correct directory via the `CHIHIROS_FRONTEND_DIST` environment variable.
+correct directory via the `AQUA_BLE_FRONTEND_DIST` environment variable.
 
 ### Service runtime tuning
 
@@ -123,7 +123,7 @@ allow notification frames to arrive before reading the device's
 the environment variable:
 
 ```bash
-export CHIHIROS_STATUS_CAPTURE_WAIT=0.8  # seconds
+export AQUA_BLE_STATUS_WAIT=0.8  # seconds
 ```
 
 Lowering the value can make successive manual refreshes faster but risks
@@ -137,22 +137,26 @@ Centralized reference for runtime configuration knobs exposed by the service / S
 
 | Variable | Default | Type | Purpose | Example |
 |----------|---------|------|---------|---------|
-| `CHIHIROS_SERVICE_HOST` | `0.0.0.0` | str | Listen interface for the FastAPI/Uvicorn server. | `127.0.0.1` |
-| `CHIHIROS_SERVICE_PORT` | `8000` | int | Listen port for the FastAPI/Uvicorn server. | `9000` |
-| `CHIHIROS_AUTO_RECONNECT` | `1` | int/bool | Attempt reconnect to previously cached devices on startup (`1` truthy, `0` disabled). | `0` |
-| `CHIHIROS_AUTO_DISCOVER_ON_START` | `0` | int/bool | When no cached devices exist, perform a one-off scan at startup and try to connect to supported devices automatically. | `1` |
-| `CHIHIROS_STATUS_CAPTURE_WAIT` | `1.5` | float (s) | Delay after requesting a status before reading cached frame (tune for adapter speed / RF conditions). | `0.8` |
-| `CHIHIROS_FRONTEND_DEV_SERVER` | (unset) | str/URL | If set, root path proxies to a running Vite dev server instead of serving built assets. Set to `0` to force-disable proxy even if assets missing. | `http://localhost:5173` |
-| `CHIHIROS_FRONTEND_DIST` | `frontend/dist` | path | Absolute/relative path to built SPA assets (index.html + assets/). | `/opt/app/frontend-build` |
-| `CHIHIROS_LOG_LEVEL` | `INFO` | str | Logging verbosity for service logger (standard Python levels). | `DEBUG` |
+| `AQUA_BLE_SERVICE_HOST` | `0.0.0.0` | str | Listen interface for the FastAPI/Uvicorn server. | `127.0.0.1` |
+| `AQUA_BLE_SERVICE_PORT` | `8000` | int | Listen port for the FastAPI/Uvicorn server. | `9000` |
+| `AQUA_BLE_AUTO_RECONNECT` | `1` | int/bool | Attempt reconnect to previously cached devices on startup (`1` truthy, `0` disabled). | `0` |
+| `AQUA_BLE_AUTO_DISCOVER` | `0` | int/bool | When no cached devices exist, perform a one-off scan at startup and try to connect to supported devices automatically. | `1` |
+| `AQUA_BLE_STATUS_WAIT` | `1.5` | float (s) | Delay after requesting a status before reading cached frame (tune for adapter speed / RF conditions). | `0.8` |
+| `AQUA_BLE_FRONTEND_DEV` | (unset) | str/URL | If set, root path proxies to a running Vite dev server instead of serving built assets. Set to `0` to force-disable proxy even if assets missing. | `http://localhost:5173` |
+| `AQUA_BLE_FRONTEND_DIST` | `frontend/dist` | path | Absolute/relative path to built SPA assets (index.html + assets/). | `/opt/app/frontend-build` |
+| `AQUA_BLE_LOG_LEVEL` | `INFO` | str | Logging verbosity for service logger (standard Python levels). | `DEBUG` |
+| `AQUA_BLE_CONFIG_DIR` | `~/.aqua-ble` | path | Configuration directory for device state and profiles. | `~/.config/aqua-ble` |
+
+**Migration Note:** Old environment variable names (`CHIHIROS_*`) are still supported for backward compatibility through automatic fallback. New projects should use the `AQUA_BLE_*` prefix.
 
 Notes:
 
 - Boolean style variables accept `0/1`, `true/false`, `yes/no`, or `on/off` (case-insensitive). Invalid or empty values fall back to the documented default.
 - Auto-discover runs only when the cache is empty (first run) to avoid interrupting existing connections.
-- `CHIHIROS_STATUS_CAPTURE_WAIT` invalid (non-float) values fall back to the default at import time.
+- `AQUA_BLE_STATUS_WAIT` invalid (non-float) values fall back to the default at import time.
 - When both a dev server proxy and a local dist are unavailable the root route returns HTTP 503 with guidance.
 - Changes to these variables require a service restart to take effect (they are read at module import or startup).
+- Configuration directory migration: If `~/.chihiros/` exists and `~/.aqua-ble/` doesn't, configs are automatically migrated to the new location on first startup.
 
 ## Docker usage
 

@@ -8,29 +8,26 @@ implementation and expose the same public names for backwards compatibility.
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 
 # Ensure the implementation module picks up any env override when this
-# module is reloaded during tests (the tests set CHIHIROS_STATUS_CAPTURE_WAIT
+# module is reloaded during tests (the tests set AQUA_BLE_STATUS_WAIT
 # then reload this module expecting the constant to reflect the env var).
 from . import ble_service as _ble_impl
 from . import spa
 from .api.routes_commands import router as commands_router
+from .api.routes_configurations import router as configurations_router
 from .api.routes_devices import router as devices_router
-from .api.routes_dosers import router as dosers_router
-from .api.routes_lights import router as lights_router
 from .ble_service import BLEService
+from .config_migration import get_env_float
 
 try:
-    _ble_impl.STATUS_CAPTURE_WAIT_SECONDS = float(
-        os.getenv(
-            "CHIHIROS_STATUS_CAPTURE_WAIT",
-            str(_ble_impl.STATUS_CAPTURE_WAIT_SECONDS),
-        )
+    _ble_impl.STATUS_CAPTURE_WAIT_SECONDS = get_env_float(
+        "AQUA_BLE_STATUS_WAIT",
+        _ble_impl.STATUS_CAPTURE_WAIT_SECONDS,
     )
 except Exception:
     # Be conservative: if parsing fails, leave the implementation default.
@@ -51,7 +48,7 @@ async def lifespan(app: FastAPI):
         await service.stop()
 
 
-app = FastAPI(title="Chihiros BLE Service", lifespan=lifespan)
+app = FastAPI(title="Aquarium BLE Service", lifespan=lifespan)
 
 # Back-compat constants and helpers for tests
 SPA_UNAVAILABLE_MESSAGE = getattr(spa, "SPA_UNAVAILABLE_MESSAGE")
@@ -93,11 +90,10 @@ async def serve_spa() -> Response:
 
 # Startup/shutdown handled by lifespan above
 
-# Include API routers for devices, dosers, lights, and commands.
+# Include API routers for devices, commands, and configurations.
 app.include_router(devices_router)
-app.include_router(dosers_router)
-app.include_router(lights_router)
 app.include_router(commands_router)
+app.include_router(configurations_router)
 
 
 @app.get("/{spa_path:path}", include_in_schema=False)
@@ -144,11 +140,13 @@ def main() -> None:  # pragma: no cover - thin CLI wrapper
     """Run the FastAPI service under Uvicorn."""
     import uvicorn
 
-    host = os.getenv("CHIHIROS_SERVICE_HOST", "0.0.0.0")
-    port = int(os.getenv("CHIHIROS_SERVICE_PORT", "8000"))
+    from .config_migration import get_env_with_fallback
+
+    host = get_env_with_fallback("AQUA_BLE_SERVICE_HOST", "0.0.0.0")
+    port = int(get_env_with_fallback("AQUA_BLE_SERVICE_PORT", "8000"))
 
     uvicorn.run(
-        "chihiros_device_manager.service:app",
+        "aquarium_device_manager.service:app",
         host=host,
         port=port,
     )

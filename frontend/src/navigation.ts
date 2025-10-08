@@ -28,7 +28,7 @@ export function renderLayout(): void {
             <span class="version">Legacy dashboard utilities & diagnostics</span>
           </div>
           <div class="header-actions">
-            ${renderHeaderNavigation("dev")}
+            ${renderHeaderNavigation("production")}
           </div>
         </div>
       </header>
@@ -60,7 +60,7 @@ export function renderLayout(): void {
         <div class="footer-content">
           <span class="footer-info">Developer diagnostics • Legacy dashboard utilities</span>
           <div class="footer-links">
-            ${renderFooterNavigation("dev")}
+            ${renderFooterNavigation("production")}
           </div>
         </div>
       </footer>
@@ -108,7 +108,10 @@ export function setupTabs(): void {
     } else if (isOverview) {
       void loadOverview();
     } else if (isDev) {
-      void loadDevView();
+      const devPanel = document.getElementById("dev-content");
+      if (devPanel) {
+        devPanel.innerHTML = loadDevView();
+      }
     }
   }
 
@@ -394,19 +397,33 @@ async function loadOverview(force = false): Promise<void> {
   }
 }
 
-async function loadDevView(): Promise<void> {
-  const container = document.getElementById("dev-content");
-  if (!container) return;
+function loadDevView(): string {
+  return `
+    <div class="notice notice-info">
+      <h3>🚧 Dev Tools Retired</h3>
+      <p>The development tools and diagnostics panel has been retired. Please use one of the modern interfaces:</p>
+      <ul>
+        <li><strong>Production Dashboard</strong> - For device configuration and management</li>
+        <li><strong>Modern Dashboard</strong> - For monitoring and control</li>
+      </ul>
+    </div>
+  `;
+}
 
-  try {
-    const devToolsModule = await import("./dev/dev-tools");
-    await devToolsModule.loadDevTools();
-  } catch (err) {
-    container.innerHTML = renderNotice(
-      err instanceof Error ? err.message : "Failed to load developer tools.",
-      "error"
-    );
-  }
+async function loadMainView() {
+    const mainContent = document.getElementById("main-content");
+    const app = document.getElementById("app");
+
+    if (mainContent && app) {
+        // Set the main content for the legacy view
+        mainContent.innerHTML = `
+            ${renderHeaderNavigation("production")}
+            <main id="dashboard-content">
+                ${loadDevView()}
+            </main>
+            ${renderFooterNavigation("production")}
+        `;
+    }
 }
 
 export function setupInteractions(): void {

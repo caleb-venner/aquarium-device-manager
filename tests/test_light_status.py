@@ -1,6 +1,6 @@
 """Unit tests for light status parsing."""
 
-from chihiros_device_manager.light_status import parse_light_payload
+from aquarium_device_manager.light_status import parse_light_payload
 
 
 def hex_to_bytes(h: str) -> bytes:

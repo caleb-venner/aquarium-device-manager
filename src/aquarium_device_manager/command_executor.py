@@ -155,6 +155,10 @@ class CommandExecutor:
                 brightness=args["brightness"],
                 color=args.get("color", 0),
             )
+
+            # Update and persist light configuration
+            await self._save_light_brightness_config(address, args)
+
             return cached_status_to_dict(self.ble_service, status)
 
         elif action == "enable_auto_mode":
@@ -187,6 +191,10 @@ class CommandExecutor:
                 ramp_up_minutes=args.get("ramp_up_minutes", 0),
                 weekdays=args.get("weekdays", []),
             )
+
+            # Update and persist light configuration
+            await self._save_light_auto_setting_config(address, args)
+
             return cached_status_to_dict(self.ble_service, status)
 
         elif action == "set_schedule":
@@ -200,7 +208,133 @@ class CommandExecutor:
                 confirm=args.get("confirm", True),
                 wait_seconds=args.get("wait_seconds", 2.0),
             )
+
+            # Update and persist doser configuration
+            await self._save_doser_schedule_config(address, args)
+
             return cached_status_to_dict(self.ble_service, status)
 
         else:
             raise ValueError(f"Unsupported action: {action}")
+
+    async def _save_doser_schedule_config(
+        self, address: str, args: Dict[str, Any]
+    ) -> None:
+        """Save doser schedule configuration after successful command.
+
+        Args:
+            address: Device MAC address
+            args: Command arguments from set_schedule
+        """
+        if not self.ble_service._auto_save_config:
+            logger.debug("Auto-save config disabled, skipping")
+            return
+
+        try:
+            from .config_helpers import update_doser_schedule_config
+
+            device = self.ble_service._doser_storage.get_device(address)
+            if device:
+                # Update the configuration
+                device = update_doser_schedule_config(device, args)
+                self.ble_service._doser_storage.upsert_device(device)
+                logger.info(
+                    f"Saved doser configuration for {address}, "
+                    f"head {args['head_index']}"
+                )
+            else:
+                logger.warning(
+                    f"No configuration found for doser {address}, "
+                    "cannot save schedule update"
+                )
+        except Exception as exc:
+            # Don't fail the command if config save fails
+            logger.error(
+                f"Failed to save doser configuration for {address}: {exc}",
+                exc_info=True,
+            )
+
+    async def _save_light_brightness_config(
+        self, address: str, args: Dict[str, Any]
+    ) -> None:
+        """Save light brightness configuration after successful command.
+
+        Args:
+            address: Device MAC address
+            args: Command arguments from set_brightness
+        """
+        if not self.ble_service._auto_save_config:
+            logger.debug("Auto-save config disabled, skipping")
+            return
+
+        try:
+            from .config_helpers import update_light_brightness
+
+            device = self.ble_service._light_storage.get_device(address)
+            if device:
+                # Update the configuration
+                device = update_light_brightness(
+                    device,
+                    brightness=args["brightness"],
+                    color=args.get("color", 0),
+                )
+                self.ble_service._light_storage.upsert_device(device)
+                logger.info(
+                    f"Saved light configuration for {address}, "
+                    f"brightness={args['brightness']}"
+                )
+            else:
+                logger.warning(
+                    f"No profile found for light {address}, "
+                    "cannot save brightness update"
+                )
+        except Exception as exc:
+            # Don't fail the command if config save fails
+            logger.error(
+                f"Failed to save light configuration for {address}: {exc}",
+                exc_info=True,
+            )
+
+    async def _save_light_auto_setting_config(
+        self, address: str, args: Dict[str, Any]
+    ) -> None:
+        """Save light auto setting configuration after successful command.
+
+        Args:
+            address: Device MAC address
+            args: Command arguments from add_auto_setting
+        """
+        if not self.ble_service._auto_save_config:
+            logger.debug("Auto-save config disabled, skipping")
+            return
+
+        try:
+            from .config_helpers import add_light_auto_program
+
+            device = self.ble_service._light_storage.get_device(address)
+            if device:
+                # Update the configuration
+                device = add_light_auto_program(
+                    device,
+                    sunrise=args["sunrise"],
+                    sunset=args["sunset"],
+                    brightness=args["brightness"],
+                    ramp_up_minutes=args.get("ramp_up_minutes", 0),
+                    weekdays=args.get("weekdays"),
+                )
+                self.ble_service._light_storage.upsert_device(device)
+                logger.info(
+                    f"Saved light auto program for {address}, "
+                    f"{args['sunrise']}-{args['sunset']}"
+                )
+            else:
+                logger.warning(
+                    f"No profile found for light {address}, "
+                    "cannot save auto program"
+                )
+        except Exception as exc:
+            # Don't fail the command if config save fails
+            logger.error(
+                f"Failed to save light auto program for {address}: {exc}",
+                exc_info=True,
+            )

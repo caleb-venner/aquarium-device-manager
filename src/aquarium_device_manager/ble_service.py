@@ -2,7 +2,7 @@
 
 Contains the BLEService orchestration class and supporting CachedStatus dataclass.
 This is a mechanical extract so tests and callers can continue to import
-from chihiros_device_manager.service while the implementation lives here.
+from aquarium_device_manager.service while the implementation lives here.
 """
 
 from __future__ import annotations
@@ -10,14 +10,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, is_dataclass
-from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, cast
 
 from fastapi import HTTPException
+
+from .config_migration import (
+    get_config_dir,
+    get_env_bool,
+    get_env_float,
+    get_env_with_fallback,
+)
 
 try:
     from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
@@ -104,39 +109,29 @@ async def device_session(address: str) -> AsyncIterator[BaseDevice]:
 
 
 # Persistence and runtime configuration
-STATE_PATH = Path.home() / ".chihiros_state.json"
-AUTO_RECONNECT_ENV = "CHIHIROS_AUTO_RECONNECT"
-STATUS_CAPTURE_WAIT_ENV = "CHIHIROS_STATUS_CAPTURE_WAIT"
-AUTO_DISCOVER_ENV = "CHIHIROS_AUTO_DISCOVER_ON_START"
-try:
-    STATUS_CAPTURE_WAIT_SECONDS = float(
-        os.getenv(STATUS_CAPTURE_WAIT_ENV, "1.5")
-    )
-except ValueError:  # pragma: no cover - defensive parse guard
-    STATUS_CAPTURE_WAIT_SECONDS = 1.5
+CONFIG_DIR = get_config_dir()
+STATE_PATH = CONFIG_DIR / "state.json"
+DOSER_CONFIG_PATH = CONFIG_DIR / "doser_configs.json"
+LIGHT_PROFILE_PATH = CONFIG_DIR / "light_profiles.json"
+
+# Environment variable names (new naming)
+AUTO_RECONNECT_ENV = "AQUA_BLE_AUTO_RECONNECT"
+STATUS_CAPTURE_WAIT_ENV = "AQUA_BLE_STATUS_WAIT"
+AUTO_DISCOVER_ENV = "AQUA_BLE_AUTO_DISCOVER"
+AUTO_SAVE_CONFIG_ENV = "AQUA_BLE_AUTO_SAVE"
+
+# Get status capture wait with fallback
+STATUS_CAPTURE_WAIT_SECONDS = get_env_float(STATUS_CAPTURE_WAIT_ENV, 1.5)
 
 
 def _get_env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    s = raw.strip()
-    if s == "":
-        return default
-    lowered = s.lower()
-    if lowered in ("1", "true", "yes", "on"):
-        return True
-    if lowered in ("0", "false", "no", "off"):
-        return False
-    try:
-        return bool(int(s))
-    except ValueError:
-        return default
+    """Wrap for backward compatibility - delegate to config_migration."""
+    return get_env_bool(name, default)
 
 
 # Module logger
-logger = logging.getLogger("chihiros_device_manager.service")
-_default_level = os.getenv("CHIHIROS_LOG_LEVEL", "INFO").upper()
+logger = logging.getLogger("aquarium_device_manager.service")
+_default_level = get_env_with_fallback("AQUA_BLE_LOG_LEVEL", "INFO").upper()
 if not logging.getLogger().handlers:
     logging.basicConfig(
         level=getattr(logging, _default_level, logging.INFO),
@@ -173,8 +168,24 @@ class BLEService:
         self._commands: Dict[str, list] = {}  # Per-device command history
         self._auto_reconnect = _get_env_bool(AUTO_RECONNECT_ENV, True)
         self._auto_discover_on_start = _get_env_bool(AUTO_DISCOVER_ENV, False)
+        self._auto_save_config = _get_env_bool(AUTO_SAVE_CONFIG_ENV, True)
         self._reconnect_task: asyncio.Task | None = None
         self._discover_task: asyncio.Task | None = None
+
+        # Ensure config directory exists
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Initialize storage instances for persistent configurations
+        from .doser_storage import DoserStorage
+        from .light_storage import LightStorage
+
+        self._doser_storage = DoserStorage(DOSER_CONFIG_PATH)
+        self._light_storage = LightStorage(LIGHT_PROFILE_PATH)
+        logger.info(
+            "Configuration storage initialized: doser=%s, light=%s",
+            DOSER_CONFIG_PATH,
+            LIGHT_PROFILE_PATH,
+        )
 
     @property
     def _doser(self) -> Optional[Doser]:
@@ -263,13 +274,20 @@ class BLEService:
     async def connect_device(
         self, address: str, device_type: Optional[str] = None
     ) -> CachedStatus:
-        """Connect to a device by address and return its cached status."""
+        """Connect to a device by address and return its cached status.
+
+        Also loads any saved configuration for the device.
+        """
         device = await self._ensure_device(address, device_type)
         device_kind = self._get_device_kind(device)
         if device_kind is None:
             raise HTTPException(
                 status_code=400, detail="Unsupported device type"
             )
+
+        # Load saved configuration if available
+        await self._load_device_configuration(address, device_kind)
+
         return await self._refresh_device_status(device_kind, persist=True)
 
     async def _ensure_device(
@@ -400,6 +418,62 @@ class BLEService:
                 key=lambda item: item[1],
             )
         ]
+
+    async def _load_device_configuration(
+        self, address: str, device_kind: str
+    ) -> None:
+        """Load saved configuration for a device after connection.
+
+        Args:
+            address: Device MAC address
+            device_kind: Type of device ('doser' or 'light')
+        """
+        if device_kind == "doser":
+            saved_config = self._doser_storage.get_device(address)
+            if saved_config:
+                logger.info(
+                    f"Loaded saved configuration for doser {address} "
+                    f"with {len(saved_config.configurations)} configuration(s)"
+                )
+            else:
+                logger.debug(
+                    f"No saved configuration found for doser {address}"
+                )
+                # Create default configuration
+                from .config_helpers import create_default_doser_config
+
+                default_config = create_default_doser_config(address)
+                self._doser_storage.upsert_device(default_config)
+                logger.info(
+                    f"Created default configuration for doser {address}"
+                )
+
+        elif device_kind == "light":
+            saved_profile = self._light_storage.get_device(address)
+            if saved_profile:
+                logger.info(
+                    f"Loaded saved profile for light {address} "
+                    f"with {len(saved_profile.configurations)} configuration(s)"
+                )
+            else:
+                logger.debug(f"No saved profile found for light {address}")
+                # Create default profile
+                from .config_helpers import create_default_light_profile
+
+                # Get channel info if device is connected
+                async with self._lock:
+                    device = self._devices.get(device_kind)
+                    channels = (
+                        self._build_channels(device_kind, device)
+                        if device
+                        else None
+                    )
+
+                default_profile = create_default_light_profile(
+                    address, channels=channels
+                )
+                self._light_storage.upsert_device(default_profile)
+                logger.info(f"Created default profile for light {address}")
 
     def _infer_device_type(self, device: BaseDevice) -> Optional[str]:
         return self._get_device_kind(device)

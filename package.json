@@ -1,5 +1,5 @@
 {
-  "name": "chihiros-device-manager",
+  "name": "aquarium-device-manager",
   "private": true,
   "workspaces": [
     "frontend"

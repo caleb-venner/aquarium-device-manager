@@ -7,19 +7,10 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "chihiros-device-manager"
-dynamic = ["version", "dependencies"]
-description = "BLE control service for Chihiros hardware"
+name = "aquarium-device-manager"
+version = "2.0.0"
+description = "Python service for controlling aquarium devices over Bluetooth Low Energy"
 readme = "README.md"
-authors = [
-    {name = "Caleb Venner"}
-]
-license = {text = "MIT"}
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "Operating System :: OS Independent",
-]
-keywords = ["chihiros", "bluetooth", "ble", "service"]
 
 requires-python = ">=3.10"
 
@@ -41,7 +32,7 @@ where = [
 [tool.setuptools_scm]
 
 [project.scripts]
-chihiros-service = "chihiros_device_manager.service:main"
+aquarium-service = "aquarium_device_manager.service:main"
 
 [tool.black]
 line-length = 80

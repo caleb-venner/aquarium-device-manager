@@ -1,8 +1,8 @@
 # Simple dev helpers
 
 # Env flags (overridable). Export so recursive make and recipe shells inherit.
-CHIHIROS_AUTO_DISCOVER_ON_START ?= 0
-export CHIHIROS_AUTO_DISCOVER_ON_START
+AQUA_BLE_AUTO_DISCOVER ?= 0
+export AQUA_BLE_AUTO_DISCOVER
 
 .PHONY: help dev dev-front dev-back build front-build lint test precommit
 
@@ -34,14 +34,14 @@ front-build:
 # Backend
 
 dev-back:
-	PYTHONPATH=src CHIHIROS_AUTO_RECONNECT=1 uvicorn chihiros_device_manager.service:app --reload --host 0.0.0.0 --port 8000
+	PYTHONPATH=src AQUA_BLE_AUTO_RECONNECT=1 uvicorn aquarium_device_manager.service:app --reload --host 0.0.0.0 --port 8000
 
 # Combined
 
 dev:
 	@echo "Starting dev servers (frontend + backend)"
 	@echo "Tip: In VS Code, run the 'dev: full stack' task to launch both in background."
-	@$(MAKE) -j2 CHIHIROS_AUTO_DISCOVER_ON_START=1 dev-front dev-back
+	@$(MAKE) -j2 AQUA_BLE_AUTO_DISCOVER=1 dev-front dev-back
 
 # Build & quality
 

@@ -5,7 +5,7 @@ Ensure the encoder bumps message id when a checksum collision would occur.
 
 import pytest
 
-from chihiros_device_manager.commands import encoder
+from aquarium_device_manager.commands import encoder
 
 
 def test_checksum_collision_bumps_message_id():
