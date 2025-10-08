@@ -4,12 +4,12 @@ Maintained by **Caleb Venner**. This project builds on the open-source work publ
 
 ## Legal Disclaimer
 
-**This project is not affiliated with, endorsed by, or approved by Chihiros Aquatic Living or any of its subsidiaries.** This is an independent, open-source software project developed through reverse engineering and community contributions.
+**This project is not affiliated with, endorsed by, or approved by Chihiros Aquatic Studio or Shanghai Ogino Biotechnology Co.,Ltd.** This is an independent, open-source software project developed through reverse engineering and community contributions.
 
 - We do not reproduce, distribute, or claim ownership of any proprietary Chihiros software code
 - Device compatibility is based on publicly available Bluetooth Low Energy protocol analysis
 - Use of this software with Chihiros devices is at your own risk
-- "Chihiros" is a trademark of Chihiros Aquatic Living and is used here solely for device identification purposes
+- "Chihiros" is a trademark of Chihiros Aquatic Studio (Shanghai Ogino Biotechnology Co.,Ltd) and is used here solely for device identification purposes
 - This software is provided "as-is" without warranty of any kind
 
 ## Supported Devices
