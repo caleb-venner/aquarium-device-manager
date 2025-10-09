@@ -1864,11 +1864,11 @@ function convertScheduleToBLEParams(head: any): { volumeMl: number; hour: number
 function convertRecurrenceToBLEWeekdays(recurrence: any): number[] | undefined {
   if (!recurrence?.days) return undefined;
 
-  const dayMap: Record<string, number> = {
-    'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6, 'Sun': 0
+  const dayMap: Record<string, string> = {
+    'Sun': 'sunday', 'Mon': 'monday', 'Tue': 'tuesday', 'Wed': 'wednesday', 'Thu': 'thursday', 'Fri': 'friday', 'Sat': 'saturday'
   };
 
-  return recurrence.days.map((day: string) => dayMap[day]).filter((n: number) => n !== undefined);
+  return recurrence.days.map((day: string) => dayMap[day]).filter((s: string | undefined) => s !== undefined);
 }
 
 // Global state for the current configuration being edited

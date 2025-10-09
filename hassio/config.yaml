@@ -1,0 +1,62 @@
+name: "Aquarium Device Manager"
+description: "Manage Chihiros aquarium devices (dosers, lights) via Bluetooth LE"
+version: "1.0.0"
+slug: "aquarium-device-manager"
+init: false
+
+# Multi-architecture support
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+
+# Startup configuration
+startup: application
+boot: auto
+hassio_api: false
+homeassistant_api: false
+host_network: false
+
+# Port configuration
+ports:
+  8000/tcp: 8000
+
+ports_description:
+  8000/tcp: "Web interface for device management"
+
+# Add-on options
+options:
+  log_level: "INFO"
+  auto_discover: false
+  auto_reconnect: true
+  service_host: "0.0.0.0"
+  service_port: 8000
+
+# Options schema for validation
+schema:
+  log_level: "list(TRACE|DEBUG|INFO|WARNING|ERROR|CRITICAL)?"
+  auto_discover: "bool?"
+  auto_reconnect: "bool?"
+  service_host: "str?"
+  service_port: "port?"
+
+# Required capabilities
+bluetooth: true
+uart: false
+
+# Map options to environment variables
+environment:
+  AQUA_BLE_LOG_LEVEL: "{{ .log_level }}"
+  AQUA_BLE_AUTO_DISCOVER: "{{ .auto_discover }}"
+  AQUA_BLE_AUTO_RECONNECT: "{{ .auto_reconnect }}"
+  AQUA_BLE_SERVICE_HOST: "{{ .service_host }}"
+  AQUA_BLE_SERVICE_PORT: "{{ .service_port }}"
+  AQUA_BLE_CONFIG_DIR: "/data"
+
+# Add-on documentation
+url: "https://github.com/caleb-venner/aquarium-device-manager"
+webui: "http://[HOST]:[PORT:8000]"
+
+# Image configuration
+image: "ghcr.io/caleb-venner/aquarium-device-manager/{arch}"

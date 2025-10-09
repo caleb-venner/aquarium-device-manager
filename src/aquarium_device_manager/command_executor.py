@@ -189,7 +189,7 @@ class CommandExecutor:
                 sunset=parse_time(sunset_str),
                 brightness=args["brightness"],
                 ramp_up_minutes=args.get("ramp_up_minutes", 0),
-                weekdays=args.get("weekdays", []),
+                weekdays=args.get("weekdays"),
             )
 
             # Update and persist light configuration
@@ -204,7 +204,7 @@ class CommandExecutor:
                 volume_tenths_ml=args["volume_tenths_ml"],
                 hour=args["hour"],
                 minute=args["minute"],
-                weekdays=args.get("weekdays"),
+                weekdays=args.get("weekdays"),  # Now passes List[PumpWeekday]
                 confirm=args.get("confirm", True),
                 wait_seconds=args.get("wait_seconds", 2.0),
             )

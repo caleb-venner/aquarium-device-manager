@@ -674,7 +674,7 @@ class BLEService:
         volume_tenths_ml: int,
         hour: int,
         minute: int,
-        weekdays: Sequence[doser_commands.PumpWeekday] | None = None,
+        weekdays: Optional[Sequence[doser_commands.PumpWeekday]] = None,
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> CachedStatus:

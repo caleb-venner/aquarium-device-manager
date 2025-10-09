@@ -23,16 +23,62 @@ Maintained by **Caleb Venner**. This project builds on the open-source work publ
 - Chihiros Z Light TINY
 - other LED models might work as well but are not tested
 
+## Deployment Options
+
+This project supports multiple deployment methods to fit different use cases:
+
+### 🏠 Home Assistant Add-on (Recommended)
+Perfect integration with Home Assistant for smart home automation.
+
+- **Easy installation** through HA add-on store
+- **Bluetooth access** automatically configured
+- **Data persistence** managed by HA supervisor
+- **Web interface** accessible through HA dashboard
+
+➡️ **[See Home Assistant setup guide](hassio/README.md)**
+
+### 🐳 Docker Container
+Ideal for self-hosting, Unraid, or standalone deployment.
+
+- **Multi-architecture** support (amd64, arm64, armv7)
+- **Docker Compose** for easy setup
+- **Health monitoring** and automatic restarts
+- **Volume persistence** for device configurations
+
+➡️ **[See Docker setup guide](docker/README.md)**
+
+### 🐍 Python Service
+Direct installation for development or advanced users.
+
+- **Native performance** on Raspberry Pi or Linux
+- **Development environment** for contributing
+- **Full control** over dependencies and configuration
+- **System service** integration available
+
+➡️ **[See local installation guide](#local-installation)**
+
 ## Requirements
 
-- a device with bluetooth LE support for sending the commands to the LED
-- [Python 3.10+](https://www.python.org/downloads/) with pip
+- Device with Bluetooth LE support
+- [Python 3.10+](https://www.python.org/downloads/) (for local installation)
+- Compatible Chihiros devices within Bluetooth range
 
-## Usage
+## Quick Start
 
-This project provides a web-based interface for controlling Chihiros devices through a FastAPI backend and TypeScript frontend. The CLI tool has been deprecated in favor of the web interface.
+### Home Assistant Add-on
+```yaml
+# Add-on configuration
+log_level: INFO
+auto_discover: false
+auto_reconnect: true
+```
 
-## Running the BLE web service
+### Docker
+```bash
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+### Local Installation
 
 Install the package and launch the bundled FastAPI/Uvicorn entrypoint:
 

@@ -9,6 +9,8 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from .commands.encoder import LightWeekday, PumpWeekday
+
 # Command status types
 CommandStatus = Literal[
     "pending", "running", "success", "failed", "timed_out", "cancelled"
@@ -126,7 +128,9 @@ class DoserScheduleArgs(BaseModel):
     volume_tenths_ml: int = Field(..., ge=0, le=255)
     hour: int = Field(..., ge=0, le=23)
     minute: int = Field(..., ge=0, le=59)
-    weekdays: Optional[list[int]] = Field(None, description="0-6 weekday list")
+    weekdays: Optional[list[PumpWeekday]] = Field(
+        None, description="List of weekdays"
+    )
     confirm: bool = Field(True)
     wait_seconds: float = Field(2.0, ge=0.5, le=10.0)
 
@@ -138,7 +142,9 @@ class LightAutoSettingArgs(BaseModel):
     sunset: str = Field(..., pattern=r"^\d{2}:\d{2}$")
     brightness: int = Field(..., ge=0, le=100)
     ramp_up_minutes: int = Field(0, ge=0)
-    weekdays: Optional[list[int]] = Field(None)
+    weekdays: Optional[list[LightWeekday]] = Field(
+        None, description="List of weekdays"
+    )
 
 
 # Command argument validation mapping

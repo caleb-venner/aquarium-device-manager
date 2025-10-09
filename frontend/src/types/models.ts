@@ -158,7 +158,7 @@ export interface AddAutoSettingArgs {
   sunset: string; // HH:MM format
   brightness: number; // 0-100
   ramp_up_minutes?: number; // default 0
-  weekdays?: number[]; // 0-6 weekday indices
+  weekdays?: string[]; // e.g., ["monday", "tuesday"]
 }
 
 /** Arguments for set_schedule command (doser) */
@@ -167,7 +167,7 @@ export interface SetScheduleArgs {
   volume_tenths_ml: number; // 0-255
   hour: number; // 0-23
   minute: number; // 0-59
-  weekdays?: number[]; // 0-6 weekday indices
+  weekdays?: string[]; // e.g., ["monday", "tuesday"]
   confirm?: boolean; // default true
   wait_seconds?: number; // default 2.0
 }

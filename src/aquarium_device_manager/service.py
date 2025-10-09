@@ -50,6 +50,33 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Aquarium BLE Service", lifespan=lifespan)
 
+
+# Health check endpoint for container monitoring
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint for Docker/HA monitoring."""
+    try:
+        # Basic service availability check
+        cached_statuses = service.get_status_snapshot()
+        device_count = len(cached_statuses)
+        return {
+            "status": "healthy",
+            "service": "aquarium-device-manager",
+            "version": "1.0.0",
+            "devices": {
+                "cached": device_count,
+                "status": "available" if device_count > 0 else "no_devices",
+            },
+            "bluetooth": "available",  # Could enhance with actual BLE adapter check
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "service": "aquarium-device-manager",
+        }
+
+
 # Back-compat constants and helpers for tests
 SPA_UNAVAILABLE_MESSAGE = getattr(spa, "SPA_UNAVAILABLE_MESSAGE")
 SPA_DIST_AVAILABLE = getattr(spa, "SPA_DIST_AVAILABLE")

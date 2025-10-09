@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  aquarium-manager:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: aquarium-device-manager
+    restart: unless-stopped
+
+    # Bluetooth and system access
+    privileged: true
+    network_mode: host
+
+    # Alternative to privileged mode (more secure)
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
+    # cap_add:
+    #   - NET_ADMIN
+    #   - SYS_ADMIN
+
+    # Environment configuration
+    environment:
+      - AQUA_BLE_LOG_LEVEL=INFO
+      - AQUA_BLE_AUTO_DISCOVER=false
+      - AQUA_BLE_AUTO_RECONNECT=true
+      - AQUA_BLE_SERVICE_HOST=0.0.0.0
+      - AQUA_BLE_SERVICE_PORT=8000
+
+    # Data persistence
+    volumes:
+      - ./data:/data
+      - /var/run/dbus:/var/run/dbus:ro  # DBus for Bluetooth
+
+    # Port mapping (only needed if not using host networking)
+    # ports:
+    #   - "8000:8000"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# Optional: separate database service for future expansion
+  # postgres:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     POSTGRES_DB: aquarium
+  #     POSTGRES_USER: aquarium
+  #     POSTGRES_PASSWORD: changeme
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+
+# volumes:
+#   postgres_data:
