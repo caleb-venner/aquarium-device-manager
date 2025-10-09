@@ -424,10 +424,17 @@ class DoserStorage:
         tmp_file.replace(device_file)
 
     def _list_device_files(self) -> list[Path]:
-        """List all device JSON files in the storage directory."""
+        """List all device JSON files in the storage directory.
+
+        Excluding metadata files.
+        """
         if not self._base_path.exists():
             return []
-        return list(self._base_path.glob("*.json"))
+        # Return all .json files except .metadata.json files
+        all_json_files = list(self._base_path.glob("*.json"))
+        return [
+            f for f in all_json_files if not f.name.endswith(".metadata.json")
+        ]
 
     def list_devices(self) -> list[DoserDevice]:
         """Return all persisted devices."""

@@ -69,33 +69,66 @@ class Doser(BaseDevice):
         confirm: bool = False,
         wait_seconds: float = 1.5,
     ) -> DoserStatus | None:
-        """Update daily schedule and optionally refresh status."""
+        """Update daily schedule and optionally refresh status.
+
+        Uses the complete 8-command sequence from ground truth analysis:
+
+        Phase 1 - Prelude (setup and synchronization):
+        1. Handshake command (0x5A, mode 0x04) - initial status request
+        2. First time sync command (0x5A, mode 0x09) - initial clock sync
+        3. Second time sync command (0x5A, mode 0x09) - confirmation sync
+        4. Prepare command stage 0x04 (0xA5, mode 0x04) - prepare device
+        5. Prepare command stage 0x05 (0xA5, mode 0x04) - confirm prepare
+        6. Head select command (0xA5, mode 0x20) - select dosing head
+
+        Phase 2 - Programming (dose configuration):
+        7. Head dose command (0xA5, mode 0x1B) - set volume and weekdays
+        8. Head schedule command (0xA5, mode 0x15) - set daily time
+
+        This matches both the iPhone app logs and other working implementations.
+        """
         weekday_mask = doser_commands.encode_pump_weekdays(weekdays)
-        command_batch = [
-            doser_commands.create_prepare_command(
-                self.get_next_msg_id(),
-                0x04,
-            ),
-            doser_commands.create_prepare_command(
-                self.get_next_msg_id(),
-                0x05,
-            ),
+
+        # Phase 1: Prelude - Setup and synchronization (6 commands)
+        prelude_commands = [
+            # 1. Handshake - initial device communication
+            doser_commands.create_handshake_command(self.get_next_msg_id()),
+            # 2. First time sync - initial device clock synchronization
+            doser_commands.create_set_time_command(self.get_next_msg_id()),
+            # 3. Second time sync - confirmation sync (iPhone app pattern)
+            doser_commands.create_set_time_command(self.get_next_msg_id()),
+            # 4. Prepare stage 0x04 - prepare device for configuration
+            doser_commands.create_prepare_command(self.get_next_msg_id(), 0x04),
+            # 5. Prepare stage 0x05 - confirm device is ready
+            doser_commands.create_prepare_command(self.get_next_msg_id(), 0x05),
+            # 6. Head select - choose which dosing head to configure
             doser_commands.create_head_select_command(
                 self.get_next_msg_id(), head_index
             ),
+        ]
+
+        # Send prelude commands sequentially
+        for cmd in prelude_commands:
+            await self._send_command(bytes(cmd), 3)
+
+        # Phase 2: Programming - Dose configuration (2 commands)
+        programming_commands = [
+            # 7. Head dose - set volume and weekday schedule
             doser_commands.create_head_dose_command(
                 self.get_next_msg_id(),
                 head_index,
                 volume_tenths_ml,
                 weekday_mask=weekday_mask,
             ),
+            # 8. Head schedule - set daily dosing time
             doser_commands.create_head_schedule_command(
                 self.get_next_msg_id(), head_index, hour, minute
             ),
         ]
-        # Convert bytearray commands to bytes for _send_command
-        command_bytes = [bytes(cmd) for cmd in command_batch]
-        await self._send_command(command_bytes, 3)
+
+        # Send programming commands sequentially
+        for cmd in programming_commands:
+            await self._send_command(bytes(cmd), 3)
 
         if not confirm:
             return None

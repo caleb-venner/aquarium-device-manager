@@ -448,7 +448,13 @@ class LightStorage:
     def list_devices(self) -> list[LightDevice]:
         """Return all persisted light devices."""
         devices = []
-        for device_file in self._storage_dir.glob("*.json"):
+        # Get all .json files except .metadata.json files
+        device_files = [
+            f
+            for f in self._storage_dir.glob("*.json")
+            if not f.name.endswith(".metadata.json")
+        ]
+        for device_file in device_files:
             device = self._read_device(device_file.stem.replace("_", ":"))
             if device:
                 devices.append(device)

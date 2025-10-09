@@ -125,7 +125,9 @@ class DoserScheduleArgs(BaseModel):
     """Arguments for set_schedule command."""
 
     head_index: int = Field(..., ge=0, le=3)
-    volume_tenths_ml: int = Field(..., ge=0, le=255)
+    volume_tenths_ml: int = Field(
+        ..., ge=0, le=65535, description="Volume in tenths of ml (0-6553.5ml)"
+    )
     hour: int = Field(..., ge=0, le=23)
     minute: int = Field(..., ge=0, le=59)
     weekdays: Optional[list[PumpWeekday]] = Field(

@@ -91,7 +91,7 @@ python -m venv venv
 source venv/bin/activate
 pip install -e .
 
-chihiros-service
+aqua-ble-service
 ```
 
 Environment variables `AQUA_BLE_SERVICE_HOST` and `AQUA_BLE_SERVICE_PORT`
