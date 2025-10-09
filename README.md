@@ -1,4 +1,8 @@
-# Aquarium BLE Device Manager
+# Current State
+
+This project is in very active development, at a very early stage. Expect greater functionality and further refinefment soon.
+
+## Aquarium BLE Device Manager
 
 Maintained by **Caleb Venner**. This project builds on the open-source work published as [Chihiros LED Control](https://github.com/TheMicDiet/chihiros-led-control) by Michael Dietrich. The original project is licensed under MIT; all redistributions of this codebase continue to honour that license and retain the upstream attribution.
 

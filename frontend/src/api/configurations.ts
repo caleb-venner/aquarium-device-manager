@@ -254,9 +254,73 @@ export interface SystemTimezone {
   note: string;
 }
 
+// Metadata Types
+export interface DeviceMetadata {
+  id: string;
+  name?: string;
+  timezone: string;
+  headNames?: { [key: number]: string };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface LightMetadata {
+  id: string;
+  name?: string;
+  timezone: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 /**
  * Get system timezone information
  */
 export async function getSystemTimezone(): Promise<SystemTimezone> {
   return fetchJson<SystemTimezone>("/api/configurations/system/timezone");
+}
+
+// ============================================================================
+// Metadata API Functions
+// ============================================================================
+
+/**
+ * Update doser metadata (name only, no schedules)
+ */
+export async function updateDoserMetadata(address: string, metadata: DeviceMetadata): Promise<DeviceMetadata> {
+  return putJson<DeviceMetadata>(`/api/configurations/dosers/${address}/metadata`, metadata);
+}
+
+/**
+ * Get doser metadata by address
+ */
+export async function getDoserMetadata(address: string): Promise<DeviceMetadata | null> {
+  return fetchJson<DeviceMetadata | null>(`/api/configurations/dosers/${address}/metadata`);
+}
+
+/**
+ * Get all doser metadata
+ */
+export async function listDoserMetadata(): Promise<DeviceMetadata[]> {
+  return fetchJson<DeviceMetadata[]>("/api/configurations/dosers/metadata");
+}
+
+/**
+ * Update light metadata (name only, no schedules)
+ */
+export async function updateLightMetadata(address: string, metadata: LightMetadata): Promise<LightMetadata> {
+  return putJson<LightMetadata>(`/api/configurations/lights/${address}/metadata`, metadata);
+}
+
+/**
+ * Get light metadata by address
+ */
+export async function getLightMetadata(address: string): Promise<LightMetadata | null> {
+  return fetchJson<LightMetadata | null>(`/api/configurations/lights/${address}/metadata`);
+}
+
+/**
+ * Get all light metadata
+ */
+export async function listLightMetadata(): Promise<LightMetadata[]> {
+  return fetchJson<LightMetadata[]>("/api/configurations/lights/metadata");
 }

@@ -235,7 +235,7 @@ class CommandExecutor:
 
             device = self.ble_service._doser_storage.get_device(address)
             if device:
-                # Update the configuration
+                # Update the existing configuration
                 device = update_doser_schedule_config(device, args)
                 self.ble_service._doser_storage.upsert_device(device)
                 logger.info(
@@ -243,9 +243,18 @@ class CommandExecutor:
                     f"head {args['head_index']}"
                 )
             else:
-                logger.warning(
-                    f"No configuration found for doser {address}, "
-                    "cannot save schedule update"
+                # Create new configuration from the actual command being sent
+                from .config_helpers import create_doser_config_from_command
+
+                logger.info(
+                    f"Creating new configuration for doser {address} "
+                    f"from schedule command"
+                )
+                device = create_doser_config_from_command(address, args)
+                self.ble_service._doser_storage.upsert_device(device)
+                logger.info(
+                    f"Created and saved new doser configuration for {address}, "
+                    f"head {args['head_index']}"
                 )
         except Exception as exc:
             # Don't fail the command if config save fails
@@ -272,7 +281,7 @@ class CommandExecutor:
 
             device = self.ble_service._light_storage.get_device(address)
             if device:
-                # Update the configuration
+                # Update the existing configuration
                 device = update_light_brightness(
                     device,
                     brightness=args["brightness"],
@@ -284,9 +293,20 @@ class CommandExecutor:
                     f"brightness={args['brightness']}"
                 )
             else:
-                logger.warning(
-                    f"No profile found for light {address}, "
-                    "cannot save brightness update"
+                # Create new configuration from the actual command being sent
+                from .config_helpers import create_light_config_from_command
+
+                logger.info(
+                    f"Creating new profile for light {address} "
+                    f"from brightness command"
+                )
+                device = create_light_config_from_command(
+                    address, "brightness", args
+                )
+                self.ble_service._light_storage.upsert_device(device)
+                logger.info(
+                    f"Created and saved new light profile for {address}, "
+                    f"brightness={args['brightness']}"
                 )
         except Exception as exc:
             # Don't fail the command if config save fails
@@ -313,14 +333,19 @@ class CommandExecutor:
 
             device = self.ble_service._light_storage.get_device(address)
             if device:
-                # Update the configuration
+                # Convert weekdays to strings
+                weekdays = args.get("weekdays")
+                if weekdays:
+                    weekdays = [day.value for day in weekdays]
+
+                # Update the existing configuration
                 device = add_light_auto_program(
                     device,
                     sunrise=args["sunrise"],
                     sunset=args["sunset"],
                     brightness=args["brightness"],
                     ramp_up_minutes=args.get("ramp_up_minutes", 0),
-                    weekdays=args.get("weekdays"),
+                    weekdays=weekdays,
                 )
                 self.ble_service._light_storage.upsert_device(device)
                 logger.info(
@@ -328,9 +353,20 @@ class CommandExecutor:
                     f"{args['sunrise']}-{args['sunset']}"
                 )
             else:
-                logger.warning(
-                    f"No profile found for light {address}, "
-                    "cannot save auto program"
+                # Create new configuration from the actual command being sent
+                from .config_helpers import create_light_config_from_command
+
+                logger.info(
+                    f"Creating new profile for light {address} "
+                    f"from auto program command"
+                )
+                device = create_light_config_from_command(
+                    address, "auto_program", args
+                )
+                self.ble_service._light_storage.upsert_device(device)
+                logger.info(
+                    f"Created and saved new light profile for {address}, "
+                    f"{args['sunrise']}-{args['sunset']}"
                 )
         except Exception as exc:
             # Don't fail the command if config save fails

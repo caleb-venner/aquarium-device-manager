@@ -24,6 +24,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+class LightMetadata(BaseModel):
+    """Lightweight light metadata for server-side name storage only."""
+
+    id: str
+    name: str | None = None
+    timezone: str = "UTC"
+    createdAt: str | None = None
+    updatedAt: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 def _time_to_minutes(value: str) -> int:
     hours, minutes = value.split(":", maxsplit=1)
     return int(hours) * 60 + int(minutes)
@@ -604,6 +616,84 @@ class LightStorage:
             raise KeyError(device_id)
         return device
 
+    def _get_metadata_file(self, device_id: str) -> Path:
+        """Get the file path for a device's metadata.
+
+        Args:
+            device_id: Device identifier (MAC address)
+
+        Returns:
+            Path to the device's metadata file
+        """
+        safe_id = device_id.replace(":", "_")
+        return self._storage_dir / f"{safe_id}.metadata.json"
+
+    def upsert_light_metadata(
+        self, metadata: LightMetadata | dict
+    ) -> LightMetadata:
+        """Insert or update light metadata."""
+        if isinstance(metadata, dict):
+            model = LightMetadata.model_validate(metadata)
+        else:
+            model = metadata
+
+        # Update timestamp
+        model.updatedAt = _now_iso()
+
+        metadata_file = self._get_metadata_file(model.id)
+        data = {
+            "device_type": "light",
+            "metadata": model.model_dump(mode="json"),
+        }
+
+        tmp_path = metadata_file.with_suffix(".tmp")
+        tmp_path.write_text(
+            json.dumps(data, indent=2, sort_keys=True), encoding="utf-8"
+        )
+        tmp_path.replace(metadata_file)
+        return model
+
+    def get_light_metadata(self, device_id: str) -> LightMetadata | None:
+        """Get light metadata by device id."""
+        metadata_file = self._get_metadata_file(device_id)
+        if not metadata_file.exists():
+            return None
+
+        try:
+            raw = metadata_file.read_text(encoding="utf-8").strip()
+            if not raw:
+                return None
+
+            data = json.loads(raw)
+
+            # Validate device type for safety
+            if data.get("device_type") != "light":
+                return None
+
+            metadata_data = data.get("metadata", {})
+            return LightMetadata.model_validate(metadata_data)
+        except (json.JSONDecodeError, ValueError) as exc:
+            # Log error but don't crash
+            import logging
+
+            logging.getLogger(__name__).error(
+                f"Could not parse light metadata {device_id}: {exc}"
+            )
+            return None
+
+    def list_light_metadata(self) -> list[LightMetadata]:
+        """List all light metadata."""
+        metadata_list = []
+        for metadata_file in self._storage_dir.glob("*.metadata.json"):
+            # Extract device_id from filename:
+            # "ABC_DEF_GHI.metadata.json" -> "ABC:DEF:GHI"
+            filename_stem = metadata_file.name.removesuffix(".metadata.json")
+            device_id = filename_stem.replace("_", ":")
+            metadata = self.get_light_metadata(device_id)
+            if metadata:
+                metadata_list.append(metadata)
+        return metadata_list
+
 
 __all__ = [
     "AutoProfile",
@@ -615,6 +705,7 @@ __all__ = [
     "LightConfiguration",
     "LightDevice",
     "LightDeviceCollection",
+    "LightMetadata",
     "LightProfileRevision",
     "LightStorage",
     "ManualProfile",

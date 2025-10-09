@@ -11,9 +11,13 @@ import {
   getDoserConfigurations,
   getLightConfigurations,
   getConfigurationSummary,
+  listDoserMetadata,
+  listLightMetadata,
   type DoserDevice,
   type LightDevice,
   type ConfigurationSummary,
+  type DeviceMetadata,
+  type LightMetadata,
 } from "../api/configurations";
 import { getDeviceStatus, scanDevices, connectDevice } from "../api/devices";
 import type { StatusResponse, CachedStatus, ScanDevice } from "../types/models";
@@ -30,6 +34,8 @@ import {
 let currentTab: "overview" | "devices" | "dev" = "overview";
 let doserConfigs: DoserDevice[] = [];
 let lightConfigs: LightDevice[] = [];
+let doserMetadata: DeviceMetadata[] = [];
+let lightMetadata: LightMetadata[] = [];
 let summary: ConfigurationSummary | null = null;
 let deviceStatus: StatusResponse | null = null;
 let isLoading = false;
@@ -171,55 +177,97 @@ function renderOverviewTab(): string {
     address
   }));
 
-  const connectedDevices = devices.filter(d => d.connected);
-
+  // Show empty state if no devices, but don't show scan results here
   if (devices.length === 0) {
     return `
       <div class="empty-state">
-        <h2 class="empty-state-title">No Devices Found</h2>
-        <p class="empty-state-text">
-          Start by scanning for devices or connecting to a device.
-        </p>
-        <button class="btn btn-primary" onclick="window.handleScanDevices()" ${isScanning ? 'disabled' : ''}>
-          ${isScanning ? 'Scanning...' : 'Scan for Devices'}
-        </button>
+        <h2 class="empty-state-title">No Connected Devices</h2>
+        <p class="empty-state-text">Use the "Scan Devices" button in the header to find and connect devices.</p>
       </div>
-
-      ${renderScanResults()}
     `;
   }
 
   return `
-    ${renderScanResults()}
-
-    ${devices.length > 0 ? renderDeviceSection("Devices", devices) : ""}
+    ${renderDeviceSection("Connected Devices", devices)}
   `;
 }
 
 /**
- * Render scan results section
+ * Render the unified scan section (replaces empty state when scanning/results available)
  */
-function renderScanResults(): string {
-  if (scanResults.length === 0) {
-    return '';
-  }
+function renderScanSection(showEmptyState: boolean): string {
+  const connectedAddresses = deviceStatus ? Object.keys(deviceStatus) : [];
+  const newDevices = scanResults.filter(device => !connectedAddresses.includes(device.address));
 
-  return `
-    <div class="card scan-results" style="margin-top: 24px;">
-      <div class="card-header">
-        <h2 class="card-title">Discovered Devices</h2>
-        <div class="badge badge-info">${scanResults.length}</div>
-      </div>
-      <div style="margin-top: 16px;">
-        <p style="margin: 0 0 16px 0; color: var(--gray-600); font-size: 14px;">
-          These devices were found during the last scan. Click "Connect" to add a device to your dashboard.
-        </p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 16px;">
-          ${scanResults.map(device => renderScanResultCard(device)).join("")}
+  if (isScanning) {
+    return `
+      <div class="scan-state">
+        <div class="scan-state-content">
+          <div class="scan-spinner">🔄</div>
+          <h2 class="scan-state-title">Scanning for Devices...</h2>
+          <p class="scan-state-text">Searching for nearby BLE devices. This may take a few seconds.</p>
         </div>
       </div>
-    </div>
-  `;
+    `;
+  }
+
+  if (scanResults.length > 0) {
+    if (newDevices.length === 0) {
+      return `
+        <div class="scan-state">
+          <div class="scan-state-content">
+            <h2 class="scan-state-title">No New Devices Found</h2>
+            <p class="scan-state-text">
+              Found ${scanResults.length} device${scanResults.length !== 1 ? 's' : ''}, but they are already connected.
+            </p>
+            <button class="btn btn-primary" onclick="window.handleScanDevices()">
+              Scan Again
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="scan-state">
+        <div class="scan-state-content">
+          <h2 class="scan-state-title">Discovered Devices</h2>
+          <p class="scan-state-text">
+            Found ${newDevices.length} new device${newDevices.length !== 1 ? 's' : ''}. Click "Connect" to add them to your dashboard.
+          </p>
+          <div class="scan-results-grid">
+            ${newDevices.map(device => renderScanResultCard(device)).join("")}
+          </div>
+          <div class="scan-actions">
+            <button class="btn btn-secondary" onclick="window.clearScanResults()">
+              Clear Results
+            </button>
+            <button class="btn btn-primary" onclick="window.handleScanDevices()">
+              Scan Again
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  if (showEmptyState) {
+    return `
+      <div class="scan-state">
+        <div class="scan-state-content">
+          <h2 class="scan-state-title">No Devices Found</h2>
+          <p class="scan-state-text">
+            Start by scanning for devices or connecting to a device manually.
+          </p>
+          <button class="btn btn-primary" onclick="window.handleScanDevices()">
+            Scan for Devices
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  return '';
 }
 
 /**
@@ -227,23 +275,23 @@ function renderScanResults(): string {
  */
 function renderScanResultCard(device: ScanDevice): string {
   return `
-    <div class="card" style="padding: 20px; border: 1px solid var(--gray-200);">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="flex: 1;">
-          <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${device.name}</h3>
-          <p style="margin: 0 0 8px 0; font-size: 13px; color: var(--gray-600); font-family: monospace;">${device.address}</p>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="badge badge-secondary" style="font-size: 11px;">${device.device_type}</span>
-            <span style="font-size: 12px; color: var(--gray-500);">${device.product}</span>
+    <div class="card device-scan-card">
+      <div class="scan-card-content">
+        <div class="scan-card-info">
+          <h3 class="scan-card-title">${device.name}</h3>
+          <p class="scan-card-address">${device.address}</p>
+          <div class="scan-card-meta">
+            <span class="badge badge-secondary">${device.device_type}</span>
+            <span class="scan-card-product">${device.product}</span>
           </div>
         </div>
         <button
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary scan-card-button"
           onclick="window.handleConnectDevice('${device.address}')"
-          style="margin-left: 16px; min-width: 80px;"
           title="Connect to this device and add it to your dashboard"
         >
-          Add Device
+          <span>🔌</span>
+          Connect
         </button>
       </div>
     </div>
@@ -284,12 +332,33 @@ function renderDeviceSection(
 }
 
 /**
+ * Get the configured name for a device, falling back to model name
+ */
+function getDeviceDisplayName(device: CachedStatus & { address: string }): string {
+  // First, check if there's a configured name in metadata
+  if (device.device_type === "doser") {
+    const metadata = doserMetadata.find(m => m.id === device.address);
+    if (metadata?.name) {
+      return metadata.name;
+    }
+  } else if (device.device_type === "light") {
+    const metadata = lightMetadata.find(m => m.id === device.address);
+    if (metadata?.name) {
+      return metadata.name;
+    }
+  }
+
+  // Fall back to model name or generic name
+  return device.model_name || "Unknown Device";
+}
+
+/**
  * Render an individual device tile with full device info
  */
 function renderDeviceTile(device: CachedStatus & { address: string }): string {
   const statusColor = device.connected ? "var(--success)" : "var(--gray-400)";
   const statusText = device.connected ? "Connected" : "Disconnected";
-  const deviceName = device.model_name || "Unknown Device";
+  const deviceName = getDeviceDisplayName(device);
   const timeAgo = getTimeAgo(device.updated_at);
 
   return `
@@ -444,10 +513,9 @@ function renderDoserCardStatus(device: CachedStatus & { address: string }): stri
 
   const heads = parsed.heads || [];
 
-  // Count active heads based on mode_label (not mode number)
-  const activeHeads = heads.filter((head: any) =>
-    head.mode_label?.toLowerCase() !== 'disabled'
-  ).length;
+  // Count active heads: status != 4 (Disabled)
+  // Head status: {0,1,2,3,4} = {Daily, 24 Hourly, Custom, Timer, Disabled}
+  const activeHeads = heads.filter((head: any) => head.mode !== 4).length;
 
   // Find the saved configuration for this device
   const savedConfig = doserConfigs.find(config => config.id === device.address);
@@ -464,7 +532,7 @@ function renderDoserCardStatus(device: CachedStatus & { address: string }): stri
           <div style="font-size: 20px; font-weight: 700; color: var(--primary);">${activeHeads}/${heads.length}</div>
         </div>
       </div>
-      ${renderPumpHeads(heads, savedConfig)}
+      ${renderPumpHeads(heads, savedConfig, device.address)}
     </div>
   `;
 }
@@ -550,7 +618,15 @@ function getHeadConfigData(headIndex: number, savedConfig: DoserDevice | undefin
 /**
  * Render pump heads grid
  */
-function renderPumpHeads(heads: any[], savedConfig?: DoserDevice): string {
+/**
+ * Get the configured name for a doser head
+ */
+function getDoserHeadName(deviceAddress: string, headIndex: number): string | null {
+  const metadata = doserMetadata.find(m => m.id === deviceAddress);
+  return metadata?.headNames?.[headIndex] || null;
+}
+
+function renderPumpHeads(heads: any[], savedConfig?: DoserDevice, deviceAddress?: string): string {
   // Always show 4 heads (standard for doser devices)
   // Combine device status data with configuration data
   const allHeads = [];
@@ -579,14 +655,19 @@ function renderPumpHeads(heads: any[], savedConfig?: DoserDevice): string {
           const displayMode = head.mode_label || 'disabled';
           const isActive = displayMode?.toLowerCase() !== 'disabled';
 
+          // Get the configured head name
+          const headName = deviceAddress ? getDoserHeadName(deviceAddress, head.index) : null;
+
           return `
             <div style="padding: 12px; background: ${isActive ? 'var(--success-light)' : 'var(--gray-50)'}; border: 1px solid ${isActive ? 'var(--success)' : 'var(--gray-200)'}; border-radius: 6px;">
               <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
                 <div style="width: 28px; height: 28px; border-radius: 50%; background: ${isActive ? 'var(--success)' : 'var(--gray-300)'}; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">
                   ${head.index}
                 </div>
-                <div style="font-size: 12px; font-weight: 600; color: ${isActive ? 'var(--success)' : 'var(--gray-500)'}; text-transform: capitalize;">
-                  ${displayMode}
+                <div style="flex: 1;">
+                  <div style="font-size: 12px; font-weight: 600; color: ${isActive ? 'var(--success)' : 'var(--gray-500)'}; text-transform: capitalize;">
+                    ${displayMode}${headName ? ` → ${headName}` : ''}
+                  </div>
                 </div>
               </div>
               ${isActive ? `
@@ -630,28 +711,8 @@ function renderDeviceCardControls(device: CachedStatus & { address: string }): s
  * Render device-specific control buttons
  */
 function renderDeviceSpecificControls(device: CachedStatus & { address: string }): string {
-  if (device.device_type === "light") {
-    return `
-      <button class="btn btn-sm btn-success" style="flex: 1; min-width: 80px;">
-        💡 On
-      </button>
-      <button class="btn btn-sm btn-secondary" style="flex: 1; min-width: 80px;">
-        🌙 Off
-      </button>
-      <button class="btn btn-sm" style="flex: 1; min-width: 80px;">
-        🤖 Auto
-      </button>
-    `;
-  } else if (device.device_type === "doser") {
-    return `
-      <button class="btn btn-sm" style="flex: 1; min-width: 100px;">
-        ⏰ Schedule
-      </button>
-      <button class="btn btn-sm" style="flex: 1; min-width: 100px;">
-        🧪 Test Dose
-      </button>
-    `;
-  }
+  // Device-specific controls removed - use the main Configure button instead
+  // All device control functionality is accessible through the configuration interface
   return '';
 }
 
@@ -846,32 +907,208 @@ function renderLightPreview(light: LightDevice): string {
 }
 
 /**
- * Render the unified devices tab - shows both dosers and lights together
+ * Render the unified devices tab - shows all connected devices with their configurations
  */
 function renderDevicesTab(): string {
-  const totalDevices = doserConfigs.length + lightConfigs.length;
+  // Get all connected devices from device status
+  const connectedDevices = deviceStatus ? Object.entries(deviceStatus) : [];
 
-  if (totalDevices === 0) {
+  if (connectedDevices.length === 0) {
     return `
       <div class="empty-state">
-        <h2 class="empty-state-title">No Device Profiles</h2>
+        <h2 class="empty-state-title">No Connected Devices</h2>
         <p class="empty-state-text">
-          Connect to doser or light devices to automatically create configuration profiles.
+          Use the "Scan Devices" button in the header to find and connect devices for configuration and management.
         </p>
       </div>
     `;
   }
 
+  const totalDevices = connectedDevices.length;
+  const devicesWithConfigs = connectedDevices.filter(([address, status]) => {
+    if (status.device_type === 'doser') {
+      return doserConfigs.some(d => d.id === address);
+    } else if (status.device_type === 'light') {
+      return lightConfigs.some(l => l.id === address);
+    }
+    return false;
+  }).length;
+
   return `
     <div class="card">
       <div class="card-header">
-        <h2 class="card-title">Device Profiles</h2>
-        <div class="badge badge-info">${totalDevices}</div>
+        <h2 class="card-title">Connected Devices</h2>
+        <div class="header-badges">
+          <div class="badge badge-info">${totalDevices} Connected</div>
+          <div class="badge badge-success">${devicesWithConfigs} Configured</div>
+        </div>
       </div>
     </div>
     <div class="config-grid">
-      ${doserConfigs.map(d => renderDoserCard(d)).join("")}
-      ${lightConfigs.map(l => renderLightCard(l)).join("")}
+      ${connectedDevices.map(([address, status]) => renderConnectedDeviceCard(address, status)).join("")}
+    </div>
+  `;
+}
+
+/**
+ * Render a card for any connected device (with or without configuration)
+ */
+function renderConnectedDeviceCard(address: string, status: CachedStatus): string {
+  const deviceType = status.device_type;
+  const modelName = status.model_name || 'Unknown Model';
+  const isConnected = status.connected;
+  const lastUpdated = new Date(status.updated_at * 1000);
+
+  // Check if device has a configuration
+  let hasConfig = false;
+  let configCount = 0;
+  let deviceConfig: DoserDevice | LightDevice | null = null;
+
+  if (deviceType === 'doser') {
+    deviceConfig = doserConfigs.find(d => d.id === address) || null;
+    hasConfig = !!deviceConfig;
+    configCount = deviceConfig?.configurations?.length || 0;
+  } else if (deviceType === 'light') {
+    deviceConfig = lightConfigs.find(l => l.id === address) || null;
+    hasConfig = !!deviceConfig;
+    configCount = deviceConfig?.configurations?.length || 0;
+  }
+
+  const formatDateTime = (date: Date) => {
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  return `
+    <div class="card ${isConnected ? 'device-connected' : 'device-disconnected'}">
+      <div class="card-header">
+        <h3 class="card-title">
+          ${deviceConfig?.name || `${modelName} ${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)}`}
+        </h3>
+        <div class="card-actions">
+          <button class="btn-icon" title="Configure Server Settings (Name, Head Names)" onclick="window.handleConfigureDevice('${address}', '${deviceType}')">Configure</button>
+          ${hasConfig ? `<button class="btn-icon" title="Delete Profile" onclick="window.handleDeleteDevice('${address}', '${deviceType}')">Delete</button>` : ''}
+        </div>
+      </div>
+
+      <!-- Device Info Section -->
+      <div class="device-info-section">
+        <div class="device-detail">
+          <div class="detail-label">Device Address</div>
+          <div class="detail-value">${address}</div>
+        </div>
+        <div class="device-detail">
+          <div class="detail-label">Type</div>
+          <div class="detail-value">${deviceType.charAt(0).toUpperCase() + deviceType.slice(1)}</div>
+        </div>
+        <div class="device-detail">
+          <div class="detail-label">Model</div>
+          <div class="detail-value">${modelName}</div>
+        </div>
+      </div>
+
+      <!-- Connection Status -->
+      <div class="connection-status">
+        <div class="status-indicator ${isConnected ? 'connected' : 'disconnected'}">
+          <span class="status-dot"></span>
+          ${isConnected ? 'Connected' : 'Disconnected'}
+        </div>
+        <div class="last-updated">
+          Last updated: ${formatDateTime(lastUpdated)}
+        </div>
+      </div>
+
+      <!-- Configuration Status -->
+      <div class="config-status">
+        <div class="badge ${hasConfig ? 'badge-success' : 'badge-gray'}">
+          ${hasConfig ? `${configCount} configuration${configCount !== 1 ? 's' : ''}` : 'No configuration'}
+        </div>
+        ${hasConfig && deviceConfig && 'activeConfigurationId' in deviceConfig ? `
+          <div class="active-config">
+            Active: ${deviceConfig.activeConfigurationId || 'None'}
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Device-Specific Info -->
+      ${deviceType === 'doser' && status.parsed ? renderDoserStatusInfo(status.parsed) : ''}
+      ${deviceType === 'light' && status.parsed ? renderLightStatusInfo(status.parsed) : ''}
+
+      <!-- Quick Actions -->
+      <div class="device-actions">
+        ${isConnected ? `
+          <button class="btn btn-secondary btn-small" title="Device Commands & Schedule Settings" onclick="window.handleDeviceSettings('${address}', '${deviceType}')">
+            <span>⚙️</span>
+            Settings
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="window.handleRefreshDevice('${address}')">
+            <span>🔄</span>
+            Refresh
+          </button>
+        ` : `
+          <button class="btn btn-primary btn-small" onclick="window.handleConnectDevice('${address}')">
+            <span>🔌</span>
+            Connect
+          </button>
+        `}
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render doser-specific status information
+ */
+function renderDoserStatusInfo(parsed: any): string {
+  if (!parsed || !parsed.heads) return '';
+
+  // Count active heads: status != 4 (Disabled)
+  // Head status: {0,1,2,3,4} = {Daily, 24 Hourly, Custom, Timer, Disabled}
+  const activeHeads = parsed.heads.filter((head: any) => head.mode !== 4).length;
+  const totalHeads = parsed.heads.length;
+
+  return `
+    <div class="device-status-info">
+      <div class="status-detail">
+        <span class="detail-label">Active Heads:</span>
+        <span class="detail-value">${activeHeads}/${totalHeads}</span>
+      </div>
+      ${parsed.weekday !== null && parsed.hour !== null && parsed.minute !== null ? `
+        <div class="status-detail">
+          <span class="detail-label">Device Time:</span>
+          <span class="detail-value">${parsed.hour}:${parsed.minute.toString().padStart(2, '0')}</span>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/**
+ * Render light-specific status information
+ */
+function renderLightStatusInfo(parsed: any): string {
+  if (!parsed) return '';
+
+  return `
+    <div class="device-status-info">
+      ${parsed.current_hour !== null && parsed.current_minute !== null ? `
+        <div class="status-detail">
+          <span class="detail-label">Device Time:</span>
+          <span class="detail-value">${parsed.current_hour}:${parsed.current_minute.toString().padStart(2, '0')}</span>
+        </div>
+      ` : ''}
+      ${parsed.keyframes ? `
+        <div class="status-detail">
+          <span class="detail-label">Keyframes:</span>
+          <span class="detail-value">${parsed.keyframes.length}</span>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -917,9 +1154,6 @@ function renderDoserCard(doser: DoserDevice): string {
       </div>
       <div style="display: flex; flex-direction: column; gap: 8px;">
         <div style="font-size: 13px; color: var(--gray-600);">
-          <strong>Timezone:</strong> ${doser.timezone || 'Not set'}
-        </div>
-        <div style="font-size: 13px; color: var(--gray-600);">
           <strong>Active Config:</strong> ${activeConfig}
         </div>
         ${doser.updatedAt ? `<div style="font-size: 12px; color: var(--gray-500);">Updated: ${formatDateTime(doser.updatedAt)}</div>` : ''}
@@ -958,7 +1192,7 @@ function renderLightCard(light: LightDevice): string {
       <div class="card-header">
         <h3 class="card-title">${light.name || "Light Device"}</h3>
         <div class="card-actions">
-          <button class="btn-icon" title="Edit" onclick="alert('Edit feature coming soon')">Edit</button>
+          <button class="btn-icon" title="Configure" onclick="window.handleConfigureLight('${light.id}')">Configure</button>
           <button class="btn-icon" title="Delete" onclick="window.handleDeleteLight('${light.id}')">Delete</button>
         </div>
       </div>
@@ -973,9 +1207,6 @@ function renderLightCard(light: LightDevice): string {
         ${channelCount > 0 ? `<div class="badge badge-info" style="margin-left: 8px;">${channelCount} channel${channelCount !== 1 ? 's' : ''}</div>` : ''}
       </div>
       <div style="display: flex; flex-direction: column; gap: 8px;">
-        <div style="font-size: 13px; color: var(--gray-600);">
-          <strong>Timezone:</strong> ${light.timezone || 'Not set'}
-        </div>
         <div style="font-size: 13px; color: var(--gray-600);">
           <strong>Active Config:</strong> ${activeConfig}
         </div>
@@ -1246,12 +1477,14 @@ async function loadAllConfigurations() {
   refreshDashboard();
 
   try {
-    // Load configurations and device status in parallel
+    // Load configurations, metadata, and device status in parallel
     const results = await Promise.allSettled([
       getDoserConfigurations(),
       getLightConfigurations(),
       getConfigurationSummary(),
       getDeviceStatus(),
+      listDoserMetadata(),
+      listLightMetadata(),
     ]);
 
     // Handle doser configs
@@ -1301,10 +1534,28 @@ async function loadAllConfigurations() {
       deviceStatus = {};
     }
 
+    // Handle doser metadata
+    if (results[4].status === "fulfilled") {
+      doserMetadata = results[4].value;
+    } else {
+      console.error("❌ Failed to load doser metadata:", results[4].reason);
+      doserMetadata = [];
+    }
+
+    // Handle light metadata
+    if (results[5].status === "fulfilled") {
+      lightMetadata = results[5].value;
+    } else {
+      console.error("❌ Failed to load light metadata:", results[5].reason);
+      lightMetadata = [];
+    }
+
     console.log("✅ Loaded data:", {
       dosers: doserConfigs.length,
       lights: lightConfigs.length,
       devices: Object.keys(deviceStatus || {}).length,
+      doserMetadata: doserMetadata.length,
+      lightMetadata: lightMetadata.length,
       summary: summary ? "loaded" : "fallback"
     });
   } catch (err) {
@@ -1343,47 +1594,308 @@ function refreshDashboard() {
 (window as any).handleScanDevices = async () => {
   if (isScanning) return; // Prevent double scan
 
+  // Show scan modal instead of redirecting to overview tab
+  showScanDevicesModal();
+};
+
+/**
+ * Show the device scanning modal with live scan progress
+ */
+function showScanDevicesModal(): void {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'scan-modal';
+
+  const renderModalContent = () => {
+    const connectedAddresses = deviceStatus ? Object.keys(deviceStatus) : [];
+    const newDevices = scanResults.filter(device => !connectedAddresses.includes(device.address));
+
+    if (isScanning) {
+      return `
+        <div class="modal-content" style="max-width: 90vw; width: 500px;">
+          <div class="modal-header">
+            <h2>🔄 Scanning for Devices...</h2>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+          </div>
+          <div class="modal-body" style="text-align: center; padding: 40px;">
+            <div class="scan-spinner" style="font-size: 48px; margin-bottom: 20px;">🔄</div>
+            <p>Searching for nearby BLE devices. This may take a few seconds.</p>
+          </div>
+        </div>
+      `;
+    }
+
+    if (scanResults.length > 0) {
+      if (newDevices.length === 0) {
+        return `
+          <div class="modal-content" style="max-width: 90vw; width: 500px;">
+            <div class="modal-header">
+              <h2>No New Devices Found</h2>
+              <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+            </div>
+            <div class="modal-body" style="text-align: center; padding: 40px;">
+              <p>Found ${scanResults.length} device${scanResults.length !== 1 ? 's' : ''}, but they are already connected.</p>
+              <div style="margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="window.startModalScan()" style="margin-right: 10px;">
+                  Scan Again
+                </button>
+                <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove();">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="modal-content" style="max-width: 95vw; width: fit-content; min-width: 600px;">
+          <div class="modal-header">
+            <h2>Discovered Devices</h2>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+          </div>
+          <div class="modal-body">
+            <p style="margin-bottom: 20px;">Found ${newDevices.length} new device${newDevices.length !== 1 ? 's' : ''}. Click "Connect" to add them to your dashboard.</p>
+            <div class="scan-results-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; max-width: 100%;">
+              ${newDevices.map(device => renderScanResultCard(device)).join("")}
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+              <button class="btn btn-secondary" onclick="window.startModalScan()" style="margin-right: 10px;">
+                Scan Again
+              </button>
+              <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove();">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="modal-content" style="max-width: 90vw; width: 500px;">
+        <div class="modal-header">
+          <h2>Scan for Devices</h2>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+        </div>
+        <div class="modal-body" style="text-align: center; padding: 40px;">
+          <p style="margin-bottom: 20px;">Search for nearby BLE devices to add to your dashboard.</p>
+          <button class="btn btn-primary" onclick="window.startModalScan()">
+            Start Scanning
+          </button>
+        </div>
+      </div>
+    `;
+  };
+
+  modal.innerHTML = renderModalContent();
+  document.body.appendChild(modal);
+
+  // Set up modal refresh function
+  (window as any).refreshScanModal = () => {
+    const existingModal = document.getElementById('scan-modal');
+    if (existingModal) {
+      existingModal.innerHTML = renderModalContent();
+    }
+  };
+}
+
+// Function to start scanning from within the modal
+(window as any).startModalScan = async () => {
+  if (isScanning) return;
+
   try {
     isScanning = true;
     scanResults = []; // Clear previous results
-    refreshDashboard(); // Update UI to show scanning state
+    (window as any).refreshScanModal(); // Update modal to show scanning state
 
     const results = await scanDevices();
     scanResults = results;
-
-    // Show success message with results count
-    if (results.length > 0) {
-      // Scroll to scan results section if devices found
-      setTimeout(() => {
-        const scanSection = document.querySelector('.scan-results');
-        if (scanSection) {
-          scanSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 100);
-    }
   } catch (err) {
-    // Clear scan results on error and show message
     scanResults = [];
     alert(`Failed to scan for devices: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     isScanning = false;
-    refreshDashboard(); // Update UI to remove scanning state
+    (window as any).refreshScanModal(); // Update modal with results
   }
 };
 
 (window as any).handleConnectDevice = async (address: string) => {
   try {
-    await connectDevice(address);
+    // Update UI to show connecting state
+    const button = document.querySelector(`button[onclick*="${address}"]`) as HTMLButtonElement;
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<span>🔄</span> Connecting...';
+    }
 
-    // Clear scan results since we connected to one
-    scanResults = [];
+    await connectDevice(address);
 
     // Refresh device status to show the newly connected device
     await loadAllConfigurations();
 
-    alert(`Successfully connected to device ${address}`);
+    // Update button to show connected state
+    if (button) {
+      button.innerHTML = '<span>✅</span> Connected';
+      button.disabled = true;
+      button.classList.remove('btn-primary');
+      button.classList.add('btn-success');
+    }
+
+    // Close scan modal if it's open and device connected successfully
+    // REMOVED: Don't auto-close scan modal to allow connecting multiple devices
+    // const scanModal = document.getElementById('scan-modal');
+    // if (scanModal) {
+    //   scanModal.remove();
+    // }
+
+    // Force refresh the dashboard to show the new device
+    refreshDashboard();
+
+    // Also refresh the scan modal if it's open to update the display
+    if ((window as any).refreshScanModal) {
+      (window as any).refreshScanModal();
+    }
+
   } catch (err) {
-    alert(`Failed to connect to device ${address}: ${err instanceof Error ? err.message : String(err)}`);
+    // Show error state on button, but no popup
+    const button = document.querySelector(`button[onclick*="${address}"]`) as HTMLButtonElement;
+    if (button) {
+      button.innerHTML = '<span>❌</span> Failed';
+      button.disabled = false;
+      button.classList.remove('btn-primary');
+      button.classList.add('btn-danger');
+
+      // Reset button after 3 seconds
+      setTimeout(() => {
+        button.innerHTML = '<span>🔌</span> Retry';
+        button.classList.remove('btn-danger');
+        button.classList.add('btn-primary');
+      }, 3000);
+    }
+  }
+};
+
+// Clear scan results
+(window as any).clearScanResults = () => {
+  scanResults = [];
+  refreshDashboard();
+};
+
+// Generic handler for configuring any device type
+(window as any).handleConfigureDevice = async (address: string, deviceType: string) => {
+  if (deviceType === 'doser') {
+    try {
+      const { getDoserConfiguration } = await import("../api/configurations");
+      const device = await getDoserConfiguration(address);
+      showDoserServerConfigModal(device);
+    } catch (err) {
+      // If no config exists, create a new one for configuration
+      console.log(`No existing doser configuration for ${address}, opening new server configuration interface`);
+      showDoserServerConfigModal({
+        id: address,
+        name: `Doser ${address.slice(-8)}`,
+        configurations: [],
+        activeConfigurationId: undefined,
+        timezone: 'UTC'
+      });
+    }
+  } else if (deviceType === 'light') {
+    try {
+      const { getLightConfiguration } = await import("../api/configurations");
+      const device = await getLightConfiguration(address);
+      showLightConfigurationModal(device);
+    } catch (err) {
+      // If no config exists, create a new one for configuration
+      console.log(`No existing light configuration for ${address}, opening new configuration interface`);
+      showLightConfigurationModal({
+        id: address,
+        name: `Light ${address.slice(-8)}`,
+        timezone: 'UTC',
+        channels: [],
+        configurations: [],
+        activeConfigurationId: undefined
+      });
+    }
+  }
+};
+
+// Handler for device settings (command/schedule interface)
+(window as any).handleDeviceSettings = async (address: string, deviceType: string) => {
+  if (deviceType === 'doser') {
+    try {
+      const { getDoserConfiguration } = await import("../api/configurations");
+      const device = await getDoserConfiguration(address);
+      showDoserDeviceSettingsModal(device);
+    } catch (err) {
+      // If no config exists, create a new one for settings
+      console.log(`No existing doser configuration for ${address}, opening new device settings interface`);
+      showDoserDeviceSettingsModal({
+        id: address,
+        name: `Doser ${address.slice(-8)}`,
+        configurations: [],
+        activeConfigurationId: undefined,
+        timezone: 'UTC'
+      });
+    }
+  } else if (deviceType === 'light') {
+    // For lights, use the same configuration modal for now
+    try {
+      const { getLightConfiguration } = await import("../api/configurations");
+      const device = await getLightConfiguration(address);
+      showLightConfigurationModal(device);
+    } catch (err) {
+      console.log(`No existing light configuration for ${address}, opening new configuration interface`);
+      showLightConfigurationModal({
+        id: address,
+        name: `Light ${address.slice(-8)}`,
+        timezone: 'UTC',
+        channels: [],
+        configurations: [],
+        activeConfigurationId: undefined
+      });
+    }
+  }
+};
+
+// Generic handler for deleting any device configuration
+(window as any).handleDeleteDevice = async (address: string, deviceType: string) => {
+  const deviceName = deviceType.charAt(0).toUpperCase() + deviceType.slice(1);
+  if (confirm(`Are you sure you want to delete the configuration for ${deviceName} ${address}?`)) {
+    try {
+      if (deviceType === 'doser') {
+        const { deleteDoserConfiguration } = await import("../api/configurations");
+        await deleteDoserConfiguration(address);
+      } else if (deviceType === 'light') {
+        const { deleteLightConfiguration } = await import("../api/configurations");
+        await deleteLightConfiguration(address);
+      }
+      await loadAllConfigurations();
+    } catch (err) {
+      alert(`Failed to delete configuration: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+};
+
+// Handler for refreshing individual device status
+(window as any).handleRefreshDevice = async (address: string) => {
+  try {
+    const { refreshDeviceStatus } = await import("../api/devices");
+    await refreshDeviceStatus(address);
+    await loadAllConfigurations(); // Refresh all data
+    alert(`Device ${address} status refreshed`);
+  } catch (err) {
+    alert(`Failed to refresh device status: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+(window as any).handleConfigureLight = async (deviceId: string) => {
+  try {
+    const { getLightConfiguration } = await import("../api/configurations");
+    const device = await getLightConfiguration(deviceId);
+    showLightConfigurationModal(device);
+  } catch (err) {
+    alert(`Failed to load light configuration: ${err instanceof Error ? err.message : String(err)}`);
   }
 };
 
@@ -1415,28 +1927,56 @@ function refreshDashboard() {
   try {
     const { getDoserConfiguration } = await import("../api/configurations");
     const device = await getDoserConfiguration(deviceId);
-    showDoserConfigurationModal(device);
+    showDoserDeviceSettingsModal(device);
   } catch (err) {
     alert(`Failed to load doser configuration: ${err instanceof Error ? err.message : String(err)}`);
   }
 };
 
 /**
- * Show the doser configuration modal
+ * Show the doser server configuration modal - for device and head names only
  */
-function showDoserConfigurationModal(device: DoserDevice): void {
+function showDoserServerConfigModal(device: DoserDevice): void {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Configure Doser</h2>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+      </div>
+      <div class="modal-body">
+        ${renderDoserServerConfigInterface(device)}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Close on background click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+}
+
+/**
+ * Show the doser device settings modal - for commands and schedules
+ */
+function showDoserDeviceSettingsModal(device: DoserDevice): void {
   currentConfigDevice = device; // Set global state
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.innerHTML = `
-    <div class="modal-content" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-content doser-config-modal" style="max-width: 1000px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
-        <h2>Configure Doser: ${device.name || device.id}</h2>
+        <h2>Doser Settings: ${device.name || device.id}</h2>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove(); currentConfigDevice = null;">×</button>
       </div>
       <div class="modal-body">
-        ${renderDoserConfigurationForm(device)}
+        ${renderDoserDeviceSettingsInterface(device)}
       </div>
     </div>
   `;
@@ -1452,6 +1992,380 @@ function showDoserConfigurationModal(device: DoserDevice): void {
   });
 }
 
+/**
+ * Render the server configuration interface - device and head names only
+ */
+function renderDoserServerConfigInterface(device: DoserDevice): string {
+  // Extract existing head names from configuration if available
+  const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId) || device.configurations[0];
+  const latestRevision = activeConfig?.revisions[activeConfig.revisions.length - 1];
+  const existingHeads = latestRevision?.heads || [];
+
+  const getHeadName = (index: number) => {
+    const head = existingHeads.find((h: any) => h.index === index);
+    return head?.label || '';
+  };
+
+  return `
+    <div class="server-config-interface">
+      <!-- Device Name Section -->
+      <div class="config-section">
+        <h3>Device Information</h3>
+        <p class="section-description">Configure the display names for this device and its dosing heads. These settings are saved server-side only.</p>
+
+        <div class="form-group">
+          <label for="server-device-name">Device Name:</label>
+          <input type="text" id="server-device-name" value="${device.name || ''}"
+                 placeholder="Enter custom device name (e.g., 'Main Tank Doser')" class="form-input">
+        </div>
+
+        <div class="device-info">
+          <div class="detail-label">Device Address:</div>
+          <div class="detail-value">${device.id}</div>
+        </div>
+      </div>
+
+      <!-- Head Names Section -->
+      <div class="config-section">
+        <h3>Dosing Head Names</h3>
+        <p class="section-description">Give descriptive names to each dosing head for easier identification.</p>
+
+        <div class="head-names-grid">
+          ${[1, 2, 3, 4].map(headIndex => `
+            <div class="head-name-config">
+              <label for="head-${headIndex}-name">Head ${headIndex}:</label>
+              <input type="text" id="head-${headIndex}-name"
+                     value="${getHeadName(headIndex)}"
+                     placeholder="e.g., Calcium, Alkalinity, Magnesium"
+                     class="form-input">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove();">
+          Cancel
+        </button>
+        <button class="btn btn-primary" onclick="window.saveDoserServerConfig('${device.id}')">
+          Save Configuration
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the device settings interface - commands and schedules only
+ */
+function renderDoserDeviceSettingsInterface(device: DoserDevice): string {
+  const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId);
+  const latestRevision = activeConfig?.revisions[activeConfig.revisions.length - 1];
+  const heads = latestRevision?.heads || [];
+
+  // Get device name from metadata, fallback to device.name or default
+  const deviceMetadata = doserMetadata.find(m => m.id === device.id);
+  const deviceDisplayName = deviceMetadata?.name || device.name || 'Unnamed Device';
+
+  return `
+    <div class="doser-config-interface">
+      <!-- Device Info Section (Read-only) -->
+      <div class="config-section">
+        <h3>Device Information</h3>
+        <p class="section-description">View device information and configure dosing schedules. Commands will be sent directly to the device.</p>
+
+        <div class="device-info-readonly">
+          <div class="info-item">
+            <span class="info-label">Device Name:</span>
+            <span class="info-value">${deviceDisplayName}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Device Address:</span>
+            <span class="info-value">${device.id}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Head Selector Section -->
+      <div class="config-section">
+        <h3>Dosing Heads</h3>
+        <p class="section-description">Select a head to configure its schedule and settings. Click "Send Command" to apply changes to the device.</p>
+
+        <div class="heads-grid">
+          ${renderHeadSelector(heads)}
+        </div>
+      </div>
+
+      <!-- Command Interface Section -->
+      <div class="config-section">
+        <div id="command-interface">
+          <div class="no-head-selected">
+            <div class="empty-state-icon">🎯</div>
+            <h4>No Head Selected</h4>
+            <p>Select a dosing head above to configure its schedule and settings.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove(); currentConfigDevice = null;">
+          Close
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the 4-head visual selector
+ */
+function renderHeadSelector(heads: any[]): string {
+  // Get device from current config device to access its ID for metadata lookup
+  const device = currentConfigDevice;
+  const deviceMetadata = device ? doserMetadata.find(m => m.id === device.id) : null;
+
+  // Ensure we have all 4 heads
+  const allHeads = [];
+  for (let i = 1; i <= 4; i++) {
+    const existingHead = heads.find(h => h.index === i);
+    // Get head name from metadata, fallback to default
+    const headName = deviceMetadata?.headNames?.[i] || `Head ${i}`;
+
+    allHeads.push(existingHead || {
+      index: i,
+      label: headName,
+      active: false,
+      schedule: { mode: 'single', dailyDoseMl: 10.0, startTime: '09:00' }
+    });
+  }
+
+  return allHeads.map(head => {
+    // Get head name from metadata for display
+    const headDisplayName = deviceMetadata?.headNames?.[head.index] || `Head ${head.index}`;
+
+    return `
+      <div class="head-selector ${head.active ? 'active' : 'inactive'}"
+           onclick="window.selectHead(${head.index})"
+           data-head-index="${head.index}">
+        <div class="head-icon">
+          <div class="head-number">${head.index}</div>
+          <div class="head-status ${head.active ? 'active' : 'inactive'}"></div>
+        </div>
+        <div class="head-info">
+          <div class="head-label">${headDisplayName}</div>
+          <div class="head-summary">
+            ${head.active ?
+              `${head.schedule?.dailyDoseMl || 0}ml at ${head.schedule?.startTime || '00:00'}` :
+              'Disabled'
+            }
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Render the command interface for a selected head
+ */
+function renderHeadCommandInterface(headIndex: number): string {
+  const device = currentConfigDevice;
+  if (!device) return '';
+
+  const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId);
+  const latestRevision = activeConfig?.revisions[activeConfig.revisions.length - 1];
+  const head = latestRevision?.heads.find((h: any) => h.index === headIndex);
+
+  const schedule = head?.schedule || { mode: 'single', dailyDoseMl: 10.0, startTime: '09:00' };
+  const recurrence = head?.recurrence || { days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] };
+
+  // Get head name from metadata
+  const deviceMetadata = doserMetadata.find(m => m.id === device.id);
+  const headDisplayName = deviceMetadata?.headNames?.[headIndex] || `Head ${headIndex}`;
+
+  return `
+    <div class="head-command-interface">
+      <div class="command-header">
+        <h4>Configure ${headDisplayName}</h4>
+        <div class="head-status-indicator ${head?.active ? 'active' : 'inactive'}">
+          ${head?.active ? '🟢 Active' : '🔴 Inactive'}
+        </div>
+      </div>
+
+      <!-- Schedule Configuration -->
+      <div class="form-section">
+        <h5>Schedule Configuration</h5>
+
+        <div class="form-group">
+          <label for="schedule-mode-${headIndex}">Mode:</label>
+          <select id="schedule-mode-${headIndex}" class="form-select" onchange="window.updateScheduleModeUI(${headIndex}, this.value)">
+            <option value="disabled" ${!head?.active ? 'selected' : ''}>Disabled</option>
+            <option value="single" ${schedule.mode === 'single' ? 'selected' : ''}>Single Daily Dose</option>
+            <option value="timer" ${schedule.mode === 'timer' ? 'selected' : ''}>Multiple Daily Doses</option>
+          </select>
+        </div>
+
+        <div id="schedule-details-${headIndex}">
+          ${renderScheduleDetails(headIndex, schedule)}
+        </div>
+
+        <div class="form-group">
+          <label>Active Days:</label>
+          <div class="weekday-selector">
+            ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+              <label class="weekday-option">
+                <input type="checkbox" value="${day}"
+                       ${recurrence.days.includes(day) ? 'checked' : ''}
+                       id="weekday-${headIndex}-${day}">
+                <span class="weekday-label">${day}</span>
+              </label>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+
+      <!-- Command Actions -->
+      <div class="command-actions">
+        <button class="btn btn-success btn-large" onclick="window.sendHeadCommandToDevice(${headIndex})">
+          Send Command
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render schedule details based on mode
+ */
+function renderScheduleDetails(headIndex: number, schedule: any): string {
+  switch (schedule.mode) {
+    case 'single':
+      return `
+        <div class="schedule-single">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="dose-amount-${headIndex}">Dose Amount (ml):</label>
+              <input type="number" id="dose-amount-${headIndex}"
+                     value="${schedule.dailyDoseMl || 10}"
+                     min="0.1" max="999" step="0.1" class="form-input">
+            </div>
+            <div class="form-group">
+              <label for="dose-time-${headIndex}">Time:</label>
+              <input type="time" id="dose-time-${headIndex}"
+                     value="${schedule.startTime || '09:00'}"
+                     class="form-input">
+            </div>
+          </div>
+        </div>
+      `;
+
+    case 'timer':
+      return `
+        <div class="schedule-timer">
+          <div class="form-group">
+            <label for="total-daily-${headIndex}">Total Daily Amount (ml):</label>
+            <input type="number" id="total-daily-${headIndex}"
+                   value="${schedule.dailyDoseMl || 10}"
+                   min="0.1" max="999" step="0.1" class="form-input">
+          </div>
+          <div class="form-group">
+            <label for="doses-per-day-${headIndex}">Number of Doses per Day:</label>
+            <select id="doses-per-day-${headIndex}" class="form-select">
+              <option value="2">2 doses</option>
+              <option value="3">3 doses</option>
+              <option value="4" selected>4 doses</option>
+              <option value="6">6 doses</option>
+              <option value="8">8 doses</option>
+              <option value="12">12 doses</option>
+            </select>
+          </div>
+          <div class="timer-info">
+            <p>Doses will be distributed evenly throughout the day</p>
+          </div>
+        </div>
+      `;
+
+    default:
+      return '<div class="schedule-disabled"><p>Head is disabled. Select a mode to configure.</p></div>';
+  }
+}
+
+/**
+ * Show the light configuration modal
+ */
+function showLightConfigurationModal(device: LightDevice): void {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>Configure Light: ${device.name || device.id}</h2>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+      </div>
+      <div class="modal-body">
+        ${renderLightConfigurationForm(device)}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Close on background click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+}
+
+/**
+ * Render the light configuration form for auto mode
+ */
+function renderLightConfigurationForm(device: LightDevice): string {
+  // For now, we'll just add a new auto setting.
+  // A full implementation would list and allow editing existing settings.
+  return `
+    <div class="config-form" id="light-config-form">
+      <div class="form-section">
+        <h3>Add Auto Mode Schedule</h3>
+        <p class="form-note">Set a daily schedule for the light to automatically turn on and off.</p>
+        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+          <div class="form-group">
+            <label for="light-sunrise">Sunrise Time:</label>
+            <input type="time" id="light-sunrise" value="08:00">
+          </div>
+          <div class="form-group">
+            <label for="light-sunset">Sunset Time:</label>
+            <input type="time" id="light-sunset" value="20:00">
+          </div>
+          <div class="form-group">
+            <label for="light-brightness">Max Brightness (%):</label>
+            <input type="number" id="light-brightness" min="0" max="100" value="80">
+          </div>
+          <div class="form-group">
+            <label for="light-ramp">Ramp-up (minutes):</label>
+            <input type="number" id="light-ramp" min="0" value="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Active Days:</label>
+          <div class="weekday-selector">
+            ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+              <label class="weekday-label">
+                <input type="checkbox" value="${day}" checked><span>${day}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-success" onclick="window.sendLightAutoSettingToDevice('${device.id}')">Send to Device</button>
+      </div>
+    </div>
+  `;
+}
 /**
  * Render the doser configuration form
  */
@@ -1550,78 +2464,218 @@ function renderHeadConfiguration(head: any, index: number): string {
   `;
 }
 
-/**
- * Render schedule-specific details
- */
-function renderScheduleDetails(schedule: any, headIndex: number): string {
-  const disabled = !schedule || schedule.mode === 'disabled';
 
-  switch (schedule.mode) {
-    case 'single':
-      return `
-        <div class="form-group">
-          <label>Daily Dose (mL):</label>
-          <input type="number" step="0.1" value="${schedule.dailyDoseMl || 1.0}"
-                 onchange="window.updateScheduleParam(${headIndex}, 'dailyDoseMl', parseFloat(this.value))"
-                 ${disabled ? 'disabled' : ''}>
-        </div>
-        <div class="form-group">
-          <label>Dose Time:</label>
-          <input type="time" value="${schedule.startTime || '09:00'}"
-                 onchange="window.updateScheduleParam(${headIndex}, 'startTime', this.value)"
-                 ${disabled ? 'disabled' : ''}>
-        </div>
-      `;
 
-    case 'timer':
-      const doses = schedule.doses || [];
-      return `
-        <div class="form-group">
-          <label>Timer Doses:</label>
-          <div class="timer-doses">
-            ${doses.map((dose: any, index: number) => `
-              <div class="timer-dose">
-                <input type="time" value="${dose.time}"
-                       onchange="window.updateTimerDose(${headIndex}, ${index}, 'time', this.value)"
-                       ${disabled ? 'disabled' : ''}>
-                <input type="number" step="0.1" value="${dose.quantityMl}"
-                       placeholder="mL" min="0.1"
-                       onchange="window.updateTimerDose(${headIndex}, ${index}, 'quantityMl', parseFloat(this.value))"
-                       ${disabled ? 'disabled' : ''}>
-                <button class="btn-icon" onclick="window.removeTimerDose(${headIndex}, ${index})"
-                        ${disabled ? 'disabled' : ''}>🗑️</button>
-              </div>
-            `).join('')}
-            <button class="btn btn-small" onclick="window.addTimerDose(${headIndex})" ${disabled ? 'disabled' : ''}>
-              + Add Dose
-            </button>
-          </div>
-        </div>
-      `;
+// ============================================================================
+// Doser Configuration Interface Functions
+// ============================================================================
 
-    case 'every_hour':
-      return `
-        <div class="form-group">
-          <label>Daily Dose (mL):</label>
-          <input type="number" step="0.1" value="${schedule.dailyDoseMl || 1.0}"
-                 onchange="window.updateScheduleParam(${headIndex}, 'dailyDoseMl', parseFloat(this.value))"
-                 ${disabled ? 'disabled' : ''}>
-        </div>
-        <div class="form-group">
-          <label>Start Time:</label>
-          <input type="time" value="${schedule.startTime || '09:00'}"
-                 onchange="window.updateScheduleParam(${headIndex}, 'startTime', this.value)"
-                 ${disabled ? 'disabled' : ''}>
-        </div>
-        <div class="form-note">
-          <small>Dose will be split into 24 equal parts, starting at the specified time.</small>
-        </div>
-      `;
+let selectedHeadIndex: number | null = null;
 
-    default:
-      return `<p class="form-note">Select a schedule mode to configure dosing parameters.</p>`;
+(window as any).selectHead = (headIndex: number) => {
+  selectedHeadIndex = headIndex;
+
+  // Update UI - highlight selected head
+  document.querySelectorAll('.head-selector').forEach(el => {
+    el.classList.remove('selected');
+  });
+
+  const selectedHead = document.querySelector(`[data-head-index="${headIndex}"]`);
+  if (selectedHead) {
+    selectedHead.classList.add('selected');
   }
-}
+
+  // Update command interface
+  const commandInterface = document.getElementById('command-interface');
+  if (commandInterface) {
+    commandInterface.innerHTML = renderHeadCommandInterface(headIndex);
+  }
+};
+
+(window as any).updateScheduleModeUI = (headIndex: number, mode: string) => {
+  const scheduleDetails = document.getElementById(`schedule-details-${headIndex}`);
+  if (scheduleDetails) {
+    let schedule: any = { mode };
+    if (mode === 'single') {
+      schedule = { mode: 'single', dailyDoseMl: 10.0, startTime: '09:00' };
+    } else if (mode === 'timer') {
+      schedule = { mode: 'timer', dailyDoseMl: 10.0 };
+    }
+
+    scheduleDetails.innerHTML = renderScheduleDetails(headIndex, schedule);
+  }
+};
+
+(window as any).sendHeadCommandToDevice = async (headIndex: number) => {
+  if (!currentConfigDevice) return;
+
+  try {
+    // Get form values
+    const mode = (document.getElementById(`schedule-mode-${headIndex}`) as HTMLSelectElement)?.value;
+
+    if (mode === 'disabled') {
+      alert('Cannot send command for disabled head. Select a mode first.');
+      return;
+    }
+
+    let commandArgs: any = {
+      head_index: headIndex
+    };
+
+    if (mode === 'single') {
+      const doseAmount = parseFloat((document.getElementById(`dose-amount-${headIndex}`) as HTMLInputElement)?.value || '10');
+      const doseTime = (document.getElementById(`dose-time-${headIndex}`) as HTMLInputElement)?.value || '09:00';
+
+      const [hour, minute] = doseTime.split(':').map(Number);
+
+      commandArgs = {
+        ...commandArgs,
+        volume_tenths_ml: Math.round(doseAmount * 10), // Convert to tenths
+        hour,
+        minute
+      };
+    }
+
+    // Get selected weekdays
+    const selectedWeekdays: string[] = [];
+    ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(day => {
+      const checkbox = document.getElementById(`weekday-${headIndex}-${day}`) as HTMLInputElement;
+      if (checkbox?.checked) {
+        selectedWeekdays.push(day);
+      }
+    });
+
+    if (selectedWeekdays.length > 0) {
+      // Convert to PumpWeekday enum format expected by backend
+      const weekdayMap: { [key: string]: string } = {
+        'Mon': 'monday',
+        'Tue': 'tuesday',
+        'Wed': 'wednesday',
+        'Thu': 'thursday',
+        'Fri': 'friday',
+        'Sat': 'saturday',
+        'Sun': 'sunday'
+      };
+      commandArgs.weekdays = selectedWeekdays.map(day => weekdayMap[day]);
+    }
+
+    // Send command to device
+    const response = await fetch(`/api/devices/${encodeURIComponent(currentConfigDevice.id)}/commands`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action: 'set_schedule',
+        args: commandArgs
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to send command: ${error}`);
+    }
+
+    const result = await response.json();
+
+    // Show success message
+    alert(`Successfully sent schedule command to Head ${headIndex}!`);
+
+    // Refresh the device data
+    await loadAllConfigurations();
+
+    // Close modal and refresh dashboard
+    document.querySelector('.modal-overlay')?.remove();
+    currentConfigDevice = null;
+
+  } catch (error) {
+    console.error('Failed to send head command:', error);
+    alert(`Failed to send command: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+(window as any).testDoseHead = async (headIndex: number) => {
+  if (!currentConfigDevice) return;
+
+  try {
+    // For now, we'll implement a simple test dose
+    const response = await fetch(`/api/devices/${encodeURIComponent(currentConfigDevice.id)}/commands`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        action: 'set_schedule',
+        args: {
+          head_index: headIndex,
+          volume_tenths_ml: 5, // 0.5ml test dose
+          hour: new Date().getHours(),
+          minute: new Date().getMinutes(),
+          weekdays: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send test dose command');
+    }
+
+    alert(`Test dose (0.5ml) sent to Head ${headIndex}!`);
+
+  } catch (error) {
+    console.error('Failed to send test dose:', error);
+    alert(`Failed to send test dose: ${error instanceof Error ? error.message : String(error)}`);
+  }
+};
+
+// Handler for saving server-side configuration (names only)
+(window as any).saveDoserServerConfig = async (deviceId: string) => {
+  try {
+    const deviceNameInput = document.getElementById('server-device-name') as HTMLInputElement;
+    const newDeviceName = deviceNameInput?.value || '';
+
+    // Collect head names
+    const headNames: { [key: number]: string } = {};
+    for (let i = 1; i <= 4; i++) {
+      const headNameInput = document.getElementById(`head-${i}-name`) as HTMLInputElement;
+      if (headNameInput?.value.trim()) {
+        headNames[i] = headNameInput.value.trim();
+      }
+    }
+
+    // Create minimal device metadata (names only)
+    const currentTime = new Date().toISOString();
+    const metadata = {
+      id: deviceId,
+      name: newDeviceName,
+      timezone: 'UTC',
+      headNames: Object.keys(headNames).length > 0 ? headNames : null,
+      createdAt: currentTime,
+      updatedAt: currentTime
+    };
+
+    const response = await fetch(`/api/configurations/dosers/${encodeURIComponent(deviceId)}/metadata`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(metadata),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to save metadata: ${response.statusText}`);
+    }
+
+    alert('Server configuration saved successfully!');
+    document.querySelector('.modal-overlay')?.remove();
+    await loadAllConfigurations(); // Refresh to show updated names
+    refreshDashboard(); // Force refresh the UI to show new names
+  } catch (err) {
+    alert(`Failed to save server configuration: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+// Note: saveDoserDeviceSettings function removed - device names are now managed via metadata
 
 // Configuration form helper functions
 (window as any).toggleHead = (headIndex: number, active: boolean) => {
@@ -1634,12 +2688,7 @@ function renderScheduleDetails(schedule: any, headIndex: number): string {
   }
 };
 
-(window as any).updateHeadLabel = (headIndex: number, label: string) => {
-  const head = findHead(headIndex);
-  if (head) {
-    head.label = label;
-  }
-};
+// Note: updateHeadLabel function removed - head names are now read-only from metadata
 
 (window as any).updateScheduleMode = (headIndex: number, mode: string) => {
   const head = findHead(headIndex);
@@ -1723,11 +2772,7 @@ function renderScheduleDetails(schedule: any, headIndex: number): string {
   if (!currentConfigDevice) return;
 
   try {
-    // Update device name from form
-    const nameInput = document.getElementById('device-name') as HTMLInputElement;
-
-    if (nameInput) currentConfigDevice.name = nameInput.value;
-
+    // Note: Device name is now managed through metadata, not editable here
     const { updateDoserConfiguration } = await import("../api/configurations");
     await updateDoserConfiguration(deviceId, currentConfigDevice);
 
@@ -1736,6 +2781,41 @@ function renderScheduleDetails(schedule: any, headIndex: number): string {
     document.querySelector('.modal-overlay')?.remove();
   } catch (err) {
     alert(`Failed to save configuration: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
+(window as any).sendLightAutoSettingToDevice = async (deviceId: string) => {
+  const form = document.getElementById('light-config-form');
+  if (!form) return;
+
+  try {
+    const { executeCommand } = await import("../api/commands");
+
+    const sunrise = (form.querySelector('#light-sunrise') as HTMLInputElement).value;
+    const sunset = (form.querySelector('#light-sunset') as HTMLInputElement).value;
+    const brightness = parseInt((form.querySelector('#light-brightness') as HTMLInputElement).value);
+    const ramp_up_minutes = parseInt((form.querySelector('#light-ramp') as HTMLInputElement).value);
+
+    const dayCheckboxes = form.querySelectorAll('.weekday-selector input:checked') as NodeListOf<HTMLInputElement>;
+    const selectedDays = Array.from(dayCheckboxes).map(cb => cb.value);
+
+    const commandRequest = {
+      action: 'add_auto_setting',
+      args: {
+        sunrise,
+        sunset,
+        brightness,
+        ramp_up_minutes,
+        weekdays: convertUiWeekdaysToEnum(selectedDays),
+      }
+    };
+
+    await executeCommand(deviceId, commandRequest);
+    alert('Auto mode schedule sent to device successfully!');
+    document.querySelector('.modal-overlay')?.remove();
+    await loadAllConfigurations(); // Refresh status
+  } catch (err) {
+    alert(`Failed to send auto setting to device: ${err instanceof Error ? err.message : String(err)}`);
   }
 };
 
@@ -1869,6 +2949,19 @@ function convertRecurrenceToBLEWeekdays(recurrence: any): number[] | undefined {
   };
 
   return recurrence.days.map((day: string) => dayMap[day]).filter((s: string | undefined) => s !== undefined);
+}
+
+function convertUiWeekdaysToEnum(uiDays: string[]): string[] {
+  const dayMap: Record<string, string> = {
+    'Mon': 'monday',
+    'Tue': 'tuesday',
+    'Wed': 'wednesday',
+    'Thu': 'thursday',
+    'Fri': 'friday',
+    'Sat': 'saturday',
+    'Sun': 'sunday'
+  };
+  return uiDays.map(day => dayMap[day]).filter(Boolean);
 }
 
 // Global state for the current configuration being edited

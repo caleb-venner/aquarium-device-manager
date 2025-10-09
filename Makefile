@@ -16,6 +16,7 @@ help:
 	@echo "make test       # run pytest"
 	@echo "make precommit  # install and run pre-commit hooks"
 	@echo "make clean      # delete all saved device state and configs"
+	@echo "make clean-dev  # clean then start dev servers"
 
 VENV?=.venv
 PY?=python3
@@ -81,3 +82,6 @@ clean:
 	else \
 		echo "✨ Already clean: No $$HOME/.aqua-ble directory found"; \
 	fi
+
+# Convenience target: clean then dev
+clean-dev: clean dev

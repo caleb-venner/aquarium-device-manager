@@ -117,7 +117,7 @@ def test_root_proxies_dev_server(monkeypatch: pytest.MonkeyPatch) -> None:
 
     response = asyncio.run(serve_spa())
     assert response is proxied
-    helper.assert_awaited_once_with("/")
+    helper.assert_awaited_once_with("/modern.html")
 
 
 def test_spa_asset_route_proxies_dev_server(

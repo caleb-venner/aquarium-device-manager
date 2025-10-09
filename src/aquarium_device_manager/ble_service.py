@@ -428,6 +428,10 @@ class BLEService:
     ) -> None:
         """Load saved configuration for a device after connection.
 
+        Only loads existing configurations - does not auto-create new ones.
+        Configurations should be explicitly created when users edit/create them
+        or send commands that require persistence.
+
         Args:
             address: Device MAC address
             device_kind: Type of device ('doser' or 'light')
@@ -441,15 +445,8 @@ class BLEService:
                 )
             else:
                 logger.debug(
-                    f"No saved configuration found for doser {address}"
-                )
-                # Create default configuration
-                from .config_helpers import create_default_doser_config
-
-                default_config = create_default_doser_config(address)
-                self._doser_storage.upsert_device(default_config)
-                logger.info(
-                    f"Created default configuration for doser {address}"
+                    f"No saved configuration found for doser {address} "
+                    "(will be created when user configures device)"
                 )
 
         elif device_kind == "light":
@@ -460,24 +457,10 @@ class BLEService:
                     f"with {len(saved_profile.configurations)} configuration(s)"
                 )
             else:
-                logger.debug(f"No saved profile found for light {address}")
-                # Create default profile
-                from .config_helpers import create_default_light_profile
-
-                # Get channel info if device is connected
-                async with self._lock:
-                    device = self._devices.get(device_kind)
-                    channels = (
-                        self._build_channels(device_kind, device)
-                        if device
-                        else None
-                    )
-
-                default_profile = create_default_light_profile(
-                    address, channels=channels
+                logger.debug(
+                    f"No saved profile found for light {address} "
+                    "(will be created when user configures device)"
                 )
-                self._light_storage.upsert_device(default_profile)
-                logger.info(f"Created default profile for light {address}")
 
     def _infer_device_type(self, device: BaseDevice) -> Optional[str]:
         return self._get_device_kind(device)
@@ -725,7 +708,7 @@ class BLEService:
         *,
         sunrise: _time,
         sunset: _time,
-        brightness: object,
+        brightness: int,
         ramp_up_minutes: int = 0,
         weekdays: list[commands.LightWeekday] | None = None,
     ) -> CachedStatus:

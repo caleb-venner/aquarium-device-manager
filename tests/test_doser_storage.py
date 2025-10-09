@@ -15,7 +15,7 @@ from aquarium_device_manager.doser_storage import DoserStorage
 @pytest.fixture
 def storage_path(tmp_path: Path) -> Path:
     """Provide a temporary path for doser storage tests."""
-    return tmp_path / "doser_devices.json"
+    return tmp_path / "doser_storage_dir"
 
 
 def _example_device(device_id: str = "device-1") -> dict:
@@ -121,12 +121,15 @@ def test_storage_roundtrip(storage_path: Path) -> None:
     assert reloaded.model_dump(mode="json") == stored.model_dump(mode="json")
 
     # File contents should be valid JSON with the expected fields
-    file_payload = json.loads(storage_path.read_text(encoding="utf-8"))
-    assert file_payload["devices"][0]["id"] == "device-1"
+    device_file_path = storage_path / "device-1.json"
+    file_payload = json.loads(device_file_path.read_text(encoding="utf-8"))
+    # The file format has metadata wrapper
+    assert file_payload["device_type"] == "doser"
+    assert file_payload["device_id"] == "device-1"
+    device_data = file_payload["device_data"]
+    assert device_data["id"] == "device-1"
     assert (
-        file_payload["devices"][0]["configurations"][0]["revisions"][0][
-            "heads"
-        ][0]["index"]
+        device_data["configurations"][0]["revisions"][0]["heads"][0]["index"]
         == 1
     )
 

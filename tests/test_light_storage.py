@@ -15,7 +15,7 @@ from aquarium_device_manager.light_storage import LightStorage
 @pytest.fixture
 def storage_path(tmp_path: Path) -> Path:
     """Provide a temporary path for light storage tests."""
-    return tmp_path / "lights.json"
+    return tmp_path / "light_storage_dir"
 
 
 def _channels() -> list[dict]:
@@ -77,8 +77,13 @@ def test_storage_roundtrip(storage_path: Path) -> None:
     assert active.latest_revision().profile.levels == _manual_levels()
     assert reloaded.model_dump(mode="json") == stored.model_dump(mode="json")
 
-    raw = json.loads(storage_path.read_text(encoding="utf-8"))
-    assert raw["devices"][0]["id"] == "light-1"
+    raw = json.loads(
+        (storage_path / "light-1.json").read_text(encoding="utf-8")
+    )
+    assert raw["device_type"] == "light"
+    assert raw["device_id"] == "light-1"
+    device_data = raw["device_data"]
+    assert device_data["id"] == "light-1"
 
 
 def test_manual_profile_must_cover_all_channels(storage_path: Path) -> None:

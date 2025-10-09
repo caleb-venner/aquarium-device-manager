@@ -776,3 +776,720 @@ input:checked + .slider:before {
     justify-content: center;
   }
 }
+
+/* ============================================================================
+   Scan State Styles
+   ============================================================================ */
+
+.scan-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  padding: 40px 20px;
+}
+
+.scan-state-content {
+  text-align: center;
+  max-width: 600px;
+}
+
+.scan-state-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin: 0 0 12px 0;
+}
+
+.scan-state-text {
+  font-size: 16px;
+  color: var(--gray-600);
+  margin: 0 0 24px 0;
+  line-height: 1.5;
+}
+
+.scan-spinner {
+  font-size: 48px;
+  margin-bottom: 20px;
+  animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.scan-results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.scan-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+.device-scan-card {
+  padding: 20px;
+  border: 1px solid var(--gray-200);
+  transition: var(--transition);
+}
+
+.device-scan-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.scan-card-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.scan-card-info {
+  flex: 1;
+}
+
+.scan-card-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.scan-card-address {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: var(--gray-600);
+  font-family: monospace;
+}
+
+.scan-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scan-card-product {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.scan-card-button {
+  min-width: 100px;
+  flex-shrink: 0;
+}
+
+.scan-card-button span {
+  margin-right: 6px;
+}
+
+/* ============================================================================
+   Device Card Styles
+   ============================================================================ */
+
+.device-connected {
+  border-left: 4px solid var(--success);
+}
+
+.device-disconnected {
+  border-left: 4px solid var(--gray-400);
+  opacity: 0.7;
+}
+
+.header-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.device-info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--gray-50);
+  border-radius: 6px;
+}
+
+.device-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.detail-value {
+  font-size: 14px;
+  color: var(--gray-900);
+  font-family: monospace;
+}
+
+.connection-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.status-indicator.connected {
+  color: var(--success);
+}
+
+.status-indicator.disconnected {
+  color: var(--gray-500);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.last-updated {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.config-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.active-config {
+  font-size: 12px;
+  color: var(--gray-600);
+}
+
+.device-status-info {
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  background: var(--gray-50);
+  border-radius: 6px;
+}
+
+.status-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.status-detail:last-child {
+  margin-bottom: 0;
+}
+
+.status-detail .detail-label {
+  font-size: 12px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.status-detail .detail-value {
+  font-size: 12px;
+  color: var(--gray-800);
+  font-weight: 600;
+}
+
+.device-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+.empty-state-actions {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ============================================================================
+   Server Configuration Interface Styles
+   ============================================================================ */
+
+.server-config-interface {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.head-names-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.head-name-config {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.head-name-config label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.device-info-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--gray-50);
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
+}
+
+.info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.info-item .info-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-600);
+}
+
+.info-item .info-value {
+  font-size: 14px;
+  color: var(--gray-900);
+  font-family: monospace;
+}
+
+/* ============================================================================
+   Doser Configuration Interface Styles
+   ============================================================================ */
+
+.doser-config-modal .modal-content {
+  max-width: 1000px;
+  max-height: 90vh;
+}
+
+.doser-config-interface {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.config-section {
+  background: white;
+  border-radius: var(--border-radius);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--gray-200);
+}
+
+.config-section h3 {
+  margin: 0 0 16px 0;
+  color: var(--gray-900);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.section-description {
+  margin: 0 0 20px 0;
+  color: var(--gray-600);
+  font-size: 14px;
+}
+
+/* Device Settings */
+.device-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  align-items: end;
+}
+
+.device-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-size: 14px;
+  color: var(--gray-900);
+  font-family: monospace;
+}
+
+/* Head Selector Grid */
+.heads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.head-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--border-radius);
+  background: white;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.head-selector:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.head-selector.selected {
+  border-color: var(--primary);
+  background: var(--primary-light);
+  box-shadow: var(--shadow-md);
+}
+
+.head-selector.active {
+  border-left: 4px solid var(--success);
+}
+
+.head-selector.inactive {
+  border-left: 4px solid var(--gray-300);
+}
+
+.head-icon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.head-number {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--gray-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--gray-700);
+}
+
+.head-selector.selected .head-number {
+  background: var(--primary);
+  color: white;
+}
+
+.head-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.head-status.active {
+  background: var(--success);
+}
+
+.head-status.inactive {
+  background: var(--gray-400);
+}
+
+.head-info {
+  flex: 1;
+}
+
+.head-label {
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+
+.head-summary {
+  font-size: 12px;
+  color: var(--gray-600);
+}
+
+/* Command Interface */
+.no-head-selected {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--gray-500);
+}
+
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.head-command-interface {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.command-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.command-header h4 {
+  margin: 0;
+  color: var(--gray-900);
+  font-size: 18px;
+}
+
+.head-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.head-status-indicator.active {
+  background: var(--success-light);
+  color: var(--success);
+}
+
+.head-status-indicator.inactive {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-section h5 {
+  margin: 0;
+  color: var(--gray-800);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.form-input,
+.form-select {
+  padding: 8px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  transition: var(--transition);
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Schedule Details */
+.schedule-single,
+.schedule-timer {
+  padding: 16px;
+  background: var(--gray-50);
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
+}
+
+.schedule-disabled {
+  padding: 16px;
+  background: var(--gray-50);
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
+  text-align: center;
+  color: var(--gray-500);
+}
+
+.timer-info {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--primary-light);
+  border-radius: 4px;
+  border-left: 3px solid var(--primary);
+}
+
+.timer-info p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--primary);
+}
+
+/* Weekday Selector */
+.weekday-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.weekday-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.weekday-option input[type="checkbox"] {
+  display: none;
+}
+
+.weekday-label {
+  padding: 6px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-600);
+  background: white;
+  transition: var(--transition);
+  user-select: none;
+}
+
+.weekday-option input[type="checkbox"]:checked + .weekday-label {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+/* Command Actions */
+.command-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+  padding-top: 16px;
+  border-top: 1px solid var(--gray-200);
+}
+
+.btn-large {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.btn-large span,
+.btn-small span {
+  margin-right: 8px;
+}
+
+/* Modal Actions */
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 20px;
+  border-top: 1px solid var(--gray-200);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .doser-config-modal .modal-content {
+    margin: 10px;
+    max-width: calc(100% - 20px);
+  }
+
+  .device-settings {
+    grid-template-columns: 1fr;
+  }
+
+  .heads-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .command-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .weekday-selector {
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .head-selector {
+    flex-direction: column;
+    text-align: center;
+    gap: 8px;
+  }
+
+  .weekday-selector {
+    gap: 4px;
+  }
+
+  .weekday-label {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+}

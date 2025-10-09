@@ -23,6 +23,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+class DeviceMetadata(BaseModel):
+    """Lightweight device metadata for server-side name storage only."""
+
+    id: str
+    name: str | None = None
+    timezone: str = "UTC"
+    headNames: dict[int, str] | None = None  # Map of head index to name
+    createdAt: str | None = None
+    updatedAt: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 def _ensure_unique(values: Sequence[str], what: str) -> None:
     seen = set()
     duplicates = set()
@@ -610,6 +623,93 @@ class DoserStorage:
             raise KeyError(device_id)
         return device
 
+    def get_device_metadata(self, device_id: str) -> DeviceMetadata | None:
+        """Get device metadata (names only) by id."""
+        device = self.get_device(device_id)
+        if device is None:
+            return None
+
+        # Extract head names from the latest revision if available
+        head_names = {}
+        if device.configurations:
+            latest_config = device.configurations[-1]
+            if latest_config.revisions:
+                latest_revision = latest_config.revisions[-1]
+                for head in latest_revision.heads:
+                    if head.label:
+                        head_names[head.index] = head.label
+
+        return DeviceMetadata(
+            id=device.id,
+            name=device.name,
+            timezone=device.timezone,
+            headNames=head_names if head_names else None,
+            createdAt=device.createdAt,
+            updatedAt=device.updatedAt,
+        )
+
+    def upsert_device_metadata(
+        self, metadata: DeviceMetadata
+    ) -> DeviceMetadata:
+        """Create or update device metadata (names only)."""
+        current_time = _now_iso()
+        metadata.updatedAt = current_time
+
+        # Check if device already exists
+        existing_device = self.get_device(metadata.id)
+
+        if existing_device:
+            # Update existing device with new names
+            existing_device.name = metadata.name
+            existing_device.timezone = metadata.timezone
+            existing_device.updatedAt = current_time
+
+            # Update head names in the latest revision
+            if metadata.headNames and existing_device.configurations:
+                latest_config = existing_device.configurations[-1]
+                if latest_config.revisions:
+                    latest_revision = latest_config.revisions[-1]
+                    for head in latest_revision.heads:
+                        if head.index in metadata.headNames:
+                            head.label = metadata.headNames[head.index]
+
+            self.upsert_device(existing_device)
+        else:
+            # Create new metadata-only file
+            if not metadata.createdAt:
+                metadata.createdAt = current_time
+
+            # Save as lightweight metadata file
+            metadata_file = self._base_path / f"{metadata.id}.metadata.json"
+            metadata_file.write_text(
+                metadata.model_dump_json(indent=2, exclude_none=True)
+            )
+
+        return metadata
+
+    def list_device_metadata(self) -> list[DeviceMetadata]:
+        """List all device metadata (from both full devices and metadata-only files)."""
+        metadata_list = []
+
+        # Get metadata from full device files
+        for device in self.list_devices():
+            device_metadata = self.get_device_metadata(device.id)
+            if device_metadata:
+                metadata_list.append(device_metadata)
+
+        # Get metadata from metadata-only files
+        for metadata_file in self._base_path.glob("*.metadata.json"):
+            try:
+                metadata_content = metadata_file.read_text()
+                metadata = DeviceMetadata.model_validate_json(metadata_content)
+                # Only add if not already in list (from full device)
+                if not any(m.id == metadata.id for m in metadata_list):
+                    metadata_list.append(metadata)
+            except Exception:
+                continue  # Skip invalid metadata files
+
+        return metadata_list
+
 
 __all__ = [
     "Calibration",
@@ -617,6 +717,7 @@ __all__ = [
     "CustomPeriod",
     "CustomPeriodsSchedule",
     "DeviceConfiguration",
+    "DeviceMetadata",
     "DoserDevice",
     "DoserDeviceCollection",
     "DoserHead",
