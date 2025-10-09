@@ -35,14 +35,16 @@ def test_capture_wait_uses_env_override(
 
     # Speed: ensure no real BLE operations happen.
     service = service_mod.service
-    # type: ignore[attr-defined]
-    service._doser = AsyncMock()
-    # type: ignore[attr-defined]
-    service._doser.device_kind = "doser"
-    # type: ignore[attr-defined]
-    service._doser.status_serializer = "serialize_doser_status"
-    # type: ignore[attr-defined]
-    service._doser_address = "AA:BB"
+
+    # Create a mock doser device
+    mock_doser = AsyncMock()
+    mock_doser.device_kind = "doser"
+    mock_doser.status_serializer = "serialize_doser_status"
+    mock_doser.address = "AA:BB"
+
+    # Set up the device in the new structure
+    service._devices["doser"] = {"AA:BB": mock_doser}
+    service._addresses["doser"] = "AA:BB"
 
     # Provide a fake status object compatible with serializer expectations.
     # Minimal fake status object; we'll bypass real serialization by patching.
@@ -51,7 +53,7 @@ def test_capture_wait_uses_env_override(
             self.raw_payload = b"\x00"
 
     fake_status = FakeStatus()
-    service._doser.last_status = fake_status  # type: ignore[attr-defined]
+    mock_doser.last_status = fake_status
 
     # Mock request_status (no-op) to avoid real BLE interaction
     async def fake_request_status():  # pragma: no cover

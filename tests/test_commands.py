@@ -7,6 +7,7 @@ import pytest
 from aquarium_device_manager.ble_service import BLEService
 from aquarium_device_manager.command_executor import CommandExecutor
 from aquarium_device_manager.commands_model import CommandRecord, CommandRequest
+from aquarium_device_manager.exception import CommandValidationError
 
 
 @pytest.fixture
@@ -127,13 +128,13 @@ class TestCommandExecutor:
         )
 
         # Invalid brightness
-        with pytest.raises(ValueError):
+        with pytest.raises(CommandValidationError):
             command_executor.validate_command_args(
                 "set_brightness", {"brightness": 150}
             )
 
         # Missing args
-        with pytest.raises(ValueError):
+        with pytest.raises(CommandValidationError):
             command_executor.validate_command_args("set_brightness", None)
 
     def test_validate_no_args_commands(self, command_executor):
@@ -143,7 +144,7 @@ class TestCommandExecutor:
         command_executor.validate_command_args("turn_on", {})
 
         # Should fail with args
-        with pytest.raises(ValueError):
+        with pytest.raises(CommandValidationError):
             command_executor.validate_command_args(
                 "turn_on", {"invalid": "arg"}
             )

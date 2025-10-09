@@ -49,8 +49,12 @@ async def execute_command(
 
         return record.to_dict()
 
+    except HTTPException:
+        # HTTPExceptions from BLE operations should propagate with their status codes
+        raise
+
     except Exception as exc:
-        # Create failed record for unexpected errors
+        # Create failed record for unexpected errors not handled by executor
         record = CommandRecord(
             id=command_request.id or "",
             address=address,
@@ -58,7 +62,7 @@ async def execute_command(
             args=command_request.args,
             timeout=command_request.timeout or 10.0,
         )
-        record.mark_failed(f"Unexpected error: {exc}")
+        record.mark_failed(f"Unexpected API error: {exc}")
         service.save_command(record)
         await service._save_state()
         return record.to_dict()

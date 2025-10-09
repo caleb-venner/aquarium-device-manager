@@ -168,3 +168,26 @@ def get_env_float(name: str, default: float) -> float:
             f"Invalid float value for {name}: '{raw}'. Using default: {default}"
         )
         return default
+
+
+def get_env_int(name: str, default: int) -> int:
+    """Get integer environment variable with fallback support.
+
+    Args:
+        name: New environment variable name
+        default: Default value if not found or invalid
+
+    Returns:
+        Integer value from environment or default
+    """
+    raw = get_env_with_fallback(name)
+    if raw is None:
+        return default
+
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            f"Invalid integer value for {name}: '{raw}'. Using default: {default}"
+        )
+        return default

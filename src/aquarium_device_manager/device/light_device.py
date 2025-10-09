@@ -129,7 +129,7 @@ class LightDevice(BaseDevice):
             sunset.time(),
             (max_brightness, 255, 255),
             ramp_up_in_minutes,
-            commands.encode_light_weekdays(
+            commands.encode_weekdays(
                 weekdays or [commands.LightWeekday.everyday]
             ),
         )
@@ -150,7 +150,7 @@ class LightDevice(BaseDevice):
             sunset.time(),
             max_brightness,
             ramp_up_in_minutes,
-            commands.encode_light_weekdays(
+            commands.encode_weekdays(
                 weekdays or [commands.LightWeekday.everyday]
             ),
         )
@@ -169,7 +169,7 @@ class LightDevice(BaseDevice):
             sunrise.time(),
             sunset.time(),
             ramp_up_in_minutes,
-            commands.encode_light_weekdays(
+            commands.encode_weekdays(
                 weekdays or [commands.LightWeekday.everyday]
             ),
         )

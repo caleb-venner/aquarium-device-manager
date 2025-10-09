@@ -8,8 +8,10 @@ between the service and storage.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from .commands.encoder import decode_pump_weekdays, pump_weekdays_to_names
 from .doser_status import DoserStatus, HeadSnapshot
 from .doser_storage import (
     Calibration,
@@ -132,6 +134,36 @@ def create_doser_config_from_status(
         # Determine if head is active based on mode
         is_active = head_snap.mode != 0x04  # 0x04 is disabled mode
 
+        # Try to decode weekday information from device status
+        # TODO: Parse per-head weekday information from HeadSnapshot.extra bytes
+        # Currently, device status may contain weekday info at device level
+        recurrence_days = [
+            "Mon",
+            "Tue",
+            "Wed",
+            "Thu",
+            "Fri",
+            "Sat",
+            "Sun",
+        ]  # Default to all days
+        if status.weekday is not None:
+            try:
+                pump_weekdays = decode_pump_weekdays(status.weekday)
+                recurrence_days = pump_weekdays_to_names(pump_weekdays)
+                if not recurrence_days:  # Empty list means no days selected
+                    recurrence_days = [
+                        "Mon",
+                        "Tue",
+                        "Wed",
+                        "Thu",
+                        "Fri",
+                        "Sat",
+                        "Sun",
+                    ]
+            except Exception:
+                # Fall back to all days if decoding fails
+                pass
+
         head = DoserHead(
             index=(
                 head_snap.mode + 1 if head_snap.mode < 4 else 1
@@ -142,9 +174,7 @@ def create_doser_config_from_status(
                 dailyDoseMl=head_snap.dosed_ml() or 10.0,
                 startTime=f"{head_snap.hour:02d}:{head_snap.minute:02d}",
             ),
-            recurrence=Recurrence(
-                days=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-            ),
+            recurrence=Recurrence(days=recurrence_days),
             missedDoseCompensation=False,
             calibration=Calibration(
                 mlPerSecond=0.1, lastCalibratedAt=timestamp
@@ -776,6 +806,26 @@ def create_light_config_from_command(
     return device
 
 
+def filter_device_json_files(storage_dir: Path) -> List[Path]:
+    """Filter JSON files in storage directory, excluding .metadata.json files.
+
+    This utility function provides consistent filtering logic for both doser and light
+    storage classes to avoid code duplication.
+
+    Args:
+        storage_dir: Directory containing device JSON files
+
+    Returns:
+        List of Path objects for device configuration files (excluding metadata files)
+    """
+    if not storage_dir.exists():
+        return []
+
+    # Get all .json files except .metadata.json files
+    all_json_files = list(storage_dir.glob("*.json"))
+    return [f for f in all_json_files if not f.name.endswith(".metadata.json")]
+
+
 __all__ = [
     "create_default_doser_config",
     "create_doser_config_from_status",
@@ -787,4 +837,5 @@ __all__ = [
     "update_light_manual_profile",
     "update_light_brightness",
     "add_light_auto_program",
+    "filter_device_json_files",
 ]

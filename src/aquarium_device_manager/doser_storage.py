@@ -7,12 +7,17 @@ with each device configuration saved as a separate JSON file named by MAC addres
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Literal, Sequence
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from .storage_utils import filter_device_json_files
+
+logger = logging.getLogger(__name__)
 
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 ModeKind = Literal["single", "every_hour", "custom_periods", "timer"]
@@ -428,13 +433,7 @@ class DoserStorage:
 
         Excluding metadata files.
         """
-        if not self._base_path.exists():
-            return []
-        # Return all .json files except .metadata.json files
-        all_json_files = list(self._base_path.glob("*.json"))
-        return [
-            f for f in all_json_files if not f.name.endswith(".metadata.json")
-        ]
+        return filter_device_json_files(self._base_path)
 
     def list_devices(self) -> list[DoserDevice]:
         """Return all persisted devices."""
@@ -447,8 +446,8 @@ class DoserStorage:
                     devices.append(device)
             except ValueError as exc:
                 # Log error but continue with other devices
-                print(
-                    f"Warning: Could not load device from {device_file}: {exc}"
+                logger.warning(
+                    f"Could not load device from {device_file}: {exc}"
                 )
         return devices
 

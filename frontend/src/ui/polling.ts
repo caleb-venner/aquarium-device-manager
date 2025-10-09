@@ -14,13 +14,15 @@ let currentMode: keyof typeof POLLING_INTERVALS = "NORMAL";
 let lastUserActivity = Date.now();
 let consecutiveErrors = 0;
 
-// Setup intelligent polling system
+// Setup intelligent polling system (disabled by default for aquarium devices)
 export function setupPolling(): number {
-  // Update user activity tracking
+  // Update user activity tracking for potential future use
   setupActivityTracking();
 
-  // Start with normal interval
-  return startPolling("NORMAL");
+  // Polling disabled by default - aquarium devices don't need frequent status updates
+  // Status only changes when users explicitly modify configuration
+  console.log("Polling disabled by default - status updates are event-driven");
+  return 0; // Return 0 to indicate no polling active
 }
 
 function startPolling(mode: keyof typeof POLLING_INTERVALS): number {
@@ -141,18 +143,22 @@ export function triggerImmediateRefresh(): void {
   }, 30000);
 }
 
-export function pausePolling(): void {
+// Manual refresh controls
+export async function manualRefresh(): Promise<void> {
+  console.log("Manual device refresh requested");
+  await performPollingUpdate();
+}
+
+export function enablePolling(mode: keyof typeof POLLING_INTERVALS = "SLOW"): number {
+  console.log(`Enabling polling in ${mode} mode for health monitoring`);
+  return startPolling(mode);
+}
+
+export function disablePolling(): void {
   if (currentInterval) {
     clearInterval(currentInterval);
     currentInterval = null;
-    console.log("Polling paused");
-  }
-}
-
-export function resumePolling(): void {
-  if (!currentInterval) {
-    startPolling(currentMode);
-    console.log("Polling resumed");
+    console.log("Polling disabled");
   }
 }
 
@@ -161,9 +167,10 @@ export function getPollingStatus() {
   return {
     active: currentInterval !== null,
     mode: currentMode,
-    interval: POLLING_INTERVALS[currentMode],
+    interval: currentInterval ? POLLING_INTERVALS[currentMode] : 0,
     consecutiveErrors,
     lastActivity: lastUserActivity,
+    disabledByDefault: true, // Indicate this is disabled by design
   };
 }
 

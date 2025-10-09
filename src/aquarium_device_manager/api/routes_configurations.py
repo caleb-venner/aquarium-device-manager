@@ -480,6 +480,69 @@ async def get_system_timezone() -> dict:
         )
 
 
+@router.get("/display/timezone")
+async def get_display_timezone(request) -> dict:
+    """Get the current display timezone setting.
+
+    Returns the configured display timezone used for formatting times
+    in the UI. This is always a valid IANA timezone identifier.
+
+    Returns:
+        dict: Contains display timezone information
+    """
+    try:
+        service = request.app.state.service
+        timezone = service.get_display_timezone()
+
+        return {
+            "display_timezone": timezone,
+            "format": "IANA identifier (e.g., America/New_York, UTC)",
+        }
+    except Exception as e:
+        logger.error(f"Error getting display timezone: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get display timezone: {str(e)}"
+        )
+
+
+@router.put("/display/timezone")
+async def set_display_timezone(timezone_data: dict, request) -> dict:
+    """Set the display timezone for UI time formatting.
+
+    Args:
+        timezone_data: Dict containing 'timezone' key with IANA timezone identifier
+                      (e.g., "America/New_York", "Europe/London", "UTC")
+
+    Returns:
+        dict: Confirmation of the updated timezone
+    """
+    try:
+        timezone = timezone_data.get("timezone")
+        if not timezone:
+            raise HTTPException(
+                status_code=400, detail="Missing required 'timezone' field"
+            )
+
+        service = request.app.state.service
+        service.set_display_timezone(timezone)
+
+        # Save the updated state
+        await service._save_state()
+
+        return {
+            "display_timezone": timezone,
+            "status": "updated",
+            "message": "Display timezone configured successfully",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error setting display timezone: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to set display timezone: {str(e)}"
+        )
+
+
 @router.put("/lights/{address}/metadata", response_model=LightMetadata)
 async def update_light_metadata(
     address: str,

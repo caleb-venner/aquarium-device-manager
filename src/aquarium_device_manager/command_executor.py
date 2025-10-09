@@ -7,11 +7,13 @@ import logging
 from datetime import time
 from typing import Any, Dict, Optional
 
+from bleak_retry_connector import BleakConnectionError, BleakNotFoundError
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from .ble_service import BLEService
 from .commands_model import COMMAND_ARG_SCHEMAS, CommandRecord, CommandRequest
+from .exception import CommandValidationError
 from .serializers import cached_status_to_dict
 
 logger = logging.getLogger(__name__)
@@ -39,16 +41,20 @@ class CommandExecutor:
         if schema_class is None:
             # Action requires no arguments
             if args is not None and args:
-                raise ValueError(f"Action '{action}' does not accept arguments")
+                raise CommandValidationError(
+                    f"Action '{action}' does not accept arguments"
+                )
             return
 
         if args is None:
-            raise ValueError(f"Action '{action}' requires arguments")
+            raise CommandValidationError(
+                f"Action '{action}' requires arguments"
+            )
 
         try:
             schema_class(**args)
         except ValidationError as exc:
-            raise ValueError(
+            raise CommandValidationError(
                 f"Invalid arguments for '{action}': {exc}"
             ) from exc
 
@@ -59,7 +65,7 @@ class CommandExecutor:
         # Validate command arguments
         try:
             self.validate_command_args(request.action, request.args)
-        except ValueError as exc:
+        except CommandValidationError as exc:
             record = CommandRecord(
                 address=address,
                 action=request.action,
@@ -68,7 +74,7 @@ class CommandExecutor:
             )
             if request.id is not None:
                 record.id = request.id
-            record.mark_failed(str(exc))
+            record.mark_failed(f"Validation error: {exc}")
             return record
 
         # Create command record
@@ -107,9 +113,25 @@ class CommandExecutor:
                         record.timeout,
                     )
 
-                except HTTPException as exc:
-                    error_msg = getattr(exc, "detail", str(exc))
-                    record.mark_failed(f"HTTP {exc.status_code}: {error_msg}")
+                except HTTPException:
+                    # HTTPExceptions should propagate up to the API layer
+                    # Don't catch them here as they contain important status info
+                    raise
+
+                except (BleakNotFoundError, BleakConnectionError) as exc:
+                    error_msg = f"Device communication failed: {exc}"
+                    record.mark_failed(error_msg)
+                    logger.error(
+                        "Command %s failed for device %s: %s",
+                        request.action,
+                        address,
+                        error_msg,
+                    )
+
+                except ValueError as exc:
+                    # ValueError typically indicates invalid parameters or device state
+                    error_msg = f"Invalid operation: {exc}"
+                    record.mark_failed(error_msg)
                     logger.error(
                         "Command %s failed for device %s: %s",
                         request.action,
@@ -118,7 +140,11 @@ class CommandExecutor:
                     )
 
                 except Exception as exc:
-                    record.mark_failed(str(exc))
+                    # Catch-all for unexpected errors
+                    error_msg = (
+                        f"Unexpected error during command execution: {exc}"
+                    )
+                    record.mark_failed(error_msg)
                     logger.error(
                         "Command %s failed for device %s: %s",
                         request.action,

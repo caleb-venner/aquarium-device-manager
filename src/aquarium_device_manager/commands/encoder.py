@@ -11,22 +11,78 @@ def next_message_id(
     """Return the next message id pair, avoiding reserved values.
 
     The encoder uses two-byte message ids that skip 0x5A/90 in both
-    positions. This helper encapsulates that wrap/skip behaviour.
+    positions. This helper encapsulates that wrap/skip behaviour with
+    proper bounds checking and session reset capability.
+
+    Args:
+        current_msg_id: Current message ID as (higher_byte, lower_byte) tuple
+
+    Returns:
+        Next message ID as (higher_byte, lower_byte) tuple
+
+    Raises:
+        ValueError: If current_msg_id contains invalid values
     """
     msg_id_higher_byte, msg_id_lower_byte = current_msg_id
+
+    # Validate input
+    if not (0 <= msg_id_higher_byte <= 255) or not (
+        0 <= msg_id_lower_byte <= 255
+    ):
+        raise ValueError(
+            f"Message ID bytes must be in range 0-255, got {current_msg_id}"
+        )
+
+    if msg_id_higher_byte == 90 or msg_id_lower_byte == 90:
+        raise ValueError(
+            f"Message ID cannot contain reserved value 90 (0x5A), got {current_msg_id}"
+        )
+
+    # Handle lower byte increment
     if msg_id_lower_byte == 255:
+        # Need to increment higher byte
         if msg_id_higher_byte == 255:
-            # start counting from the beginning
+            # Wrap around to beginning, skip (0, 0) as it's the default start
             return (0, 1)
-        if msg_id_higher_byte == 89:
-            # higher byte should never be 90
-            return (msg_id_higher_byte + 2, msg_id_lower_byte)
-        return (msg_id_higher_byte + 1, 0)
+        elif msg_id_higher_byte == 89:
+            # Skip 90 in higher byte position
+            return (91, 0)
+        else:
+            return (msg_id_higher_byte + 1, 0)
     else:
+        # Increment lower byte
         if msg_id_lower_byte == 89:
-            # lower byte should never be 90
-            return (0, msg_id_lower_byte + 2)
-        return (0, msg_id_lower_byte + 1)
+            # Skip 90 in lower byte position
+            return (msg_id_higher_byte, 91)
+        else:
+            return (msg_id_higher_byte, msg_id_lower_byte + 1)
+
+
+def reset_message_id() -> tuple[int, int]:
+    """Reset message ID to the beginning of a new session.
+
+    Returns:
+        Initial message ID for a new session
+    """
+    return (0, 1)
+
+
+def is_message_id_exhausted(current_msg_id: tuple[int, int]) -> bool:
+    """Check if message ID is approaching exhaustion.
+
+    Message IDs wrap around, but this can help detect if we're
+    in a long-running session that might benefit from a reset.
+
+    Args:
+        current_msg_id: Current message ID
+
+    Returns:
+        True if message ID is in the last 10% of available values
+    """
+    higher, lower = current_msg_id
+    # Total possible values: 256 * 256 = 65536, minus skipped values
+    # For simplicity, consider it exhausted if higher byte >= 230 (~90% through)
+    return higher >= 230
 
 
 def _calculate_checksum(input_bytes: bytes) -> int:
@@ -139,30 +195,109 @@ class LightWeekday(str, Enum):
     everyday = "everyday"
 
 
+class PumpWeekday(IntFlag):
+    """Bitmask representing the pump's weekday selection order."""
+
+    monday = 1 << 6  # bit 6, value 64
+    tuesday = 1 << 5  # bit 5, value 32
+    wednesday = 1 << 4  # bit 4, value 16
+    thursday = 1 << 3  # bit 3, value 8
+    friday = 1 << 2  # bit 2, value 4
+    saturday = 1 << 1  # bit 1, value 2
+    sunday = 1 << 0  # bit 0, value 1
+    everyday = 0x7F
+
+
+def encode_weekdays(
+    weekdays: List[LightWeekday] | Sequence[PumpWeekday] | PumpWeekday | None,
+) -> int:
+    """Encode weekday selections into a 7-bit mask for device commands.
+
+    This unified function handles both light and pump/doser weekday encoding.
+    The bit order is: Monday (bit 6) through Sunday (bit 0).
+
+    Args:
+        weekdays: Weekday selection in various formats:
+            - List of LightWeekday enums (for light devices)
+            - PumpWeekday enum, sequence, or None (for pump/doser devices)
+            - None defaults to everyday (all days)
+
+    Returns:
+        7-bit integer mask where each bit represents a weekday
+
+    Examples:
+        encode_weekdays([LightWeekday.monday, LightWeekday.wednesday]) -> 80 (64 + 16)
+        encode_weekdays(PumpWeekday.monday | PumpWeekday.wednesday) -> 80
+        encode_weekdays(None) -> 127 (everyday)
+    """
+    # Handle None -> everyday
+    if weekdays is None:
+        return 127
+
+    # Handle single PumpWeekday
+    if isinstance(weekdays, PumpWeekday):
+        return int(weekdays)
+
+    # Handle sequence of PumpWeekday (but not string or LightWeekday)
+    if hasattr(weekdays, "__iter__") and not isinstance(
+        weekdays, (str, LightWeekday)
+    ):
+        # Check if all items are PumpWeekday
+        weekday_list = list(weekdays)
+        if weekday_list and all(
+            isinstance(day, PumpWeekday) for day in weekday_list
+        ):
+            mask = PumpWeekday(0)
+            for day in weekday_list:
+                if isinstance(day, PumpWeekday):  # Extra check for type safety
+                    mask |= day
+            return int(mask)
+
+    # Handle list of LightWeekday
+    if (
+        isinstance(weekdays, list)
+        and weekdays
+        and all(isinstance(day, LightWeekday) for day in weekdays)
+    ):
+        encoding = 0
+        if LightWeekday.everyday in weekdays:
+            return 127
+        if LightWeekday.monday in weekdays:
+            encoding += 64
+        if LightWeekday.tuesday in weekdays:
+            encoding += 32
+        if LightWeekday.wednesday in weekdays:
+            encoding += 16
+        if LightWeekday.thursday in weekdays:
+            encoding += 8
+        if LightWeekday.friday in weekdays:
+            encoding += 4
+        if LightWeekday.saturday in weekdays:
+            encoding += 2
+        if LightWeekday.sunday in weekdays:
+            encoding += 1
+        return encoding
+
+    raise ValueError(f"Unsupported weekday format: {type(weekdays)}")
+
+
+# Backward compatibility aliases (deprecated)
 def encode_light_weekdays(selection: List[LightWeekday]) -> int:
     """Encode a list of light-style weekday selections into a 7-bit mask.
 
-    This ordering is used by the light protocol where Monday maps to bit 6
-    and Sunday maps to bit 0. Use `encode_pump_weekdays` for pump/doser masks.
+    Deprecated: Use encode_weekdays() instead.
     """
-    encoding = 0
-    if LightWeekday.everyday in selection:
-        return 127
-    if LightWeekday.monday in selection:
-        encoding += 64
-    if LightWeekday.tuesday in selection:
-        encoding += 32
-    if LightWeekday.wednesday in selection:
-        encoding += 16
-    if LightWeekday.thursday in selection:
-        encoding += 8
-    if LightWeekday.friday in selection:
-        encoding += 4
-    if LightWeekday.saturday in selection:
-        encoding += 2
-    if LightWeekday.sunday in selection:
-        encoding += 1
-    return encoding
+    return encode_weekdays(selection)
+
+
+def encode_pump_weekdays(
+    weekdays: Sequence[PumpWeekday] | PumpWeekday | None,
+) -> int:
+    """Convert a collection of pump/doser weekdays into the pump bitmask.
+
+    Deprecated: Use encode_weekdays() instead.
+    """
+    return encode_weekdays(weekdays)
 
 
 def _encode_uart_command(
@@ -213,35 +348,38 @@ def create_head_select_command(
     return _encode_uart_command(0xA5, 0x20, msg_id, [head_index, flag1, flag2])
 
 
-class PumpWeekday(IntFlag):
-    """Bitmask representing the pump's weekday selection order."""
+def decode_pump_weekdays(mask: int) -> list[PumpWeekday]:
+    """Convert a pump bitmask back into a list of PumpWeekday enums.
 
-    saturday = 1 << 0
-    sunday = 1 << 1
-    monday = 1 << 2
-    tuesday = 1 << 3
-    wednesday = 1 << 4
-    thursday = 1 << 5
-    friday = 1 << 6
-    everyday = 0x7F
-
-
-def encode_pump_weekdays(
-    weekdays: Sequence[PumpWeekday] | PumpWeekday | None,
-) -> int:
-    """Convert a collection of pump/doser weekdays into the pump bitmask.
-
-    The pump expects saturday as the LSB (bit 0) through friday as bit 6.
-    Accepts `None` (all days), a single `Weekday`, or a sequence of `Weekday`.
+    Decodes the bitmask where sunday is LSB (bit 0) through monday as bit 6.
     """
-    if weekdays is None:
-        return int(PumpWeekday.everyday)
-    if isinstance(weekdays, PumpWeekday):
-        return int(weekdays)
-    mask = PumpWeekday(0)
-    for day in weekdays:
-        mask |= day
-    return int(mask)
+    if mask == 0:
+        return []
+
+    weekdays = []
+    for weekday in PumpWeekday:
+        if weekday != PumpWeekday.everyday and (mask & weekday):
+            weekdays.append(weekday)
+
+    return weekdays
+
+
+def pump_weekdays_to_names(weekdays: Sequence[PumpWeekday]) -> list[str]:
+    """Convert PumpWeekday enums to weekday name strings.
+
+    Returns weekday names in the order they appear in the enum.
+    """
+    name_map = {
+        PumpWeekday.monday: "Mon",
+        PumpWeekday.tuesday: "Tue",
+        PumpWeekday.wednesday: "Wed",
+        PumpWeekday.thursday: "Thu",
+        PumpWeekday.friday: "Fri",
+        PumpWeekday.saturday: "Sat",
+        PumpWeekday.sunday: "Sun",
+    }
+
+    return [name_map[day] for day in weekdays if day in name_map]
 
 
 def create_head_dose_command(

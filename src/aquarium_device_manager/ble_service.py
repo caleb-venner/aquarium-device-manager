@@ -159,8 +159,12 @@ class BLEService:
     def __init__(self) -> None:
         """Initialize the BLEService, device maps and runtime flags."""
         self._lock = asyncio.Lock()
-        self._devices: Dict[str, BaseDevice] = {}
-        self._addresses: Dict[str, str] = {}
+        self._devices: Dict[str, Dict[str, BaseDevice]] = (
+            {}
+        )  # kind -> address -> device
+        self._addresses: Dict[str, str] = (
+            {}
+        )  # kind -> primary address (for backward compatibility)
         self._cache: Dict[str, CachedStatus] = {}
         self._commands: Dict[str, list] = {}  # Per-device command history
         self._auto_reconnect = _get_env_bool(AUTO_RECONNECT_ENV, True)
@@ -184,27 +188,47 @@ class BLEService:
             LIGHT_PROFILE_PATH,
         )
 
+        # Initialize timezone configuration
+        from .timezone_utils import get_system_timezone
+
+        self._display_timezone = get_system_timezone()
+        logger.info("Display timezone initialized: %s", self._display_timezone)
+
     @property
     def _doser(self) -> Optional[Doser]:
-        """Return the currently connected doser device if present."""
-        return cast(Optional[Doser], self._devices.get("doser"))
+        """Return the primary connected doser device if present."""
+        primary_address = self._addresses.get("doser")
+        if primary_address:
+            devices = self._devices.get("doser", {})
+            return cast(Optional[Doser], devices.get(primary_address))
+        return None
 
     @_doser.setter
     def _doser(self, value: Optional[Doser]) -> None:
-        """Set or clear the cached doser device reference."""
+        """Set or clear the primary cached doser device reference."""
         if value is None:
-            self._devices.pop("doser", None)
+            primary_address = self._addresses.pop("doser", None)
+            if primary_address and "doser" in self._devices:
+                device_dict = self._devices["doser"]
+                device_dict.pop(primary_address, None)
+                if not device_dict:
+                    self._devices.pop("doser", None)
         else:
-            self._devices["doser"] = value
+            kind = "doser"
+            address = value.address
+            if kind not in self._devices:
+                self._devices[kind] = {}
+            self._devices[kind][address] = value
+            self._addresses[kind] = address
 
     @property
     def _doser_address(self) -> Optional[str]:
-        """Return the stored address for the doser device, if any."""
+        """Return the stored primary address for the doser device, if any."""
         return self._addresses.get("doser")
 
     @_doser_address.setter
     def _doser_address(self, value: Optional[str]) -> None:
-        """Set or clear the stored doser address."""
+        """Set or clear the stored primary doser address."""
         if value is None:
             self._addresses.pop("doser", None)
         else:
@@ -212,16 +236,30 @@ class BLEService:
 
     @property
     def _light(self) -> Optional[LightDevice]:
-        """Return the currently connected light device if present."""
-        return cast(Optional[LightDevice], self._devices.get("light"))
+        """Return the primary connected light device if present."""
+        primary_address = self._addresses.get("light")
+        if primary_address:
+            devices = self._devices.get("light", {})
+            return cast(Optional[LightDevice], devices.get(primary_address))
+        return None
 
     @_light.setter
     def _light(self, value: Optional[LightDevice]) -> None:
-        """Set or clear the cached light device reference."""
+        """Set or clear the primary cached light device reference."""
         if value is None:
-            self._devices.pop("light", None)
+            primary_address = self._addresses.pop("light", None)
+            if primary_address and "light" in self._devices:
+                device_dict = self._devices["light"]
+                device_dict.pop(primary_address, None)
+                if not device_dict:
+                    self._devices.pop("light", None)
         else:
-            self._devices["light"] = value
+            kind = "light"
+            address = value.address
+            if kind not in self._devices:
+                self._devices[kind] = {}
+            self._devices[kind][address] = value
+            self._addresses[kind] = address
 
     @property
     def _light_address(self) -> Optional[str]:
@@ -237,8 +275,23 @@ class BLEService:
             self._addresses["light"] = value
 
     def current_device_address(self, device_type: str) -> Optional[str]:
-        """Return the current address for a device type, if known."""
+        """Return the current primary address for a device type, if known."""
         return self._addresses.get(device_type.lower())
+
+    def get_devices_by_kind(self, device_type: str) -> Dict[str, BaseDevice]:
+        """Return all connected devices of the specified kind."""
+        return self._devices.get(device_type.lower(), {}).copy()
+
+    def get_all_devices(self) -> Dict[str, Dict[str, BaseDevice]]:
+        """Return all connected devices organized by kind and address."""
+        result = {}
+        for kind, device_dict in self._devices.items():
+            result[kind] = device_dict.copy()
+        return result
+
+    def get_device_count(self) -> int:
+        """Return the total number of connected devices."""
+        return sum(len(device_dict) for device_dict in self._devices.values())
 
     @staticmethod
     def _normalize_kind(device_type: Optional[str]) -> str:
@@ -268,6 +321,28 @@ class BLEService:
             return kind.lower()
         return None
 
+    def get_display_timezone(self) -> str:
+        """Get the current display timezone."""
+        return self._display_timezone
+
+    def set_display_timezone(self, timezone: str) -> None:
+        """Set the display timezone for UI time formatting.
+
+        Args:
+            timezone: IANA timezone identifier (e.g., "America/New_York")
+                      Must be a valid IANA timezone - no abbreviations allowed.
+
+        Raises:
+            ValueError: If timezone is invalid
+        """
+        from .timezone_utils import _is_valid_iana_timezone
+
+        if not _is_valid_iana_timezone(timezone):
+            raise ValueError(f"Invalid IANA timezone identifier: {timezone}")
+
+        self._display_timezone = timezone
+        logger.info("Display timezone updated to: %s", timezone)
+
     async def connect_device(
         self, address: str, device_type: Optional[str] = None
     ) -> CachedStatus:
@@ -293,14 +368,12 @@ class BLEService:
         expected_kind = device_type.lower() if device_type else None
         async with self._lock:
             if expected_kind:
-                current_device = self._devices.get(expected_kind)
-                current_address = self._addresses.get(expected_kind)
-                if current_device and current_address == address:
-                    return current_device
+                device_dict = self._devices.get(expected_kind, {})
+                current_device = device_dict.get(address)
                 if current_device:
-                    await current_device.disconnect()
-                    self._devices.pop(expected_kind, None)
-                    self._addresses.pop(expected_kind, None)
+                    return current_device
+                # If we have a device of this kind but different address, keep it
+                # Only disconnect if we're replacing the same address
             try:
                 device = await get_device_from_address(address)
             except Exception as exc:
@@ -318,11 +391,15 @@ class BLEService:
                     status_code=400,
                     detail=self._format_message(expected_kind, "wrong_type"),
                 )
-            existing = self._devices.get(kind)
-            if existing:
-                await existing.disconnect()
-            self._devices[kind] = device
+
+            # Store the device
+            if kind not in self._devices:
+                self._devices[kind] = {}
+            self._devices[kind][address] = device
+
+            # Update primary address for backward compatibility
             self._addresses[kind] = address
+
             return device
 
     async def _refresh_device_status(
@@ -332,8 +409,10 @@ class BLEService:
         device: BaseDevice | None = None
         address: Optional[str] = None
         async with self._lock:
-            device = self._devices.get(normalized)
             address = self._addresses.get(normalized)
+            if address:
+                device_dict = self._devices.get(normalized, {})
+                device = device_dict.get(address)
             if not device or not address:
                 raise HTTPException(
                     status_code=400,
@@ -580,8 +659,9 @@ class BLEService:
                 logger.debug("Auto-discover task cancelled during stop()")
         await self._save_state()
         async with self._lock:
-            for device in self._devices.values():
-                await device.disconnect()
+            for kind_devices in self._devices.values():
+                for device in kind_devices.values():
+                    await device.disconnect()
             self._devices.clear()
             self._addresses.clear()
 
@@ -637,12 +717,22 @@ class BLEService:
     async def disconnect_device(self, address: str) -> None:
         """Disconnect a connected device by address if present."""
         async with self._lock:
-            for kind, current_address in list(self._addresses.items()):
-                if current_address == address:
-                    device = self._devices.pop(kind, None)
-                    self._addresses.pop(kind, None)
-                    if device:
-                        await device.disconnect()
+            for kind, device_dict in list(self._devices.items()):
+                if address in device_dict:
+                    device = device_dict[address]
+                    await device.disconnect()
+                    del device_dict[address]
+                    if not device_dict:
+                        del self._devices[kind]
+                    # Update primary address if we disconnected the primary device
+                    if self._addresses.get(kind) == address:
+                        # If there are other devices of this kind, pick one as primary
+                        if device_dict:
+                            self._addresses[kind] = next(
+                                iter(device_dict.keys())
+                            )
+                        else:
+                            self._addresses.pop(kind, None)
                     break
 
     def get_status_snapshot(self) -> Dict[str, CachedStatus]:
@@ -774,6 +864,19 @@ class BLEService:
             address: cmd_list for address, cmd_list in commands.items()
         }
 
+        # Load timezone setting (required for pre-release)
+        timezone = data.get("display_timezone")
+        if timezone:
+            self.set_display_timezone(timezone)
+        else:
+            # No saved timezone - this shouldn't happen in pre-release
+            # but ensure we always have a valid timezone
+            logger.warning("No saved timezone found, using system default")
+            from .timezone_utils import get_system_timezone
+
+            system_tz = get_system_timezone()
+            self.set_display_timezone(system_tz)
+
     async def _save_state(self) -> None:
         data = {
             "devices": {
@@ -788,6 +891,7 @@ class BLEService:
                 for address, status in self._cache.items()
             },
             "commands": self._commands,
+            "display_timezone": self._display_timezone,
         }
         STATE_PATH.write_text(json.dumps(data, indent=2, sort_keys=True))
 

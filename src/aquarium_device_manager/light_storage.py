@@ -15,6 +15,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .storage_utils import filter_device_json_files
+
 Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 InterpolationKind = Literal["step", "linear"]
 TimeString = Field(pattern=r"^\d{2}:\d{2}$")
@@ -449,11 +451,7 @@ class LightStorage:
         """Return all persisted light devices."""
         devices = []
         # Get all .json files except .metadata.json files
-        device_files = [
-            f
-            for f in self._storage_dir.glob("*.json")
-            if not f.name.endswith(".metadata.json")
-        ]
+        device_files = filter_device_json_files(self._storage_dir)
         for device_file in device_files:
             device = self._read_device(device_file.stem.replace("_", ":"))
             if device:

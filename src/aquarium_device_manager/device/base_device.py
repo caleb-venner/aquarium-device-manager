@@ -3,6 +3,7 @@
 import abc
 import asyncio
 import logging
+import time
 from abc import ABC
 from typing import ClassVar, Optional
 
@@ -21,6 +22,7 @@ from bleak_retry_connector import (
 )
 
 from ..commands import encoder as commands
+from ..config_migration import get_env_float, get_env_int
 from ..const import UART_RX_CHAR_UUID, UART_TX_CHAR_UUID
 from ..exception import CharacteristicMissingError
 
@@ -29,6 +31,10 @@ DEFAULT_ATTEMPTS = 3
 DISCONNECT_DELAY = 120
 BLEAK_BACKOFF_TIME = 0.25
 
+# Message ID session management constants (configurable via environment)
+MESSAGE_ID_RESET_INTERVAL_HOURS = get_env_float("AQUA_MSG_ID_RESET_HOURS", 24.0)
+MESSAGE_ID_MAX_SESSION_COMMANDS = get_env_int("AQUA_MSG_ID_MAX_COMMANDS", 1000)
+
 
 class _classproperty:
     """A descriptor that works like @property but for class attributes."""
@@ -36,7 +42,7 @@ class _classproperty:
     def __init__(self, func):
         self.func = func
 
-    def __get__(self, instance, owner):
+    def __get__(self, _instance, owner):  # type: ignore[unused-argument]
         if self.func is None:
             raise AttributeError("classproperty has no getter")
         return self.func(owner)
@@ -73,6 +79,10 @@ class BaseDevice(ABC):
         self.loop = asyncio.get_running_loop()
         assert self._model_name is not None
 
+        # Message ID session management
+        self._session_start_time = time.time()
+        self._session_command_count = 0
+
     # Base methods
 
     def set_log_level(self, level: int | str) -> None:
@@ -95,9 +105,67 @@ class BaseDevice(ABC):
         return self._msg_id
 
     def get_next_msg_id(self) -> tuple[int, int]:
-        """Get next message id."""
+        """Get next message id with session management."""
+        # Check if we should reset message ID based on session duration or command count
+        current_time = time.time()
+        session_duration_hours = (
+            current_time - self._session_start_time
+        ) / 3600
+
+        if (
+            session_duration_hours >= MESSAGE_ID_RESET_INTERVAL_HOURS
+            or self._session_command_count >= MESSAGE_ID_MAX_SESSION_COMMANDS
+        ):
+            self._reset_message_id_session()
+            self._logger.info(
+                "Reset message ID session after %.1f hours and %d commands",
+                session_duration_hours,
+                self._session_command_count,
+            )
+
+        self._session_command_count += 1
         self._msg_id = commands.next_message_id(self._msg_id)
         return self._msg_id
+
+    def reset_msg_id(self) -> None:
+        """Reset message ID to start of new session.
+
+        Useful for long-running applications to avoid potential
+        ID collision issues in extended sessions.
+        """
+        self._reset_message_id_session()
+
+    def _reset_message_id_session(self) -> None:
+        """Reset message ID and session tracking to start of new session."""
+        self._msg_id = commands.reset_message_id()
+        self._session_start_time = time.time()
+        self._session_command_count = 0
+
+    def is_msg_id_exhausted(self) -> bool:
+        """Check if message ID is approaching exhaustion.
+
+        Returns:
+            True if message ID is in the last 10% of available values
+        """
+        return commands.is_message_id_exhausted(self._msg_id)
+
+    def get_session_info(
+        self,
+    ) -> dict[str, float | int | tuple[int, int] | bool]:
+        """Get information about the current message ID session.
+
+        Returns:
+            Dictionary with session start time, command count, and duration
+        """
+        current_time = time.time()
+        return {
+            "session_start_time": self._session_start_time,
+            "session_duration_hours": (current_time - self._session_start_time)
+            / 3600,
+            "session_command_count": self._session_command_count,
+            "message_id": self._msg_id,
+            "message_id_exhausted": self.is_msg_id_exhausted(),
+        }
 
     @_classproperty
     def model_name(self) -> str | None:

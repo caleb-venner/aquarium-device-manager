@@ -1,7 +1,10 @@
 """Utilities for handling system timezone detection and conversion."""
 
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def get_system_timezone() -> str:
@@ -119,6 +122,66 @@ def get_timezone_for_new_device() -> str:
     system_tz = get_system_timezone()
 
     # Log the detected timezone for debugging
-    print(f"Detected system timezone: {system_tz}")
+    logger.debug(f"Detected system timezone: {system_tz}")
 
     return system_tz
+
+
+def convert_time_to_display_timezone(
+    hour: int, minute: int, from_timezone: str, to_timezone: str
+) -> tuple[int, int]:
+    """Convert a time from one timezone to another.
+
+    Args:
+        hour: Hour in 24-hour format (0-23)
+        minute: Minute (0-59)
+        from_timezone: Source timezone IANA identifier
+        to_timezone: Target timezone IANA identifier
+
+    Returns:
+        Tuple of (hour, minute) in the target timezone
+    """
+    import datetime
+    from zoneinfo import ZoneInfo
+
+    # Create a datetime for today at the specified time in source timezone
+    source_tz = ZoneInfo(from_timezone)
+    target_tz = ZoneInfo(to_timezone)
+
+    # Use today's date as reference
+    today = datetime.date.today()
+    source_time = datetime.datetime.combine(
+        today, datetime.time(hour, minute), tzinfo=source_tz
+    )
+
+    # Convert to target timezone
+    target_time = source_time.astimezone(target_tz)
+
+    return target_time.hour, target_time.minute
+
+
+def validate_timezone_for_display(timezone: str) -> str:
+    """Validate a timezone string for display purposes.
+
+    Requires proper IANA timezone identifiers only.
+
+    Args:
+        timezone: Timezone string to validate
+
+    Returns:
+        The validated timezone string
+
+    Raises:
+        ValueError: If timezone is invalid
+    """
+    if not timezone or not isinstance(timezone, str):
+        raise ValueError("Timezone must be a non-empty string")
+
+    # Require proper IANA timezone validation
+    try:
+        import zoneinfo
+
+        zoneinfo.ZoneInfo(timezone)
+        return timezone
+    except Exception as e:
+        raise ValueError(f"Invalid IANA timezone identifier '{timezone}': {e}")

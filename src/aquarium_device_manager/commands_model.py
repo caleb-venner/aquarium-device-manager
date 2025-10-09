@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .commands.encoder import LightWeekday, PumpWeekday
 
@@ -118,13 +118,26 @@ class LightBrightnessArgs(BaseModel):
     """Arguments for set_brightness command."""
 
     brightness: int = Field(..., ge=0, le=100)
-    color: int = Field(0, ge=0, le=5, description="Channel/color index")
+    color: int = Field(..., description="Channel/color index")
+
+    @field_validator("color")
+    @classmethod
+    def validate_color_index(cls, v: int) -> int:
+        """Validate color/channel index for light devices.
+
+        TODO: Make this validation device-aware based on device type/capabilities.
+        For now, allow any non-negative integer as channel indices will be
+        validated against actual device capabilities at command execution time.
+        """
+        if v < 0:
+            raise ValueError(f"Color index must be non-negative, got {v}")
+        return v
 
 
 class DoserScheduleArgs(BaseModel):
     """Arguments for set_schedule command."""
 
-    head_index: int = Field(..., ge=0, le=3)
+    head_index: int = Field(..., description="Doser head index (0-3)")
     volume_tenths_ml: int = Field(
         ..., ge=0, le=65535, description="Volume in tenths of ml (0-6553.5ml)"
     )
@@ -136,6 +149,42 @@ class DoserScheduleArgs(BaseModel):
     confirm: bool = Field(True)
     wait_seconds: float = Field(2.0, ge=0.5, le=10.0)
 
+    @field_validator("head_index")
+    @classmethod
+    def validate_head_index(cls, v: int) -> int:
+        """Validate head index for doser devices.
+
+        Currently supports 4-head devices (indices 0-3).
+        TODO: Add support for 2-head devices (indices 0-1).
+        """
+        if not (0 <= v <= 3):
+            raise ValueError(
+                f"Head index must be 0-3 for 4-head doser devices, got {v}"
+            )
+        return v
+
+    @field_validator("weekdays")
+    @classmethod
+    def validate_weekdays(
+        cls, v: Optional[list[PumpWeekday]]
+    ) -> Optional[list[PumpWeekday]]:
+        """Validate weekday selections."""
+        if v is not None:
+            if not v:
+                raise ValueError("Weekdays list cannot be empty")
+
+            # Check for invalid combinations
+            if PumpWeekday.everyday in v and len(v) > 1:
+                raise ValueError(
+                    "Cannot combine 'everyday' with specific weekdays"
+                )
+
+            # Check for duplicates
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate weekdays not allowed")
+
+        return v
+
 
 class LightAutoSettingArgs(BaseModel):
     """Arguments for add_auto_setting command."""
@@ -143,10 +192,107 @@ class LightAutoSettingArgs(BaseModel):
     sunrise: str = Field(..., pattern=r"^\d{2}:\d{2}$")
     sunset: str = Field(..., pattern=r"^\d{2}:\d{2}$")
     brightness: int = Field(..., ge=0, le=100)
-    ramp_up_minutes: int = Field(0, ge=0)
+    ramp_up_minutes: int = Field(..., description="Ramp up time in minutes")
     weekdays: Optional[list[LightWeekday]] = Field(
         None, description="List of weekdays"
     )
+
+    @field_validator("sunrise", "sunset")
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        """Validate that time strings represent valid hours and minutes."""
+        try:
+            hours, minutes = map(int, v.split(":"))
+            if not (0 <= hours <= 23):
+                raise ValueError(f"Hours must be 0-23, got {hours}")
+            if not (0 <= minutes <= 59):
+                raise ValueError(f"Minutes must be 0-59, got {minutes}")
+        except ValueError as e:
+            if "too many values to unpack" in str(
+                e
+            ) or "not enough values to unpack" in str(e):
+                raise ValueError(f"Time must be in HH:MM format, got {v}")
+            raise
+        return v
+
+    @field_validator("sunset")
+    @classmethod
+    def validate_sunset_after_sunrise(cls, v: str, info) -> str:
+        """Validate that sunset is after sunrise."""
+        if info.data.get("sunrise"):
+            sunrise = info.data["sunrise"]
+            if sunrise > v:
+                raise ValueError(
+                    f"Sunset ({v}) must be after sunrise ({sunrise})"
+                )
+        return v
+
+    @field_validator("weekdays")
+    @classmethod
+    def validate_weekdays(
+        cls, v: Optional[list[LightWeekday]]
+    ) -> Optional[list[LightWeekday]]:
+        """Validate weekday selections."""
+        if v is not None:
+            if not v:
+                raise ValueError("Weekdays list cannot be empty")
+
+            # Check for invalid combinations
+            if LightWeekday.everyday in v and len(v) > 1:
+                raise ValueError(
+                    "Cannot combine 'everyday' with specific weekdays"
+                )
+
+            # Check for duplicates
+            if len(v) != len(set(v)):
+                raise ValueError("Duplicate weekdays not allowed")
+
+        return v
+
+    @field_validator("ramp_up_minutes")
+    @classmethod
+    def validate_ramp_time(cls, v: int, info) -> int:
+        """Validate ramp up time is reasonable."""
+        # Basic validation - ramp time should be positive
+        if v < 0:
+            raise ValueError("Ramp up minutes cannot be negative")
+
+        # Check against sunrise/sunset span if available
+        if info.data.get("sunrise") and info.data.get("sunset"):
+            try:
+                sunrise_hours, sunrise_mins = map(
+                    int, info.data["sunrise"].split(":")
+                )
+                sunset_hours, sunset_mins = map(
+                    int, info.data["sunset"].split(":")
+                )
+
+                sunrise_total_mins = sunrise_hours * 60 + sunrise_mins
+                sunset_total_mins = sunset_hours * 60 + sunset_mins
+
+                # Handle next-day sunset
+                if sunset_total_mins <= sunrise_total_mins:
+                    sunset_total_mins += 24 * 60
+
+                span_minutes = sunset_total_mins - sunrise_total_mins
+
+                if v > span_minutes:
+                    raise ValueError(
+                        f"Ramp up time ({v} minutes) cannot exceed "
+                        f"sunrise-sunset span ({span_minutes} minutes)"
+                    )
+            except ValueError as e:
+                # Check if this is our intentional validation error
+                if "Ramp up time" in str(e):
+                    raise  # Re-raise our validation error
+                # Otherwise it's a parsing error, skip validation
+                pass
+
+        return v
+
+    # TODO: Add overlap detection validation
+    # This requires checking against existing auto settings on the device
+    # and should be implemented at the command execution level, not model validation
 
 
 # Command argument validation mapping

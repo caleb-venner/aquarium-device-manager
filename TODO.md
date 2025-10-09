@@ -1,154 +1,134 @@
-# Aquarium Device Controller TODO -
+# Aquarium Device Controller TODO
 
--## Light -
+## Incomplete Features
 
-- ✅ **COMPLETED**: 'Max Brightness' is not a real value, need to send brightness data for each channel. So WRGB 2 Pro is R,G,B,W
-- ✅ **COMPLETED**: Need 'Clear Auto Settings?'
-- ✅ **COMPLETED**: Set Manual Mode
+### Light Features
+
 - Need to figure out the Custom Mode. I think it just creates a bunch of auto mode settings; the device itself must compute how they all interact.
-- Ensure Auto settings do not overlap. One can end at at 21:00 with another starting at 21:00; cannot have end 21:01 start 21:00.ent counter —> 1/1; 2/3 etc for doses completed today.
+- Ensure Auto settings do not overlap. One can end at 21:00 with another starting at 21:00; cannot have end 21:01 start 21:00.
 - Real time light values - need to be implemented from saved config data.
 - What are we exposing as devices, entities, helpers, attributes?
 
-## General -
+### Doser Features
 
-## General -
+- **Manual/One-time dosing**: No immediate dose commands - need encoder functions and device methods for manual dosing
+- **Different schedule types**: Only daily recurring schedules supported - need interval-based, countdown, and conditional dosing modes
+- **Dose calibration/testing**: No priming or calibration commands - need calibration and priming functionality
+- **Schedule management**: No commands to read, modify, or delete existing schedules - need CRUD operations for schedules
+- **Advanced scheduling**: No interval-based, countdown, or conditional dosing - need more sophisticated scheduling options
+
+### General Features
 
 - Device config/state/setting file needs to maintain its current state whilst allowing partial updates through command execution and/or status updates.
-  - Do we need revision/ previous states saved?
-- ✅ **COMPLETED**: Between Overview and Devices tabs, for all devices, ensure 'Refresh' button triggers same function, it should not interupt regular navigation or UX. No pop-up window or hard page refresh. This refresh should request a new status payload.
-- ✅ **COMPLETED**: Refresh All in top bar. Should trigger refresh for all connected devices (the same result as clicking on refresh for each device)
-- ✅ **COMPLETED**: Below device information section (ie. Model …) No Configuration should become "No Saved Settings" (for all devices, light and doser).
+  - Do we need revision/previous states saved?
 
-## Doser -
+## Technical Debt and Improvements (From Code Assessment)
 
-- ✅ **COMPLETED**: Metadata config correctly loaded from file for overview, not pre-populated in configure window Devices tab.
-  - ✅ metadata should be preloaded into device configure page if present.
-- ✅ **COMPLETED**: Overview tab it correctly shows the active heads as active and what mode they are set to.
-So individual heads when selected should pre populate with this data.
-- ✅ **COMPLETED**: Implement larger than 25.6mL dosing values; requires 2 byte representation.
-  - Now supports up to 6553.5mL (65535 tenths) using automatic 1-byte/2-byte encoding
-  - Backward compatible: values ≤25.5mL use legacy 1-byte format (mode 0x1B)
-  - Larger values use new 2-byte format (mode 0x1C) with big-endian encoding
+### Storage Layer Consolidation
 
-## Doser -
+- **Issue**: Duplicate filtering logic for `.metadata.json` files in `DoserStorage` and `LightStorage`
+- **Impact**: Code duplication and inconsistent behavior
+- **Task**: Extract common storage utilities into a base class or utility module
+- **✅ COMPLETED**: Created `storage_utils.py` with `filter_device_json_files()` function, updated both storage classes to use it, all tests pass
 
-- Metadata config correctly loaded from file for overview, not pre-populated in configure window Devices tab.
-  - metadata should be preloaded into device configure page if present.
-- Overview tab it correctly shows the active heads as active and what mode they are set to.
-So individual heads when selected should pre populate with this data.
-- ✅ **COMPLETED**: Implement larger than 25.6mL dosing values; requires 2 byte representation.
-  - Now supports up to 6553.5mL (65535 tenths) using automatic 1-byte/2-byte encoding
-  - Backward compatible: values ≤25.5mL use legacy 1-byte format (mode 0x1B)
-  - Larger values use new 2-byte format (mode 0x1C) with big-endian encoding
+### Message ID Management Enhancement
 
-## Light -
+- **Issue**: Message ID generation lacks wraparound protection and session reset logic
+- **Impact**: Potential ID overflow in long-running sessions
+- **Task**: Add bounds checking and session reset logic to `commands.next_message_id()`
+- **✅ COMPLETED**: Fixed critical bug where higher byte was incorrectly reset to 0, added input validation, session reset functions, and exhaustion detection. Added comprehensive tests covering all edge cases.
 
-- ‘Max Brightness’ is not a real value, need to send brightness data for each channel. So WRGB 2 Pro is R,G,B,W
-- Need ‘Clear Auto Settings?’
-- Set Manual Mode
-- Need to figure out the Custom Mode. I think it just creates a bunch of auto mode settings; the device itself must compute how they all interact.
-- Ensure Auto settings do not overlap. One can end at at 21:00 with another starting at 21:00; cannot have end 21:01 start 21:00.
+### Command Validation Improvements
 
-## Roadmap -
+- **Issue**: Limited validation for weekday masks, time values, and head indices
+- **Impact**: Invalid commands could be sent to devices
+- **Task**: Enhance Pydantic models with stricter field validators for all command parameters
+- **✅ COMPLETED**: Added comprehensive field validators for time format/range validation, weekday combinations, head indices, sunrise/sunset ordering, and ramp time constraints. Added extensive test coverage for all validation scenarios.
 
-### Phase 1: Backend Core Logic and Configuration
+### Real-Time UI Updates
 
-We'll start with the backend to build a solid foundation for the new features. This ensures the core logic is in place before we build the frontend components.
+- **Issue**: Frontend relies on polling for status updates, no real-time push mechanism
+- **Impact**: Delayed user feedback on command execution
+- **Task**: Implement WebSocket connections for real-time device state updates
 
-**✅ COMPLETED**: Configuration Management:
+### Error Handling Standardization
 
-Task: Refactor the device state management (doser_storage.py, light_storage.py) to support atomic partial updates. This is critical for system stability and data integrity.
-Analysis: ✅ Implemented atomic configuration updates in `atomic_config.py` with immutable copy-and-update pattern
+- **Issue**: BLE errors logged but not consistently propagated to UI
+- **Impact**: Poor user experience during device failures
+- **Task**: Standardize error responses and add user-friendly error messages
+- **✅ COMPLETED**: Added custom exception classes, improved error categorization in CommandExecutor (BLE communication errors, validation errors, timeouts), updated API routes to properly propagate HTTPExceptions, enhanced error messages for better user experience
 
-- ✅ `atomic_update_doser_schedule()` - Atomic schedule updates with rollback safety
-- ✅ `atomic_update_device_metadata()` - Atomic metadata updates
-- ✅ `atomic_create_new_revision()` - Atomic revision creation
-- ✅ Updated `config_helpers.py` to use atomic functions
-- ✅ Comprehensive test coverage in `test_atomic_config.py`
-- ✅ All existing tests still pass (73/73)
+**Priority Decision Tabled**: Will decide between Real-Time UI Updates vs Device Reconnection State Tracking based on user experience impact assessment.
 
-**✅ COMPLETED**: Doser Command Enhancements:
+### Test Coverage Expansion
 
-Task: Implement support for dosing values larger than 25.6mL, which requires a 2-byte representation.
-Analysis: ✅ Modified commands/encoder.py and added comprehensive test cases
+- **Issue**: Limited integration tests for full command flows and concurrent operations
+- **Impact**: Potential undetected race conditions or edge cases
+- **Task**: Add integration tests with mocked BLE devices for concurrent operations and network failures
 
-- ✅ Now supports up to 6553.5mL (65535 tenths) using automatic 1-byte/2-byte encoding
-- ✅ Backward compatible: values ≤25.5mL use legacy 1-byte format (mode 0x1B)
-- ✅ Larger values use new 2-byte format (mode 0x1C) with big-endian encoding
-- ✅ Full test coverage in test_encoder_sanitization.py
-- ✅ Integration tested with atomic configuration updates
-Light Command Enhancements:
+### Polling Optimization
 
-Task: Rework the light control logic to handle per-channel brightness (W/R/G/B) instead of the incorrect "Max Brightness" value. Implement "Clear Auto Settings" and "Set Manual Mode".
-Analysis: I will modify commands/ops.py and the relevant device files (e.g., device/wrgb2_pro.py). I will also need to investigate how "Custom Mode" is handled.
+- **Issue**: Fixed polling frequency may overload devices and network
+- **Impact**: Battery drain and unnecessary traffic
+- **Task**: Implement adaptive polling based on device activity levels
+- **✅ COMPLETED**: Disabled automatic polling by default - aquarium devices run autonomously on schedules and status rarely changes. Added manual refresh capability and optional polling controls for health monitoring if needed.
 
-### Phase 2: Frontend Feature Implementation and UX
+### Command Batching Optimization
 
-With the backend updated, we'll focus on the frontend, implementing the user-facing features and improving the experience.
+- **Issue**: Commands sent individually with delays instead of optimized batching
+- **Impact**: Slower response times for multi-command operations
+- **Task**: Batch related commands where protocol allows
 
-**✅ COMPLETED**: Consistent Refresh Logic:
+### Timezone Handling
 
-Task: Implement non-disruptive "Refresh" and "Refresh All" functionality.
-Analysis: ✅ Implemented centralized refresh system with elegant toast notifications
+- **Issue**: Time sync uses system time without timezone validation
+- **Impact**: Incorrect dosing schedules if system timezone is misconfigured
+- **Task**: Add timezone validation and user-configurable timezone support
+- **Approach**: Always use system time for operations, but validate timezone and allow display timezone override
+- **✅ COMPLETED**: Added system timezone detection, validation, and display timezone configuration. All device operations use system time, but UI can show times in configured display timezone.
 
-- ✅ `handleRefreshAll()` and `handleRefreshDevice()` functions with consistent behavior
-- ✅ Non-disruptive toast notifications replace modal alerts
-- ✅ "Refresh All" button in header works seamlessly
-- ✅ Consistent refresh functionality across Overview/Devices tabs
-- ✅ No interruption to navigation or user workflow
+### Device Reconnection State Tracking
 
-**✅ COMPLETED**: UI Text and Layout:
+- **Issue**: Auto-reconnect state not properly tracked in UI
+- **Impact**: UI shows stale device status during reconnection attempts
+- **Task**: Add connection state indicators and retry logic in UI
 
-Task: Change "No Configuration" to "No Saved Settings" and implement enhanced doser displays.
-Analysis: ✅ Updated UI text and enhanced device status information
 
-- ✅ Changed "No Configurations Found" to "No Saved Settings Found"
-- ✅ Updated device cards to show "No saved settings" instead of "No configuration"
-- ✅ Enhanced doser head display with lifetime totals and better status information
-- ✅ Improved metadata integration throughout the interface
+### Memory Management
 
-**✅ COMPLETED**: Doser and Light UI Functionality:
+- **Issue**: Device objects accumulate message ID state indefinitely
+- **Impact**: Memory growth in long-running server instances
+- **Task**: Add periodic cleanup or session limits for device state
+- **✅ COMPLETED**: Added session-based message ID management with automatic reset after 24 hours or 1000 commands. Added configurable environment variables AQUA_MSG_ID_RESET_HOURS and AQUA_MSG_ID_MAX_COMMANDS. Added session tracking and monitoring methods.
 
-Task: Connect the frontend to the new backend capabilities. This includes pre-populating metadata, showing active doser heads, displaying real-time light values, and adding controls for the new light modes.
-Analysis: ✅ Enhanced device configuration and status display
+### Multi-Device Support
 
-- ✅ Pre-populating metadata in configuration windows from current device status
-- ✅ Showing active doser heads with current modes and settings in overview
-- ✅ Configuration windows now merge current device status with saved settings
-- ✅ Enhanced head display with lifetime totals and current dosing information
-- ✅ Proper metadata loading and display across all interfaces
+- **Issue**: BLE service only allows one device per kind (one doser, one light)
+- **Impact**: Cannot connect to multiple devices of same type simultaneously
+- **Task**: Refactor device storage to support multiple devices per kind
+- **✅ COMPLETED**: Changed data structure from Dict[str, BaseDevice] to Dict[str, Dict[str, BaseDevice]] (kind -> address -> device). Updated all methods and properties to work with multiple devices while maintaining backward compatibility. Added utility methods for device management.
 
-### Phase 3: Light Enhancements and Comprehensive Doser Configuration
+## Future Enhancements
 
-**✅ COMPLETED**: Per-Channel Light Controls:
+### Advanced Memory Management
 
-Task: Implement per-channel brightness controls (W/R/G/B), Manual mode functionality, and Clear auto settings.
-Analysis: ✅ Enhanced light control system with interactive channel management
+- **Issue**: With multi-device support, unlimited device connections could cause memory issues
+- **Impact**: Memory growth and performance degradation with many connected devices
+- **Task**: Implement intelligent device cache management with size/time limits
+- **Proposed Solution**:
+  - Size-based limits (max 50 devices total)
+  - Time-based expiration (disconnect after 2 hours idle)
+  - LRU eviction for cache size management
+  - Priority-based retention for critical devices
+- **Status**: Ready for implementation - Phase 1 (message ID sessions) completed, Phase 2 (device cache) pending
 
-- ✅ Per-channel brightness sliders with real-time adjustment for all light devices
-- ✅ Manual mode toggle with immediate device state synchronization
-- ✅ Clear auto settings functionality to remove all scheduled brightness changes
-- ✅ Device-specific channel naming (WRGB2 Pro: Red/Green/Blue/White, others: Ch1/Ch2/Ch3/Ch4)
-- ✅ Responsive UI with custom slider styling for optimal user experience
+### Command Batching
 
-**✅ COMPLETED**: Comprehensive Doser Configuration Interface:
-
-Task: Ensure all 4 doser modes are correctly implemented and available within Devices → Doser → Settings overlay.
-Analysis: ✅ Complete 4-mode doser configuration system with dynamic UI management
-
-- ✅ All 4 doser modes available: Single Daily Dose, Every Hour, Custom Periods, Timer-Based
-- ✅ Mode-specific configuration interfaces with appropriate input validation
-- ✅ Dynamic custom period management (add/remove periods with time ranges and dose counts)
-- ✅ Timer-based dose scheduling with real-time total calculation
-- ✅ Enhanced mode descriptions and user guidance for optimal configuration
-
-**✅ COMPLETED**: End-to-End Testing: All existing tests pass (73/73) with comprehensive light and doser functionality.
-
-### Phase 4: Integration, Testing, and Review
-
-Finally, we'll ensure everything works together seamlessly.
-
-End-to-End Testing: I'll add new tests and run the existing test suite to verify all the changes and check for regressions.
-Final Review: We can review the completed work against the TODO list to ensure every item has been addressed.
-This plan tackles the most critical backend dependencies first, which should make the frontend development more straightforward.
+- **Issue**: Commands sent individually with delays instead of optimized batching
+- **Impact**: Slower response times for multi-command operations
+- **Task**: Batch related commands where protocol allows
+- **Proposed Solution**:
+  - Group sequential commands into single BLE operations
+  - Implement command queuing and batch processing
+  - Add protocol-level optimizations for related operations
+- **Status**: Future enhancement - currently commands are sent individually

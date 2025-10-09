@@ -3,6 +3,8 @@
 
 __all__ = [
     "next_message_id",
+    "reset_message_id",
+    "is_message_id_exhausted",
     "create_set_time_command",
     "create_manual_setting_command",
     "create_add_auto_setting_command",
@@ -11,7 +13,9 @@ __all__ = [
     "create_switch_to_auto_mode_command",
     "create_status_request_command",
     "LightWeekday",
-    "encode_light_weekdays",
+    "PumpWeekday",
+    "encode_weekdays",
+    "encode_light_weekdays",  # deprecated
     "set_doser_schedule",
     "set_light_brightness",
     "turn_light_on",
@@ -21,8 +25,9 @@ __all__ = [
     "reset_auto_settings",
     "add_light_auto_setting",
 ]
-from .encoder import (
+from .encoder import (  # noqa: F401 - deprecated, kept for backward compatibility
     LightWeekday,
+    PumpWeekday,
     create_add_auto_setting_command,
     create_delete_auto_setting_command,
     create_manual_setting_command,
@@ -31,7 +36,11 @@ from .encoder import (
     create_status_request_command,
     create_switch_to_auto_mode_command,
     encode_light_weekdays,
+    encode_pump_weekdays,
+    encode_weekdays,
+    is_message_id_exhausted,
     next_message_id,
+    reset_message_id,
 )
 from .ops import (
     add_light_auto_setting,

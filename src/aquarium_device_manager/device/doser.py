@@ -87,7 +87,7 @@ class Doser(BaseDevice):
 
         This matches both the iPhone app logs and other working implementations.
         """
-        weekday_mask = doser_commands.encode_pump_weekdays(weekdays)
+        weekday_mask = doser_commands.encode_weekdays(weekdays)
 
         # Phase 1: Prelude - Setup and synchronization (6 commands)
         prelude_commands = [
