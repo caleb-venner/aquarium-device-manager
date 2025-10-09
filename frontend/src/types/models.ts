@@ -117,6 +117,7 @@ export interface DoserParsed {
   minute: number | null;
   heads: DoserHead[];
   tail_raw: string; // hex string
+  lifetime_totals_tenths_ml: number[]; // lifetime totals in tenths of mL for each head
 }
 
 // ========================================
@@ -311,4 +312,9 @@ export function getCommandStatusLabel(status: CommandStatus): string {
     case "cancelled": return "Cancelled";
     default: return "Unknown";
   }
+}
+
+/** Convert lifetime totals from tenths of mL to mL */
+export function getLifetimeTotalsInMl(parsed: DoserParsed): number[] {
+  return parsed.lifetime_totals_tenths_ml.map(tenths => tenths / 10);
 }

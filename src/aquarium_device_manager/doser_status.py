@@ -63,9 +63,15 @@ class DoserStatus:
     tail_targets: list[int]
     tail_flag: int | None
     tail_raw: bytes
+    # Lifetime totals in tenths of mL for each head (4 heads max)
+    lifetime_totals_tenths_ml: list[int]
     # Preserve the original raw payload bytes so callers can access the
     # underlying frame when necessary (keeps parity with ParsedLightStatus).
     raw_payload: bytes = b""
+
+    def lifetime_totals_ml(self) -> list[float]:
+        """Return lifetime totals in mL for all heads."""
+        return [total / 10.0 for total in self.lifetime_totals_tenths_ml]
 
 
 def parse_doser_payload(payload: bytes) -> DoserStatus:
@@ -171,7 +177,21 @@ def parse_doser_payload(payload: bytes) -> DoserStatus:
         if len(tail_raw) > 4:
             tail_flag = tail_raw[4]
 
-    # lifetime counters removed; ignore counter-style fragments entirely.
+    # Parse lifetime totals if this is a counter-style fragment
+    lifetime_totals_tenths_ml: list[int] = []
+
+    # Check if this is a lifetime totals payload (no time fields, 8+ bytes of data)
+    if weekday is None and hour is None and minute is None and len(body) >= 8:
+        # This appears to be a lifetime totals payload
+        # Each head total is 2 bytes (big-endian), up to 4 heads
+        # The payload may have a trailing checksum byte, so use pairs of bytes
+        usable_bytes = (len(body) // 2) * 2  # Round down to even number
+        num_heads = min(4, usable_bytes // 2)
+        for i in range(num_heads):
+            high_byte = body[i * 2]
+            low_byte = body[i * 2 + 1]
+            total_tenths_ml = (high_byte << 8) | low_byte
+            lifetime_totals_tenths_ml.append(total_tenths_ml)
 
     return DoserStatus(
         message_id=message_id,
@@ -183,5 +203,6 @@ def parse_doser_payload(payload: bytes) -> DoserStatus:
         tail_targets=tail_targets,
         tail_flag=tail_flag,
         tail_raw=tail_raw,
+        lifetime_totals_tenths_ml=lifetime_totals_tenths_ml,
         raw_payload=payload,
     )
