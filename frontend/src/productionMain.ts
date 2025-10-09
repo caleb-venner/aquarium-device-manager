@@ -10,6 +10,7 @@
  */
 
 import { renderProductionDashboard } from "./ui/productionDashboard";
+import { createNotificationSystem } from "./ui/notifications";
 import "./ui/productionDashboard.css";
 
 // Initialize the production dashboard
@@ -21,6 +22,9 @@ async function init() {
     if (!appElement) {
       throw new Error("App element not found");
     }
+
+    // Initialize notification system
+    createNotificationSystem();
 
     // Render the dashboard
     appElement.innerHTML = renderProductionDashboard();

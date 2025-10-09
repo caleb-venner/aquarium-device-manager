@@ -213,75 +213,32 @@ def update_doser_schedule_config(
 ) -> DoserDevice:
     """Update a doser device configuration based on set_schedule command args.
 
+    This function now uses atomic updates to ensure configuration consistency.
+    Either all changes succeed or none do, preventing partial state corruption.
+
     Args:
         device: The DoserDevice to update
         args: Command arguments from set_schedule command
 
     Returns:
-        Updated DoserDevice
+        Updated DoserDevice (new instance)
     """
+    from .atomic_config import atomic_update_doser_schedule
+
     head_index = args["head_index"]
     volume_tenths_ml = args["volume_tenths_ml"]
     hour = args["hour"]
     minute = args["minute"]
     weekdays = args.get("weekdays")
 
-    # Get active configuration
-    config = device.get_active_configuration()
-    latest = config.latest_revision()
-
-    # Find and update the head
-    head_found = False
-    for head in latest.heads:
-        if head.index == head_index:
-            head_found = True
-            head.active = True
-            head.schedule = SingleSchedule(
-                mode="single",
-                dailyDoseMl=volume_tenths_ml / 10.0,
-                startTime=f"{hour:02d}:{minute:02d}",
-            )
-            if weekdays:
-                # Convert PumpWeekday enum values to day name strings
-                weekday_names = []
-                for weekday in weekdays:
-                    if hasattr(weekday, "name"):
-                        # Map PumpWeekday enum names to 3-letter day names
-                        day_mapping = {
-                            "monday": "Mon",
-                            "tuesday": "Tue",
-                            "wednesday": "Wed",
-                            "thursday": "Thu",
-                            "friday": "Fri",
-                            "saturday": "Sat",
-                            "sunday": "Sun",
-                        }
-                        weekday_names.append(
-                            day_mapping.get(
-                                weekday.name.lower(), weekday.name[:3]
-                            )
-                        )
-                    else:
-                        # Already a string
-                        weekday_names.append(str(weekday))
-                head.recurrence.days = weekday_names
-            logger.info(
-                f"Updated head {head_index} schedule: "
-                f"{volume_tenths_ml / 10.0}ml at {hour:02d}:{minute:02d}"
-            )
-            break
-
-    if not head_found:
-        logger.warning(
-            f"Head {head_index} not found in device {device.id} configuration"
-        )
-
-    # Update timestamps
-    timestamp = _now_iso()
-    config.updatedAt = timestamp
-    device.updatedAt = timestamp
-
-    return device
+    return atomic_update_doser_schedule(
+        device=device,
+        head_index=head_index,
+        volume_tenths_ml=volume_tenths_ml,
+        hour=hour,
+        minute=minute,
+        weekdays=weekdays,
+    )
 
 
 def update_doser_head_stats(

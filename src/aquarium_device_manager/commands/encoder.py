@@ -254,24 +254,52 @@ def create_head_dose_command(
     repeat_flag: int = 0x01,
     reserved: int = 0x00,
 ) -> bytearray:
-    """Create the mode 0x1B command that sets weekday mask and daily dose."""
-    if not 0 <= volume_tenths_ml <= 0xFF:
-        raise ValueError("volume_tenths_ml must fit in one byte")
+    """Create the mode 0x1B command that sets weekday mask and daily dose.
+
+    Now supports volumes up to 6553.5mL (65535 tenths) using 2-byte encoding.
+    Values <= 255 use legacy 1-byte format for backward compatibility.
+    Values > 255 use new 2-byte format.
+    """
+    if not 0 <= volume_tenths_ml <= 0xFFFF:
+        raise ValueError("volume_tenths_ml must fit in two bytes (0-65535)")
     if not 0 <= weekday_mask <= 0x7F:
         raise ValueError("weekday_mask must be a 7-bit value")
-    return _encode_uart_command(
-        0xA5,
-        0x1B,
-        msg_id,
-        [
-            head_index,
-            weekday_mask,
-            schedule_mode,
-            repeat_flag,
-            reserved,
-            volume_tenths_ml,
-        ],
-    )
+
+    # Use 2-byte encoding for volumes > 255, otherwise keep legacy 1-byte format
+    if volume_tenths_ml <= 0xFF:
+        # Legacy 1-byte format for backward compatibility
+        return _encode_uart_command(
+            0xA5,
+            0x1B,
+            msg_id,
+            [
+                head_index,
+                weekday_mask,
+                schedule_mode,
+                repeat_flag,
+                reserved,
+                volume_tenths_ml,
+            ],
+        )
+    else:
+        # New 2-byte format for larger volumes
+        # Split volume into high and low bytes (big-endian)
+        volume_high = (volume_tenths_ml >> 8) & 0xFF
+        volume_low = volume_tenths_ml & 0xFF
+        return _encode_uart_command(
+            0xA5,
+            0x1C,  # New mode for 2-byte volume encoding
+            msg_id,
+            [
+                head_index,
+                weekday_mask,
+                schedule_mode,
+                repeat_flag,
+                reserved,
+                volume_high,
+                volume_low,
+            ],
+        )
 
 
 def create_head_schedule_command(

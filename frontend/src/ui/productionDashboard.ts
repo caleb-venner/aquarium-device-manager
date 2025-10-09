@@ -21,6 +21,8 @@ import {
 } from "../api/configurations";
 import { getDeviceStatus, scanDevices, connectDevice } from "../api/devices";
 import type { StatusResponse, CachedStatus, ScanDevice } from "../types/models";
+import { useActions } from "../stores/deviceStore";
+import { renderNotifications } from "./notifications";
 import {
   calculateLightWattage,
   formatWattage,
@@ -451,8 +453,8 @@ function renderLightCardStatus(device: CachedStatus & { address: string }): stri
     ? Math.max(...currentKeyframes.map((kf: any) => kf.percent || 0))
     : 0;
 
-  // Use device.channels for actual channel count, not keyframes.length
-  const channelCount = device.channels?.length || keyframes.length;
+  // Use device.channels for actual channel count, default to 4 if not available
+  const channelCount = device.channels?.length || 4;
 
   return `
     <div style="padding: 16px; background: var(--gray-50);">
@@ -470,24 +472,125 @@ function renderLightCardStatus(device: CachedStatus & { address: string }): stri
           <div style="font-size: 20px; font-weight: 700; color: var(--gray-900);">${channelCount}</div>
         </div>
       </div>
-      ${renderChannelLevels(keyframes, device.channels || undefined)}
+      ${renderChannelLevels(keyframes, device.channels || undefined, device.address)}
     </div>
   `;
 }
 
 /**
- * Render channel brightness levels - Placeholder for future implementation
+ * Get channel names for a device based on its model
  */
-function renderChannelLevels(keyframes: any[], channels?: any[]): string {
-  const channelCount = channels?.length || keyframes.length;
+function getDeviceChannelNames(deviceAddress: string): string[] {
+  const device = deviceStatus && deviceStatus[deviceAddress];
+  if (!device) return ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
+
+  const modelName = device.model_name?.toLowerCase() || '';
+
+  // WRGB devices have Red, Green, Blue, White channels
+  if (modelName.includes('wrgb')) {
+    return ['Red', 'Green', 'Blue', 'White'];
+  }
+
+  // RGB devices
+  if (modelName.includes('rgb')) {
+    return ['Red', 'Green', 'Blue'];
+  }
+
+  // Default fallback
+  return ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
+}
+
+/**
+ * Render channel brightness levels with interactive controls
+ */
+function renderChannelLevels(keyframes: any[], channels?: any[], deviceAddress?: string): string {
+  const channelCount = channels?.length || 4; // Default to 4 channels if not specified
+
+  // Get current schedule intensity from keyframes (represents max intensity across all channels)
+  const currentIntensity = keyframes.length > 0
+    ? Math.max(...keyframes.map((kf: any) => kf.percent || 0))
+    : 0;
+
+  if (!deviceAddress) {
+    return `
+      <div style="background: white; padding: 16px; border-radius: 6px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px;">Channel Levels</div>
+        <div style="padding: 40px 20px; text-align: center; background: var(--gray-50); border-radius: 6px; border: 2px dashed var(--gray-300);">
+          <div style="font-size: 32px; margin-bottom: 12px; opacity: 0.5;">📊</div>
+          <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">No device data available</div>
+          <div style="font-size: 12px; color: var(--gray-500);">${channelCount} channel${channelCount !== 1 ? 's' : ''} detected</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Get channel names for the device
+  const channelNames = getDeviceChannelNames(deviceAddress);
 
   return `
     <div style="background: white; padding: 16px; border-radius: 6px;">
-      <div style="font-size: 13px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px;">Channel Levels</div>
-      <div style="padding: 40px 20px; text-align: center; background: var(--gray-50); border-radius: 6px; border: 2px dashed var(--gray-300);">
-        <div style="font-size: 32px; margin-bottom: 12px; opacity: 0.5;">📊</div>
-        <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">Real-time channel levels coming soon</div>
-        <div style="font-size: 12px; color: var(--gray-500);">${channelCount} channel${channelCount !== 1 ? 's' : ''} detected</div>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="font-size: 13px; font-weight: 600; color: var(--gray-700);">Channel Controls</div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-sm btn-secondary" onclick="window.handleSetManualMode('${deviceAddress}')" title="Switch to Manual Mode">
+            🎛️ Manual
+          </button>
+          <button class="btn btn-sm btn-warning" onclick="window.handleClearAutoSettings('${deviceAddress}')" title="Clear Auto Settings">
+            🗑️ Clear Auto
+          </button>
+        </div>
+      </div>
+
+      ${keyframes.length === 0 ? `
+        <div style="padding: 20px; text-align: center; background: var(--gray-50); border-radius: 6px; border: 2px dashed var(--gray-300); margin-bottom: 16px;">
+          <div style="font-size: 14px; color: var(--gray-600); margin-bottom: 4px;">No schedule data</div>
+          <div style="font-size: 12px; color: var(--gray-500);">Set auto programs or switch to manual mode to control channels</div>
+        </div>
+      ` : `
+        <div style="background: var(--primary-light); padding: 12px; border-radius: 6px; margin-bottom: 16px; border-left: 4px solid var(--primary);">
+          <div style="font-size: 12px; font-weight: 600; color: var(--primary); margin-bottom: 4px;">Current Schedule Intensity</div>
+          <div style="font-size: 16px; font-weight: 700; color: var(--primary);">${currentIntensity}%</div>
+          <div style="font-size: 11px; color: var(--primary); opacity: 0.8;">Based on auto schedule (affects all channels proportionally)</div>
+        </div>
+      `}
+
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px;">
+        ${Array.from({ length: channelCount }, (_, index) => {
+          const channelName = channelNames[index] || `Channel ${index + 1}`;
+          // For manual control, start with current schedule intensity as default
+          const defaultBrightness = currentIntensity;
+
+          return `
+            <div style="background: var(--gray-50); padding: 12px; border-radius: 6px; border: 1px solid var(--gray-200);">
+              <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 12px; font-weight: 600; color: var(--gray-700);">${channelName}</span>
+                <span style="font-size: 14px; font-weight: 700; color: var(--gray-500);" id="channel-value-${index}">-</span>
+              </div>
+              <div style="margin-bottom: 8px;">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value="${defaultBrightness}"
+                  class="channel-slider"
+                  data-device="${deviceAddress}"
+                  data-channel="${index}"
+                  style="width: 100%; height: 6px; border-radius: 3px; background: var(--gray-300); outline: none;"
+                  onchange="window.handleChannelBrightnessChange('${deviceAddress}', ${index}, this.value)"
+                  oninput="document.getElementById('channel-value-${index}').textContent = this.value + '%'"
+                />
+              </div>
+              <div style="display: flex; gap: 4px;">
+                <button class="btn btn-xs btn-secondary" onclick="window.handleSetChannelBrightness('${deviceAddress}', ${index}, 0)" style="flex: 1;">Off</button>
+                <button class="btn btn-xs btn-primary" onclick="window.handleSetChannelBrightness('${deviceAddress}', ${index}, 100)" style="flex: 1;">Max</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <div style="margin-top: 12px; padding: 8px 12px; background: var(--gray-100); border-radius: 4px; font-size: 11px; color: var(--gray-600);">
+        💡 <strong>Note:</strong> Individual channel values are not reported by the device. Use manual controls above to set specific channel brightness levels.
       </div>
     </div>
   `;
@@ -626,6 +729,38 @@ function getDoserHeadName(deviceAddress: string, headIndex: number): string | nu
   return metadata?.headNames?.[headIndex] || null;
 }
 
+/**
+ * Get the lifetime total for a doser head
+ */
+function getHeadLifetimeTotal(headIndex: number, deviceAddress?: string): string {
+  if (!deviceAddress || !deviceStatus || !deviceStatus[deviceAddress]) {
+    return 'N/A';
+  }
+
+  const device = deviceStatus[deviceAddress];
+  const parsed = device.parsed as any;
+
+  if (!parsed || !parsed.lifetime_totals_tenths_ml || !Array.isArray(parsed.lifetime_totals_tenths_ml)) {
+    return 'N/A';
+  }
+
+  // Convert 1-based index to 0-based for array access
+  const lifetimeTotal = parsed.lifetime_totals_tenths_ml[headIndex - 1];
+
+  if (typeof lifetimeTotal !== 'number') {
+    return 'N/A';
+  }
+
+  // Convert tenths of mL to mL and format appropriately
+  const totalMl = lifetimeTotal / 10;
+
+  if (totalMl >= 1000) {
+    return `${(totalMl / 1000).toFixed(1)}L`;
+  }
+
+  return `${totalMl.toFixed(1)}ml`;
+}
+
 function renderPumpHeads(heads: any[], savedConfig?: DoserDevice, deviceAddress?: string): string {
   // Always show 4 heads (standard for doser devices)
   // Combine device status data with configuration data
@@ -675,9 +810,12 @@ function renderPumpHeads(heads: any[], savedConfig?: DoserDevice, deviceAddress?
                   <span>Time: <strong style="color: var(--gray-900);">${String(head.hour || 0).padStart(2, '0')}:${String(head.minute || 0).padStart(2, '0')}</strong></span>
                   <span>Set: <strong style="color: var(--gray-900);">${head.configData.setDose}</strong></span>
                 </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--gray-600);">
-                  <span>Dosed: <strong style="color: var(--gray-900);">${head.dosed_tenths_ml ? (head.dosed_tenths_ml / 10).toFixed(1) : '0.0'}ml</strong></span>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--gray-600); margin-bottom: 4px;">
+                  <span>Today: <strong style="color: var(--gray-900);">${head.dosed_tenths_ml ? (head.dosed_tenths_ml / 10).toFixed(1) : '0.0'}ml</strong></span>
                   <span>Schedule: <strong style="color: var(--gray-900);">${head.configData.schedule}</strong></span>
+                </div>
+                <div style="font-size: 10px; color: var(--gray-500); text-align: center; padding-top: 4px; border-top: 1px solid var(--gray-200);">
+                  Lifetime: <strong>${getHeadLifetimeTotal(head.index, deviceAddress)}</strong>
                 </div>
               ` : ''}
             </div>
@@ -771,7 +909,7 @@ function renderConfigurationsTab(): string {
     return `
       <div class="empty-state">
         <div class="empty-state-icon">🔍</div>
-        <h2 class="empty-state-title">No Configurations Found</h2>
+        <h2 class="empty-state-title">No Saved Settings Found</h2>
         <p class="empty-state-text">
           Start by scanning for devices or connecting to a device to create a configuration.
         </p>
@@ -1027,7 +1165,7 @@ function renderConnectedDeviceCard(address: string, status: CachedStatus): strin
       <!-- Configuration Status -->
       <div class="config-status">
         <div class="badge ${hasConfig ? 'badge-success' : 'badge-gray'}">
-          ${hasConfig ? `${configCount} configuration${configCount !== 1 ? 's' : ''}` : 'No configuration'}
+          ${hasConfig ? `${configCount} configuration${configCount !== 1 ? 's' : ''}` : 'No saved settings'}
         </div>
         ${hasConfig && deviceConfig && 'activeConfigurationId' in deviceConfig ? `
           <div class="active-config">
@@ -1575,6 +1713,8 @@ function refreshDashboard() {
   if (appElement) {
     appElement.innerHTML = renderProductionDashboard();
   }
+  // Render notifications after dashboard update
+  renderNotifications();
 }
 
 // ============================================================================
@@ -1588,7 +1728,20 @@ function refreshDashboard() {
 };
 
 (window as any).handleRefreshAll = async () => {
-  await loadAllConfigurations();
+  const { addNotification } = useActions();
+
+  try {
+    await loadAllConfigurations();
+    addNotification({
+      type: 'success',
+      message: 'All device configurations refreshed successfully'
+    });
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to refresh configurations: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
 };
 
 (window as any).handleScanDevices = async () => {
@@ -1713,7 +1866,11 @@ function showScanDevicesModal(): void {
     scanResults = results;
   } catch (err) {
     scanResults = [];
-    alert(`Failed to scan for devices: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to scan for devices: ${err instanceof Error ? err.message : String(err)}`
+    });
   } finally {
     isScanning = false;
     (window as any).refreshScanModal(); // Update modal with results
@@ -1879,13 +2036,21 @@ function showScanDevicesModal(): void {
 
 // Handler for refreshing individual device status
 (window as any).handleRefreshDevice = async (address: string) => {
+  const { addNotification } = useActions();
+
   try {
     const { refreshDeviceStatus } = await import("../api/devices");
     await refreshDeviceStatus(address);
     await loadAllConfigurations(); // Refresh all data
-    alert(`Device ${address} status refreshed`);
+    addNotification({
+      type: 'success',
+      message: `Device ${address} status refreshed successfully`
+    });
   } catch (err) {
-    alert(`Failed to refresh device status: ${err instanceof Error ? err.message : String(err)}`);
+    addNotification({
+      type: 'error',
+      message: `Failed to refresh device status: ${err instanceof Error ? err.message : String(err)}`
+    });
   }
 };
 
@@ -1923,13 +2088,130 @@ function showScanDevicesModal(): void {
   }
 };
 
+/**
+ * Create a device configuration that merges current device status with saved configuration
+ * This ensures the configure window shows current device state, not just saved settings
+ */
+function createDeviceConfigFromStatus(
+  deviceId: string,
+  currentStatus: CachedStatus | undefined,
+  savedDevice: DoserDevice | null
+): DoserDevice {
+  // Get metadata for device name and head names
+  const metadata = doserMetadata.find(m => m.id === deviceId);
+
+  // Base device structure
+  const device: DoserDevice = {
+    id: deviceId,
+    name: metadata?.name || savedDevice?.name || `Doser ${deviceId.slice(-4)}`,
+    timezone: savedDevice?.timezone || 'UTC',
+    configurations: savedDevice?.configurations || [],
+    activeConfigurationId: savedDevice?.activeConfigurationId || undefined
+  };
+
+  // If we have current device status, use it to populate head data
+  if (currentStatus?.parsed && currentStatus.device_type === 'doser') {
+    const parsed = currentStatus.parsed as any;
+    const heads = parsed.heads || [];
+
+    // Create a new configuration from current device status if none exists
+    if (!device.configurations.length) {
+      const newConfig = {
+        id: `config-${Date.now()}`,
+        name: 'Current Device Settings',
+        revisions: [{
+          id: `revision-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          heads: heads.map((head: any, index: number) => ({
+            index: index + 1,
+            schedule: head.mode_label !== 'disabled' ? {
+              mode: 'single' as const,
+              dailyDoseMl: (head.dosed_tenths_ml || 0) / 10,
+              hour: head.hour || 0,
+              minute: head.minute || 0
+            } : null,
+            recurrence: head.mode_label !== 'disabled' ? {
+              days: [0, 1, 2, 3, 4, 5, 6] // Default to every day
+            } : null
+          }))
+        }]
+      };
+
+      device.configurations = [newConfig];
+      device.activeConfigurationId = newConfig.id;
+    } else {
+      // Update existing configuration with current device status
+      const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId);
+      if (activeConfig && activeConfig.revisions.length > 0) {
+        const latestRevision = activeConfig.revisions[activeConfig.revisions.length - 1];
+
+        // Update head data with current device status
+        heads.forEach((head: any, index: number) => {
+          const headIndex = index + 1;
+          let configHead = latestRevision.heads?.find((h: any) => h.index === headIndex);
+
+          if (!configHead && head.mode_label !== 'disabled') {
+            // Add new head if it's active on device but not in config
+            if (!latestRevision.heads) latestRevision.heads = [];
+            configHead = {
+              index: headIndex,
+              schedule: null,
+              recurrence: null
+            };
+            latestRevision.heads.push(configHead);
+          }
+
+          if (configHead && head.mode_label !== 'disabled') {
+            // Update schedule with current device data if head is active
+            if (!configHead.schedule) {
+              configHead.schedule = {
+                mode: 'single' as const,
+                dailyDoseMl: (head.dosed_tenths_ml || 0) / 10,
+                hour: head.hour || 0,
+                minute: head.minute || 0
+              };
+            }
+
+            if (!configHead.recurrence) {
+              configHead.recurrence = {
+                days: [0, 1, 2, 3, 4, 5, 6]
+              };
+            }
+          }
+        });
+      }
+    }
+  }
+
+  return device;
+}
+
 (window as any).handleConfigureDoser = async (deviceId: string) => {
   try {
     const { getDoserConfiguration } = await import("../api/configurations");
-    const device = await getDoserConfiguration(deviceId);
+
+    // Get current device status for live data
+    const currentDeviceStatus = deviceStatus && deviceStatus[deviceId];
+
+    // Load saved configuration (may be null if none exists)
+    let savedDevice: DoserDevice | null = null;
+    try {
+      savedDevice = await getDoserConfiguration(deviceId);
+    } catch (err) {
+      // No saved config exists, that's okay
+      console.log("No saved configuration found, creating new config from device status");
+    }
+
+    // Create a device configuration that merges current status with saved config
+    const device = createDeviceConfigFromStatus(deviceId, currentDeviceStatus || undefined, savedDevice);
+
     showDoserDeviceSettingsModal(device);
   } catch (err) {
-    alert(`Failed to load doser configuration: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to load doser configuration: ${err instanceof Error ? err.message : String(err)}`
+    });
   }
 };
 
@@ -2202,8 +2484,10 @@ function renderHeadCommandInterface(headIndex: number): string {
           <label for="schedule-mode-${headIndex}">Mode:</label>
           <select id="schedule-mode-${headIndex}" class="form-select" onchange="window.updateScheduleModeUI(${headIndex}, this.value)">
             <option value="disabled" ${!head?.active ? 'selected' : ''}>Disabled</option>
-            <option value="single" ${schedule.mode === 'single' ? 'selected' : ''}>Single Daily Dose</option>
-            <option value="timer" ${schedule.mode === 'timer' ? 'selected' : ''}>Multiple Daily Doses</option>
+            <option value="single" ${schedule.mode === 'single' ? 'selected' : ''}>Daily - Single dose at set time</option>
+            <option value="every_hour" ${schedule.mode === 'every_hour' ? 'selected' : ''}>24 Hour - Hourly dosing</option>
+            <option value="custom_periods" ${schedule.mode === 'custom_periods' ? 'selected' : ''}>Custom - Custom time periods</option>
+            <option value="timer" ${schedule.mode === 'timer' ? 'selected' : ''}>Timer - Multiple specific times</option>
           </select>
         </div>
 
@@ -2244,12 +2528,15 @@ function renderScheduleDetails(headIndex: number, schedule: any): string {
     case 'single':
       return `
         <div class="schedule-single">
+          <div class="schedule-mode-description">
+            <p><strong>Daily Mode:</strong> Dose once per day at a specific time</p>
+          </div>
           <div class="form-row">
             <div class="form-group">
               <label for="dose-amount-${headIndex}">Dose Amount (ml):</label>
               <input type="number" id="dose-amount-${headIndex}"
                      value="${schedule.dailyDoseMl || 10}"
-                     min="0.1" max="999" step="0.1" class="form-input">
+                     min="0.1" max="6553.5" step="0.1" class="form-input">
             </div>
             <div class="form-group">
               <label for="dose-time-${headIndex}">Time:</label>
@@ -2261,28 +2548,87 @@ function renderScheduleDetails(headIndex: number, schedule: any): string {
         </div>
       `;
 
+    case 'every_hour':
+      return `
+        <div class="schedule-every-hour">
+          <div class="schedule-mode-description">
+            <p><strong>24 Hour Mode:</strong> Dose every hour starting at a specific time</p>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="daily-total-${headIndex}">Total Daily Amount (ml):</label>
+              <input type="number" id="daily-total-${headIndex}"
+                     value="${schedule.dailyDoseMl || 24}"
+                     min="0.1" max="6553.5" step="0.1" class="form-input">
+            </div>
+            <div class="form-group">
+              <label for="start-time-${headIndex}">Start Time:</label>
+              <input type="time" id="start-time-${headIndex}"
+                     value="${schedule.startTime || '08:00'}"
+                     class="form-input">
+            </div>
+          </div>
+          <div class="hourly-info">
+            <p>Hourly dose: <span id="hourly-dose-${headIndex}">${((schedule.dailyDoseMl || 24) / 24).toFixed(1)}ml</span></p>
+            <script>
+              document.getElementById('daily-total-${headIndex}').addEventListener('input', function() {
+                const daily = parseFloat(this.value) || 0;
+                document.getElementById('hourly-dose-${headIndex}').textContent = (daily / 24).toFixed(1) + 'ml';
+              });
+            </script>
+          </div>
+        </div>
+      `;
+
+    case 'custom_periods':
+      return `
+        <div class="schedule-custom">
+          <div class="schedule-mode-description">
+            <p><strong>Custom Mode:</strong> Define custom time periods with different dose frequencies</p>
+          </div>
+          <div class="form-group">
+            <label for="custom-daily-${headIndex}">Total Daily Amount (ml):</label>
+            <input type="number" id="custom-daily-${headIndex}"
+                   value="${schedule.dailyDoseMl || 10}"
+                   min="0.1" max="6553.5" step="0.1" class="form-input">
+          </div>
+          <div class="custom-periods">
+            <h6>Time Periods:</h6>
+            <div class="period-list" id="periods-${headIndex}">
+              ${renderCustomPeriods(headIndex, schedule.periods || [
+                { startTime: '08:00', endTime: '12:00', doses: 2 },
+                { startTime: '18:00', endTime: '22:00', doses: 2 }
+              ])}
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="window.addCustomPeriod(${headIndex})">
+              + Add Period
+            </button>
+          </div>
+        </div>
+      `;
+
     case 'timer':
       return `
         <div class="schedule-timer">
-          <div class="form-group">
-            <label for="total-daily-${headIndex}">Total Daily Amount (ml):</label>
-            <input type="number" id="total-daily-${headIndex}"
-                   value="${schedule.dailyDoseMl || 10}"
-                   min="0.1" max="999" step="0.1" class="form-input">
+          <div class="schedule-mode-description">
+            <p><strong>Timer Mode:</strong> Specific doses at exact times throughout the day</p>
           </div>
-          <div class="form-group">
-            <label for="doses-per-day-${headIndex}">Number of Doses per Day:</label>
-            <select id="doses-per-day-${headIndex}" class="form-select">
-              <option value="2">2 doses</option>
-              <option value="3">3 doses</option>
-              <option value="4" selected>4 doses</option>
-              <option value="6">6 doses</option>
-              <option value="8">8 doses</option>
-              <option value="12">12 doses</option>
-            </select>
+          <div class="timer-doses">
+            <h6>Dose Schedule:</h6>
+            <div class="dose-list" id="doses-${headIndex}">
+              ${renderTimerDoses(headIndex, schedule.doses || [
+                { time: '08:00', quantityMl: 2.5 },
+                { time: '12:00', quantityMl: 2.5 },
+                { time: '16:00', quantityMl: 2.5 },
+                { time: '20:00', quantityMl: 2.5 }
+              ])}
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" onclick="window.addTimerDose(${headIndex})">
+              + Add Dose
+            </button>
           </div>
-          <div class="timer-info">
-            <p>Doses will be distributed evenly throughout the day</p>
+          <div class="timer-summary">
+            <p>Total daily: <span id="timer-total-${headIndex}">${calculateTimerTotal(schedule.doses || [])}</span>ml</p>
           </div>
         </div>
       `;
@@ -2290,6 +2636,134 @@ function renderScheduleDetails(headIndex: number, schedule: any): string {
     default:
       return '<div class="schedule-disabled"><p>Head is disabled. Select a mode to configure.</p></div>';
   }
+}
+
+/**
+ * Helper function to render custom periods
+ */
+function renderCustomPeriods(headIndex: number, periods: any[]): string {
+  return periods.map((period, index) => `
+    <div class="period-item" data-period-index="${index}">
+      <div class="period-row">
+        <div class="form-group">
+          <label>Start:</label>
+          <input type="time" value="${period.startTime}"
+                 class="form-input period-start" data-head="${headIndex}" data-period="${index}">
+        </div>
+        <div class="form-group">
+          <label>End:</label>
+          <input type="time" value="${period.endTime}"
+                 class="form-input period-end" data-head="${headIndex}" data-period="${index}">
+        </div>
+        <div class="form-group">
+          <label>Doses:</label>
+          <input type="number" value="${period.doses}" min="1" max="12"
+                 class="form-input period-doses" data-head="${headIndex}" data-period="${index}">
+        </div>
+        <button type="button" class="btn btn-sm btn-danger" onclick="window.removeCustomPeriod(${headIndex}, ${index})">
+          ×
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * Helper function to render timer doses
+ */
+function renderTimerDoses(headIndex: number, doses: any[]): string {
+  return doses.map((dose, index) => `
+    <div class="dose-item" data-dose-index="${index}">
+      <div class="dose-row">
+        <div class="form-group">
+          <label>Time:</label>
+          <input type="time" value="${dose.time}"
+                 class="form-input dose-time" data-head="${headIndex}" data-dose="${index}">
+        </div>
+        <div class="form-group">
+          <label>Amount (ml):</label>
+          <input type="number" value="${dose.quantityMl}" min="0.1" max="6553.5" step="0.1"
+                 class="form-input dose-amount" data-head="${headIndex}" data-dose="${index}"
+                 onchange="window.updateTimerTotal(${headIndex})">
+        </div>
+        <button type="button" class="btn btn-sm btn-danger" onclick="window.removeTimerDose(${headIndex}, ${index})">
+          ×
+        </button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
+ * Helper function to calculate timer total
+ */
+function calculateTimerTotal(doses: any[]): number {
+  return doses.reduce((total, dose) => total + (dose.quantityMl || 0), 0);
+}
+
+/**
+ * Render channel brightness inputs for new auto program
+ */
+function renderChannelBrightnessInputs(device: LightDevice): string {
+  const channels = device.channels || [];
+  const isWRGB2Pro = device.id.toLowerCase().includes('wrgb2pro');
+
+  if (channels.length === 0) {
+    return '<div class="channel-input"><label>Brightness (%):</label><input type="number" id="brightness-default" min="0" max="100" value="80"></div>';
+  }
+
+  return channels.map((channel, index) => {
+    let channelName = `Ch${index + 1}`;
+    if (isWRGB2Pro && channels.length === 4) {
+      const names = ['Red', 'Green', 'Blue', 'White'];
+      channelName = names[index] || channelName;
+    }
+
+    return `
+      <div class="channel-input">
+        <label>${channelName} (%):</label>
+        <input type="number" id="brightness-ch${index}" min="0" max="100" value="80">
+      </div>
+    `;
+  }).join('');
+}
+
+/**
+ * Render an existing auto program with edit/delete controls
+ */
+function renderAutoProgram(program: any, index: number, deviceId: string): string {
+  const enabledDays = program.days || [];
+  const daysText = enabledDays.length === 7 ? 'Every day' :
+                   enabledDays.length === 0 ? 'No days' :
+                   enabledDays.join(', ');
+
+  const channelLevels = program.levels || {};
+  const levelsText = Object.entries(channelLevels)
+    .map(([channel, level]) => `${channel}: ${level}%`)
+    .join(', ') || 'No levels set';
+
+  return `
+    <div class="auto-program-item" data-program-index="${index}">
+      <div class="program-header">
+        <div class="program-title">
+          <strong>${program.label || `Program ${index + 1}`}</strong>
+          ${program.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-gray">Disabled</span>'}
+        </div>
+        <div class="program-actions">
+          <button class="btn-small btn-secondary" onclick="window.editAutoProgram('${deviceId}', ${index})">Edit</button>
+          <button class="btn-small btn-danger" onclick="window.removeAutoProgram('${deviceId}', ${index})">Remove</button>
+        </div>
+      </div>
+      <div class="program-details">
+        <div class="program-info">
+          <div><strong>Time:</strong> ${program.sunrise} → ${program.sunset}</div>
+          <div><strong>Ramp:</strong> ${program.rampMinutes} minutes</div>
+          <div><strong>Days:</strong> ${daysText}</div>
+          <div><strong>Levels:</strong> ${levelsText}</div>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 /**
@@ -2321,47 +2795,82 @@ function showLightConfigurationModal(device: LightDevice): void {
 }
 
 /**
- * Render the light configuration form for auto mode
+ * Render the light configuration form with support for up to 7 auto programs
  */
 function renderLightConfigurationForm(device: LightDevice): string {
-  // For now, we'll just add a new auto setting.
-  // A full implementation would list and allow editing existing settings.
+  const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId);
+  const latestRevision = activeConfig?.revisions[activeConfig.revisions.length - 1];
+  const currentProfile = latestRevision?.profile;
+  const existingPrograms = currentProfile?.mode === 'auto' ? currentProfile.programs : [];
+
   return `
     <div class="config-form" id="light-config-form">
       <div class="form-section">
-        <h3>Add Auto Mode Schedule</h3>
-        <p class="form-note">Set a daily schedule for the light to automatically turn on and off.</p>
-        <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
-          <div class="form-group">
-            <label for="light-sunrise">Sunrise Time:</label>
-            <input type="time" id="light-sunrise" value="08:00">
+        <h3>Auto Mode Programs</h3>
+        <p class="form-note">Manage up to 7 auto programs. Each program defines sunrise/sunset times for specific days. Programs cannot overlap in time.</p>
+
+        ${existingPrograms.length > 0 ? `
+          <div class="existing-programs">
+            <h4>Existing Programs (${existingPrograms.length}/7)</h4>
+            <div class="programs-list">
+              ${existingPrograms.map((program: any, index: number) => renderAutoProgram(program, index, device.id)).join('')}
+            </div>
           </div>
-          <div class="form-group">
-            <label for="light-sunset">Sunset Time:</label>
-            <input type="time" id="light-sunset" value="20:00">
+        ` : ''}
+
+        ${existingPrograms.length < 7 ? `
+          <div class="new-program-section">
+            <h4>Add New Program</h4>
+            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
+              <div class="form-group">
+                <label for="light-sunrise">Sunrise Time:</label>
+                <input type="time" id="light-sunrise" value="08:00">
+              </div>
+              <div class="form-group">
+                <label for="light-sunset">Sunset Time:</label>
+                <input type="time" id="light-sunset" value="20:00">
+              </div>
+              <div class="form-group">
+                <label for="light-ramp">Ramp Duration (minutes):</label>
+                <input type="number" id="light-ramp" min="0" max="120" value="30">
+              </div>
+              <div class="form-group">
+                <label for="light-label">Program Label (optional):</label>
+                <input type="text" id="light-label" placeholder="e.g., Weekday Schedule">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Channel Brightness (%):</label>
+              <div class="channel-brightness-grid">
+                ${renderChannelBrightnessInputs(device)}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Active Days:</label>
+              <div class="weekday-selector">
+                ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+                  <label class="weekday-label">
+                    <input type="checkbox" value="${day}" checked><span>${day}</span>
+                  </label>`).join('')}
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="btn btn-primary" onclick="window.sendLightAutoSettingToDevice('${device.id}')">Add Program</button>
+            </div>
           </div>
-          <div class="form-group">
-            <label for="light-brightness">Max Brightness (%):</label>
-            <input type="number" id="light-brightness" min="0" max="100" value="80">
+        ` : `
+          <div class="max-programs-notice">
+            <p style="color: var(--gray-600); font-style: italic;">Maximum of 7 auto programs reached. Remove an existing program to add a new one.</p>
           </div>
-          <div class="form-group">
-            <label for="light-ramp">Ramp-up (minutes):</label>
-            <input type="number" id="light-ramp" min="0" value="0">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Active Days:</label>
-          <div class="weekday-selector">
-            ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
-              <label class="weekday-label">
-                <input type="checkbox" value="${day}" checked><span>${day}</span>
-              </label>`).join('')}
-          </div>
-        </div>
+        `}
       </div>
+
       <div class="form-actions">
         <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-        <button class="btn btn-success" onclick="window.sendLightAutoSettingToDevice('${device.id}')">Send to Device</button>
+        ${existingPrograms.length > 0 ? `<button class="btn btn-warning" onclick="window.clearAllAutoPrograms('${device.id}')">Clear All Programs</button>` : ''}
       </div>
     </div>
   `;
@@ -2496,10 +3005,37 @@ let selectedHeadIndex: number | null = null;
   const scheduleDetails = document.getElementById(`schedule-details-${headIndex}`);
   if (scheduleDetails) {
     let schedule: any = { mode };
-    if (mode === 'single') {
-      schedule = { mode: 'single', dailyDoseMl: 10.0, startTime: '09:00' };
-    } else if (mode === 'timer') {
-      schedule = { mode: 'timer', dailyDoseMl: 10.0 };
+
+    switch (mode) {
+      case 'single':
+        schedule = { mode: 'single', dailyDoseMl: 10.0, startTime: '09:00' };
+        break;
+      case 'every_hour':
+        schedule = { mode: 'every_hour', dailyDoseMl: 24.0, startTime: '08:00' };
+        break;
+      case 'custom_periods':
+        schedule = {
+          mode: 'custom_periods',
+          dailyDoseMl: 10.0,
+          periods: [
+            { startTime: '08:00', endTime: '12:00', doses: 2 },
+            { startTime: '18:00', endTime: '22:00', doses: 2 }
+          ]
+        };
+        break;
+      case 'timer':
+        schedule = {
+          mode: 'timer',
+          doses: [
+            { time: '08:00', quantityMl: 2.5 },
+            { time: '12:00', quantityMl: 2.5 },
+            { time: '16:00', quantityMl: 2.5 },
+            { time: '20:00', quantityMl: 2.5 }
+          ]
+        };
+        break;
+      default:
+        schedule = { mode: 'disabled' };
     }
 
     scheduleDetails.innerHTML = renderScheduleDetails(headIndex, schedule);
@@ -2666,12 +3202,20 @@ let selectedHeadIndex: number | null = null;
       throw new Error(`Failed to save metadata: ${response.statusText}`);
     }
 
-    alert('Server configuration saved successfully!');
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'success',
+      message: 'Server configuration saved successfully!'
+    });
     document.querySelector('.modal-overlay')?.remove();
     await loadAllConfigurations(); // Refresh to show updated names
     refreshDashboard(); // Force refresh the UI to show new names
   } catch (err) {
-    alert(`Failed to save server configuration: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to save server configuration: ${err instanceof Error ? err.message : String(err)}`
+    });
   }
 };
 
@@ -2758,6 +3302,59 @@ let selectedHeadIndex: number | null = null;
   }
 };
 
+// ============================================================================
+// Custom Period and Timer Dose Management Handlers
+// ============================================================================
+
+(window as any).addCustomPeriod = (headIndex: number) => {
+  const periodsList = document.getElementById(`periods-${headIndex}`);
+  if (!periodsList) return;
+
+  const currentPeriods = Array.from(periodsList.querySelectorAll('.period-item')).length;
+  const newPeriod = { startTime: '09:00', endTime: '17:00', doses: 1 };
+
+  const newPeriodHtml = renderCustomPeriods(headIndex, [newPeriod]);
+  periodsList.insertAdjacentHTML('beforeend', newPeriodHtml);
+};
+
+(window as any).removeCustomPeriod = (headIndex: number, periodIndex: number) => {
+  const periodItem = document.querySelector(`.period-item[data-period-index="${periodIndex}"]`);
+  if (periodItem) {
+    periodItem.remove();
+  }
+};
+
+(window as any).addTimerDose = (headIndex: number) => {
+  const dosesList = document.getElementById(`doses-${headIndex}`);
+  if (!dosesList) return;
+
+  const newDose = { time: '12:00', quantityMl: 1.0 };
+  const newDoseHtml = renderTimerDoses(headIndex, [newDose]);
+  dosesList.insertAdjacentHTML('beforeend', newDoseHtml);
+
+  // Update total
+  (window as any).updateTimerTotal(headIndex);
+};
+
+(window as any).removeTimerDose = (headIndex: number, doseIndex: number) => {
+  const doseItem = document.querySelector(`.dose-item[data-dose-index="${doseIndex}"]`);
+  if (doseItem) {
+    doseItem.remove();
+    (window as any).updateTimerTotal(headIndex);
+  }
+};
+
+(window as any).updateTimerTotal = (headIndex: number) => {
+  const doseAmounts = Array.from(document.querySelectorAll(`#doses-${headIndex} .dose-amount`))
+    .map((input: any) => parseFloat(input.value) || 0);
+  const total = doseAmounts.reduce((sum, amount) => sum + amount, 0);
+
+  const totalElement = document.getElementById(`timer-total-${headIndex}`);
+  if (totalElement) {
+    totalElement.textContent = total.toFixed(1);
+  }
+};
+
 (window as any).updateTimerDose = (headIndex: number, doseIndex: number, param: string, value: any) => {
   const head = findHead(headIndex);
   if (head && head.schedule && head.schedule.mode === 'timer') {
@@ -2776,11 +3373,19 @@ let selectedHeadIndex: number | null = null;
     const { updateDoserConfiguration } = await import("../api/configurations");
     await updateDoserConfiguration(deviceId, currentConfigDevice);
 
-    alert('Configuration saved successfully!');
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'success',
+      message: 'Configuration saved successfully!'
+    });
     await loadAllConfigurations();
     document.querySelector('.modal-overlay')?.remove();
   } catch (err) {
-    alert(`Failed to save configuration: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to save configuration: ${err instanceof Error ? err.message : String(err)}`
+    });
   }
 };
 
@@ -2793,8 +3398,24 @@ let selectedHeadIndex: number | null = null;
 
     const sunrise = (form.querySelector('#light-sunrise') as HTMLInputElement).value;
     const sunset = (form.querySelector('#light-sunset') as HTMLInputElement).value;
-    const brightness = parseInt((form.querySelector('#light-brightness') as HTMLInputElement).value);
     const ramp_up_minutes = parseInt((form.querySelector('#light-ramp') as HTMLInputElement).value);
+
+    // Collect per-channel brightness values or use default
+    const channels: Record<string, number> = {};
+    const brightnessInputs = form.querySelectorAll('[id^="brightness-"]') as NodeListOf<HTMLInputElement>;
+
+    if (brightnessInputs.length === 0) {
+      // Fallback to old brightness field if present
+      const legacyBrightness = form.querySelector('#light-brightness') as HTMLInputElement;
+      channels['default'] = legacyBrightness ? parseInt(legacyBrightness.value) : 80;
+    } else {
+      Array.from(brightnessInputs).forEach(input => {
+        const match = input.id.match(/brightness-(.+)/);
+        if (match) {
+          channels[match[1]] = parseInt(input.value) || 0;
+        }
+      });
+    }
 
     const dayCheckboxes = form.querySelectorAll('.weekday-selector input:checked') as NodeListOf<HTMLInputElement>;
     const selectedDays = Array.from(dayCheckboxes).map(cb => cb.value);
@@ -2804,19 +3425,85 @@ let selectedHeadIndex: number | null = null;
       args: {
         sunrise,
         sunset,
-        brightness,
+        channels, // Use per-channel brightness instead of single brightness
         ramp_up_minutes,
         weekdays: convertUiWeekdaysToEnum(selectedDays),
+        label: (form.querySelector('#light-label') as HTMLInputElement)?.value || 'Auto Program'
       }
     };
 
     await executeCommand(deviceId, commandRequest);
-    alert('Auto mode schedule sent to device successfully!');
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'success',
+      message: 'Auto mode schedule sent to device successfully!'
+    });
     document.querySelector('.modal-overlay')?.remove();
     await loadAllConfigurations(); // Refresh status
   } catch (err) {
-    alert(`Failed to send auto setting to device: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to send auto setting to device: ${err instanceof Error ? err.message : String(err)}`
+    });
   }
+};
+
+// ============================================================================
+// Auto Program Management Handlers
+// ============================================================================
+
+(window as any).addAutoProgram = async (deviceId: string) => {
+  const { addNotification } = useActions();
+  addNotification({
+    type: 'info',
+    message: 'Multi-program auto configuration is being developed. For now, use the single program form below.'
+  });
+};
+
+(window as any).removeAutoProgram = async (deviceId: string, programIndex: number) => {
+  const { addNotification } = useActions();
+  addNotification({
+    type: 'info',
+    message: 'Program management features coming soon. Use "Clear Auto Settings" to remove all programs.'
+  });
+};
+
+(window as any).clearAllAutoPrograms = async (deviceId: string) => {
+  if (!confirm('Are you sure you want to clear all auto programs? This will also clear the device\'s auto settings.')) return;
+
+  try {
+    const { executeCommand } = await import("../api/commands");
+
+    await executeCommand(deviceId, {
+      action: 'clear_auto_settings',
+      args: {}
+    });
+
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'success',
+      message: 'Auto settings cleared successfully!'
+    });
+
+    document.querySelector('.modal-overlay')?.remove();
+    await loadAllConfigurations(); // Refresh status
+
+  } catch (err) {
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to clear auto programs: ${err instanceof Error ? err.message : String(err)}`
+    });
+  }
+};
+
+(window as any).editAutoProgram = async (deviceId: string, programIndex: number) => {
+  const { addNotification } = useActions();
+  addNotification({
+    type: 'info',
+    message: 'Edit functionality coming soon. For now, clear existing programs and add new ones.'
+  });
 };
 
 (window as any).sendToDevice = async (deviceId: string) => {
@@ -2858,9 +3545,103 @@ let selectedHeadIndex: number | null = null;
       await executeCommand(deviceId, commandRequest);
     }
 
-    alert('Configuration sent to device successfully!');
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'success',
+      message: 'Configuration sent to device successfully!'
+    });
   } catch (err) {
-    alert(`Failed to send to device: ${err instanceof Error ? err.message : String(err)}`);
+    const { addNotification } = useActions();
+    addNotification({
+      type: 'error',
+      message: `Failed to send to device: ${err instanceof Error ? err.message : String(err)}`
+    });
+  }
+};
+
+// ============================================================================
+// Light Control Handlers
+// ============================================================================
+
+(window as any).handleSetManualMode = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { setManualMode } = await import("../api/commands");
+    await setManualMode(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Switched to manual mode successfully'
+    });
+
+    // Refresh device status to show updated state
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to set manual mode: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleClearAutoSettings = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { resetAutoSettings } = await import("../api/commands");
+    await resetAutoSettings(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Auto settings cleared successfully'
+    });
+
+    // Refresh device status to show updated state
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to clear auto settings: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleSetChannelBrightness = async (deviceAddress: string, channelIndex: number, brightness: number) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { sendManualBrightnessCommands } = await import("../api/commands");
+    await sendManualBrightnessCommands(deviceAddress, [
+      { index: channelIndex, value: brightness }
+    ]);
+
+    addNotification({
+      type: 'success',
+      message: `Channel ${channelIndex + 1} set to ${brightness}%`
+    });
+
+    // Refresh device status to show updated brightness
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 500);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to set channel brightness: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleChannelBrightnessChange = async (deviceAddress: string, channelIndex: number, brightness: string) => {
+  // Convert string to number and call the set function
+  const brightnessValue = parseInt(brightness, 10);
+  if (!isNaN(brightnessValue)) {
+    await (window as any).handleSetChannelBrightness(deviceAddress, channelIndex, brightnessValue);
   }
 };
 
