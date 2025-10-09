@@ -22,41 +22,13 @@
 - Device config/state/setting file needs to maintain its current state whilst allowing partial updates through command execution and/or status updates.
   - Do we need revision/previous states saved?
 
-## Technical Debt and Improvements (From Code Assessment)
-
-### Storage Layer Consolidation
-
-- **Issue**: Duplicate filtering logic for `.metadata.json` files in `DoserStorage` and `LightStorage`
-- **Impact**: Code duplication and inconsistent behavior
-- **Task**: Extract common storage utilities into a base class or utility module
-- **✅ COMPLETED**: Created `storage_utils.py` with `filter_device_json_files()` function, updated both storage classes to use it, all tests pass
-
-### Message ID Management Enhancement
-
-- **Issue**: Message ID generation lacks wraparound protection and session reset logic
-- **Impact**: Potential ID overflow in long-running sessions
-- **Task**: Add bounds checking and session reset logic to `commands.next_message_id()`
-- **✅ COMPLETED**: Fixed critical bug where higher byte was incorrectly reset to 0, added input validation, session reset functions, and exhaustion detection. Added comprehensive tests covering all edge cases.
-
-### Command Validation Improvements
-
-- **Issue**: Limited validation for weekday masks, time values, and head indices
-- **Impact**: Invalid commands could be sent to devices
-- **Task**: Enhance Pydantic models with stricter field validators for all command parameters
-- **✅ COMPLETED**: Added comprehensive field validators for time format/range validation, weekday combinations, head indices, sunrise/sunset ordering, and ramp time constraints. Added extensive test coverage for all validation scenarios.
+## Future Improvements
 
 ### Real-Time UI Updates
 
 - **Issue**: Frontend relies on polling for status updates, no real-time push mechanism
 - **Impact**: Delayed user feedback on command execution
 - **Task**: Implement WebSocket connections for real-time device state updates
-
-### Error Handling Standardization
-
-- **Issue**: BLE errors logged but not consistently propagated to UI
-- **Impact**: Poor user experience during device failures
-- **Task**: Standardize error responses and add user-friendly error messages
-- **✅ COMPLETED**: Added custom exception classes, improved error categorization in CommandExecutor (BLE communication errors, validation errors, timeouts), updated API routes to properly propagate HTTPExceptions, enhanced error messages for better user experience
 
 **Priority Decision Tabled**: Will decide between Real-Time UI Updates vs Device Reconnection State Tracking based on user experience impact assessment.
 
@@ -66,47 +38,17 @@
 - **Impact**: Potential undetected race conditions or edge cases
 - **Task**: Add integration tests with mocked BLE devices for concurrent operations and network failures
 
-### Polling Optimization
-
-- **Issue**: Fixed polling frequency may overload devices and network
-- **Impact**: Battery drain and unnecessary traffic
-- **Task**: Implement adaptive polling based on device activity levels
-- **✅ COMPLETED**: Disabled automatic polling by default - aquarium devices run autonomously on schedules and status rarely changes. Added manual refresh capability and optional polling controls for health monitoring if needed.
-
 ### Command Batching Optimization
 
 - **Issue**: Commands sent individually with delays instead of optimized batching
 - **Impact**: Slower response times for multi-command operations
 - **Task**: Batch related commands where protocol allows
 
-### Timezone Handling
-
-- **Issue**: Time sync uses system time without timezone validation
-- **Impact**: Incorrect dosing schedules if system timezone is misconfigured
-- **Task**: Add timezone validation and user-configurable timezone support
-- **Approach**: Always use system time for operations, but validate timezone and allow display timezone override
-- **✅ COMPLETED**: Added system timezone detection, validation, and display timezone configuration. All device operations use system time, but UI can show times in configured display timezone.
-
 ### Device Reconnection State Tracking
 
 - **Issue**: Auto-reconnect state not properly tracked in UI
 - **Impact**: UI shows stale device status during reconnection attempts
 - **Task**: Add connection state indicators and retry logic in UI
-
-
-### Memory Management
-
-- **Issue**: Device objects accumulate message ID state indefinitely
-- **Impact**: Memory growth in long-running server instances
-- **Task**: Add periodic cleanup or session limits for device state
-- **✅ COMPLETED**: Added session-based message ID management with automatic reset after 24 hours or 1000 commands. Added configurable environment variables AQUA_MSG_ID_RESET_HOURS and AQUA_MSG_ID_MAX_COMMANDS. Added session tracking and monitoring methods.
-
-### Multi-Device Support
-
-- **Issue**: BLE service only allows one device per kind (one doser, one light)
-- **Impact**: Cannot connect to multiple devices of same type simultaneously
-- **Task**: Refactor device storage to support multiple devices per kind
-- **✅ COMPLETED**: Changed data structure from Dict[str, BaseDevice] to Dict[str, Dict[str, BaseDevice]] (kind -> address -> device). Updated all methods and properties to work with multiple devices while maintaining backward compatibility. Added utility methods for device management.
 
 ## Future Enhancements
 
