@@ -1,6 +1,6 @@
 # Current State
 
-This project is in very active development, at a very early stage. Expect greater functionality and further refinefment soon.
+This project is in very active development, at a very early stage. Expect further functionality and refinement soon.
 
 ## Aquarium BLE Device Manager
 
