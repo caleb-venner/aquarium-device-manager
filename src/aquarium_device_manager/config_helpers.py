@@ -473,7 +473,7 @@ def add_light_auto_program(
     device: LightDevice,
     sunrise: str,
     sunset: str,
-    brightness: int,
+    brightness: int | dict[str, int],
     ramp_up_minutes: int = 0,
     weekdays: list[str] | None = None,
 ) -> LightDevice:
@@ -483,7 +483,7 @@ def add_light_auto_program(
         device: The LightDevice to update
         sunrise: Sunrise time (HH:MM format)
         sunset: Sunset time (HH:MM format)
-        brightness: Target brightness level
+        brightness: Target brightness level (int) or per-channel levels (dict)
         ramp_up_minutes: Ramp-up duration in minutes
         weekdays: List of weekdays (default: all days)
 

@@ -413,6 +413,13 @@ class CommandExecutor:
         try:
             from .config_helpers import add_light_auto_program
 
+            # Handle either single brightness or per-channel brightness
+            brightness_arg = args.get("brightness") or args.get("channels")
+            if brightness_arg is None:
+                raise ValueError(
+                    "Either 'brightness' or 'channels' must be provided"
+                )
+
             device = self.ble_service._light_storage.get_device(address)
             if device:
                 # Convert weekdays to strings
@@ -425,7 +432,7 @@ class CommandExecutor:
                     device,
                     sunrise=args["sunrise"],
                     sunset=args["sunset"],
-                    brightness=args["brightness"],
+                    brightness=brightness_arg,
                     ramp_up_minutes=args.get("ramp_up_minutes", 0),
                     weekdays=weekdays,
                 )
