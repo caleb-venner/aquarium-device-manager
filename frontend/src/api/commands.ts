@@ -55,18 +55,17 @@ export async function sendManualBrightnessCommands(
     }))
     .sort((a, b) => a.index - b.index);
 
-  const commands: CommandRecord[] = [];
+  // Extract brightness values in channel order
+  const brightnessValues = sanitized.map(p => p.value);
 
-  for (const { index, value } of sanitized) {
-    const command = await executeCommand(address, {
-      action: "set_brightness",
-      args: { brightness: value, color: index },
-      timeout: 10,
-    });
-    commands.push(command);
-  }
+  // Send all channels in one payload
+  const command = await executeCommand(address, {
+    action: "set_manual_multi_channel_brightness",
+    args: { channels: brightnessValues },
+    timeout: 10,
+  });
 
-  return commands;
+  return [command];
 }
 
 export async function turnLightOn(address: string): Promise<CommandRecord> {

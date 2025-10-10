@@ -772,6 +772,14 @@ class BLEService:
             self, address, brightness=brightness, color=color
         )
 
+    async def set_manual_multi_channel_brightness(
+        self, address: str, brightness: tuple[int, ...]
+    ) -> CachedStatus:
+        """Set manual multi-channel brightness for a light device in one payload."""
+        return await device_commands.set_manual_multi_channel_brightness(
+            self, address, brightness
+        )
+
     async def turn_light_on(self, address: str) -> CachedStatus:
         """Turn the light device at the address on."""
         return await device_commands.turn_light_on(self, address)

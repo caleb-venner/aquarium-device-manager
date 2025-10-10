@@ -127,6 +127,36 @@ def create_manual_setting_command(
     return _encode_uart_command(90, 7, msg_id, [color, brightness_level])
 
 
+def create_manual_multi_channel_setting_command(
+    msg_id: tuple[int, int], brightness: tuple[int, ...]
+) -> bytearray:
+    """Create a manual multi-channel brightness setting command.
+
+    Supports variable numbers of brightness channels (RGB, RGBW, etc.).
+    The brightness tuple length determines how many channels are configured.
+    """
+    # Validate brightness values
+    if not brightness or len(brightness) > 4:
+        raise ValueError(
+            f"Brightness must contain 1-4 values, got {len(brightness)}"
+        )
+
+    for i, val in enumerate(brightness):
+        if not (0 <= val <= 100):
+            raise ValueError(f"Brightness value {i} must be 0-100, got {val}")
+
+    parameters = [
+        *brightness,
+    ]
+
+    # Pad with 255s to ensure consistent command length (4 brightness slots)
+    padding_needed = 4 - len(brightness)
+    parameters.extend([255] * padding_needed)
+
+    # Use command type 91 for multi-channel manual setting (90 is single channel)
+    return _encode_uart_command(91, 13, msg_id, parameters)
+
+
 def create_add_auto_setting_command(
     msg_id: tuple[int, int],
     sunrise: datetime.time,

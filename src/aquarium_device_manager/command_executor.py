@@ -211,6 +211,31 @@ class CommandExecutor:
 
             return cached_status_to_dict(self.ble_service, status)
 
+        elif action == "set_manual_multi_channel_brightness":
+            # Handle manual multi-channel brightness setting in one payload
+            channels = args.get("channels", [])
+            if not channels:
+                raise ValueError(
+                    "channels argument required for manual multi-channel brightness"
+                )
+
+            if not isinstance(channels, (list, tuple)) or len(channels) > 4:
+                raise ValueError(
+                    "channels must be a list/tuple of 1-4 brightness values"
+                )
+
+            # Convert to tuple of ints
+            brightness_tuple = tuple(int(x) for x in channels)
+
+            status = await self.ble_service.set_manual_multi_channel_brightness(
+                address, brightness_tuple
+            )
+
+            # Update and persist light configuration
+            await self._save_light_brightness_config(address, args)
+
+            return cached_status_to_dict(self.ble_service, status)
+
         elif action == "enable_auto_mode":
             status = await self.ble_service.enable_auto_mode(address)
             return cached_status_to_dict(self.ble_service, status)
