@@ -20,7 +20,7 @@ Devices --> Settings --> Turn On, Turn Off settings not working; low priority.
 - **Advanced scheduling**: No interval-based, countdown, or conditional dosing - need more sophisticated scheduling options
 
 ## General Features
-
+- Drop 'Searching' Notification when Scan Device
 - Need to rethink the overview display for devices. What information do we want?
 - When a device is first connected to, the user needs to fill out the device 'Config' information. Device name, head names etc. They should also be made aware that the device will be 'reset' and they need to create new schedules/settings etc. So take note from controller app --> transfer.
 - Device config/state/setting file needs to maintain its current state whilst allowing partial updates through command execution and/or status updates.
