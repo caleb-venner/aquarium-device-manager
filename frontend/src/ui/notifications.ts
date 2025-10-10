@@ -141,12 +141,22 @@ function createNotificationElement(
 
   // Add click handler for close button
   const closeBtn = element.querySelector(".notification-close") as HTMLButtonElement;
-  closeBtn.addEventListener("click", () => {
+  const removeNotification = () => {
     element.classList.remove("show");
     setTimeout(() => {
       onRemove(notification.id);
     }, 300); // Wait for animation
-  });
+  };
+
+  closeBtn.addEventListener("click", removeNotification);
+
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    // Check if notification still exists (user hasn't manually closed it)
+    if (element.parentNode) {
+      removeNotification();
+    }
+  }, 5000);
 
   return element;
 }

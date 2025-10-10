@@ -32,6 +32,7 @@ class LightMetadata(BaseModel):
     id: str
     name: str | None = None
     timezone: str = "UTC"
+    autoReconnect: bool = False  # Auto-reconnect on service start
     createdAt: str | None = None
     updatedAt: str | None = None
 

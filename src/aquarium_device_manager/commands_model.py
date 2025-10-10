@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .commands.encoder import LightWeekday, PumpWeekday
 
@@ -191,11 +191,27 @@ class LightAutoSettingArgs(BaseModel):
 
     sunrise: str = Field(..., pattern=r"^\d{2}:\d{2}$")
     sunset: str = Field(..., pattern=r"^\d{2}:\d{2}$")
-    brightness: int = Field(..., ge=0, le=100)
-    ramp_up_minutes: int = Field(..., description="Ramp up time in minutes")
+    brightness: Optional[int] = Field(
+        None, ge=0, le=100, description="Single channel brightness (0-100)"
+    )
+    channels: Optional[dict[str, int]] = Field(
+        None, description="Per-channel brightness values"
+    )
+    ramp_up_minutes: int = Field(0, description="Ramp up time in minutes")
     weekdays: Optional[list[LightWeekday]] = Field(
         None, description="List of weekdays"
     )
+
+    @model_validator(mode="after")
+    def validate_brightness_or_channels(self) -> "LightAutoSettingArgs":
+        """Ensure either brightness or channels is provided, but not both."""
+        if self.brightness is None and self.channels is None:
+            raise ValueError(
+                "Either 'brightness' or 'channels' must be provided"
+            )
+        if self.brightness is not None and self.channels is not None:
+            raise ValueError("Cannot specify both 'brightness' and 'channels'")
+        return self
 
     @field_validator("sunrise", "sunset")
     @classmethod

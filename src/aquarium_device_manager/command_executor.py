@@ -187,6 +187,30 @@ class CommandExecutor:
 
             return cached_status_to_dict(self.ble_service, status)
 
+        elif action == "set_multi_channel_brightness":
+            # Handle multiple channel brightness setting
+            channels = args.get("channels", {})
+            if not channels:
+                raise ValueError(
+                    "channels argument required for multi-channel brightness"
+                )
+
+            # Set brightness for each channel
+            for channel_name, brightness in channels.items():
+                await self.ble_service.set_light_brightness(
+                    address,
+                    brightness=brightness,
+                    color=channel_name,
+                )
+
+            # Get final status after all channels are set
+            status = await self.ble_service.request_status(address)
+
+            # Update and persist light configuration
+            await self._save_light_brightness_config(address, args)
+
+            return cached_status_to_dict(self.ble_service, status)
+
         elif action == "enable_auto_mode":
             status = await self.ble_service.enable_auto_mode(address)
             return cached_status_to_dict(self.ble_service, status)
@@ -209,11 +233,18 @@ class CommandExecutor:
                 hours, minutes = time_str.split(":")
                 return time(int(hours), int(minutes))
 
+            # Handle either single brightness or per-channel brightness
+            brightness_arg = args.get("brightness") or args.get("channels")
+            if brightness_arg is None:
+                raise ValueError(
+                    "Either 'brightness' or 'channels' must be provided"
+                )
+
             status = await self.ble_service.add_light_auto_setting(
                 address,
                 sunrise=parse_time(sunrise_str),
                 sunset=parse_time(sunset_str),
-                brightness=args["brightness"],
+                brightness=brightness_arg,
                 ramp_up_minutes=args.get("ramp_up_minutes", 0),
                 weekdays=args.get("weekdays"),
             )

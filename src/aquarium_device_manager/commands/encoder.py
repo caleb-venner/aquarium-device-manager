@@ -131,11 +131,25 @@ def create_add_auto_setting_command(
     msg_id: tuple[int, int],
     sunrise: datetime.time,
     sunset: datetime.time,
-    brightness: tuple[int, int, int],
+    brightness: tuple[int, ...],
     ramp_up_minutes: int,
     weekdays: int,
 ) -> bytearray:
-    """Create a command to add an auto program to a light device."""
+    """Create a command to add an auto program to a light device.
+
+    Supports variable numbers of brightness channels (RGB, RGBW, etc.).
+    The brightness tuple length determines how many channels are configured.
+    """
+    # Validate brightness values
+    if not brightness or len(brightness) > 4:
+        raise ValueError(
+            f"Brightness must contain 1-4 values, got {len(brightness)}"
+        )
+
+    for i, val in enumerate(brightness):
+        if not (0 <= val <= 100):
+            raise ValueError(f"Brightness value {i} must be 0-100, got {val}")
+
     parameters = [
         sunrise.hour,
         sunrise.minute,
@@ -144,12 +158,11 @@ def create_add_auto_setting_command(
         ramp_up_minutes,
         weekdays,
         *brightness,
-        255,
-        255,
-        255,
-        255,
-        255,
     ]
+
+    # Pad with 255s to ensure consistent command length (7 brightness slots total)
+    padding_needed = 7 - len(brightness)
+    parameters.extend([255] * padding_needed)
 
     return _encode_uart_command(165, 25, msg_id, parameters)
 

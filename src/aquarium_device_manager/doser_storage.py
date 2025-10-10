@@ -35,6 +35,7 @@ class DeviceMetadata(BaseModel):
     name: str | None = None
     timezone: str = "UTC"
     headNames: dict[int, str] | None = None  # Map of head index to name
+    autoReconnect: bool = False  # Auto-reconnect on service start
     createdAt: str | None = None
     updatedAt: str | None = None
 

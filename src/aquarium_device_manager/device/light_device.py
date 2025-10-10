@@ -156,6 +156,51 @@ class LightDevice(BaseDevice):
         )
         await self._send_command(cmd, 3)
 
+    async def add_multi_channel_setting(
+        self,
+        sunrise,
+        sunset,
+        channel_brightness: dict[str, int] | None = None,
+        ramp_up_in_minutes: int = 0,
+        weekdays: list[commands.LightWeekday] | None = None,
+    ) -> None:
+        """Add an automation setting using all available channels.
+
+        Args:
+            sunrise: Sunrise time
+            sunset: Sunset time
+            channel_brightness: Dict mapping color names to brightness values (0-100).
+                               If None, all channels default to 100.
+            ramp_up_in_minutes: Ramp up time in minutes
+            weekdays: List of weekdays, defaults to everyday
+        """
+        # Get brightness values for all channels
+        brightness_values = []
+        for color_name in sorted(
+            self.colors.keys(), key=lambda x: self.colors[x]
+        ):
+            brightness = (
+                channel_brightness.get(color_name, 100)
+                if channel_brightness
+                else 100
+            )
+            brightness_values.append(brightness)
+
+        # Convert to tuple
+        brightness_tuple = tuple(brightness_values)
+
+        cmd = commands.create_add_auto_setting_command(
+            self.get_next_msg_id(),
+            sunrise.time(),
+            sunset.time(),
+            brightness_tuple,
+            ramp_up_in_minutes,
+            commands.encode_weekdays(
+                weekdays or [commands.LightWeekday.everyday]
+            ),
+        )
+        await self._send_command(cmd, 3)
+
     async def remove_setting(
         self,
         sunrise,

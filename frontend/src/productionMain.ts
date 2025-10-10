@@ -9,7 +9,7 @@
  * - Clean, professional UI
  */
 
-import { renderProductionDashboard } from "./ui/productionDashboard";
+import { renderProductionDashboard, initializeDashboardHandlers } from "./ui/aquarium-dashboard/dashboard";
 import { createNotificationSystem } from "./ui/notifications";
 import "./ui/productionDashboard.css";
 
@@ -25,6 +25,9 @@ async function init() {
 
     // Initialize notification system
     createNotificationSystem();
+
+    // Initialize dashboard handlers
+    initializeDashboardHandlers();
 
     // Render the dashboard
     appElement.innerHTML = renderProductionDashboard();

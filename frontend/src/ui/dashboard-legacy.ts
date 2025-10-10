@@ -15,6 +15,7 @@ import {
   listLightMetadata,
   type DoserDevice,
   type LightDevice,
+  type LightChannel,
   type ConfigurationSummary,
   type DeviceMetadata,
   type LightMetadata,
@@ -465,7 +466,7 @@ function renderLightCardStatus(device: CachedStatus & { address: string }): stri
         </div>
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Max Brightness</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--primary);">${maxBrightness}%</div>
+          <div style="font-size: 20px; font-weight: 700, color: var(--primary);">${maxBrightness}%</div>
         </div>
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Channels</div>
@@ -628,11 +629,11 @@ function renderDoserCardStatus(device: CachedStatus & { address: string }): stri
       <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px;">
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Current Time</div>
-          <div style="font-size: 16px; font-weight: 700; color: var(--gray-900);">${dateTimeDisplay}</div>
+          <div style="font-size: 16px; font-weight: 700, color: var(--gray-900);">${dateTimeDisplay}</div>
         </div>
         <div style="background: white; padding: 12px; border-radius: 6px;">
           <div style="font-size: 11px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Active Heads</div>
-          <div style="font-size: 20px; font-weight: 700; color: var(--primary);">${activeHeads}/${heads.length}</div>
+          <div style="font-size: 20px; font-weight: 700, color: var(--primary);">${activeHeads}/${heads.length}</div>
         </div>
       </div>
       ${renderPumpHeads(heads, savedConfig, device.address)}
@@ -1996,14 +1997,14 @@ function showScanDevicesModal(): void {
       });
     }
   } else if (deviceType === 'light') {
-    // For lights, use the same configuration modal for now
+    // For lights, use the device settings modal for commands
     try {
       const { getLightConfiguration } = await import("../api/configurations");
       const device = await getLightConfiguration(address);
-      showLightConfigurationModal(device);
+      showLightDeviceSettingsModal(device);
     } catch (err) {
-      console.log(`No existing light configuration for ${address}, opening new configuration interface`);
-      showLightConfigurationModal({
+      console.log(`No existing light configuration for ${address}, opening new device settings interface`);
+      showLightDeviceSettingsModal({
         id: address,
         name: `Light ${address.slice(-8)}`,
         timezone: 'UTC',
@@ -2274,6 +2275,266 @@ function showDoserDeviceSettingsModal(device: DoserDevice): void {
   });
 }
 
+function showLightConfigurationModal(device: LightDevice): void {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content light-config-modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>Light Configuration: ${device.name || device.id}</h2>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+      </div>
+      <div class="modal-body">
+        ${renderLightConfigurationForm(device)}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Close on background click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+}
+
+/**
+ * Show the light device settings modal - for commands and controls
+ */
+function showLightDeviceSettingsModal(device: LightDevice): void {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-content light-settings-modal" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h2>Light Settings: ${device.name || device.id}</h2>
+        <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
+      </div>
+      <div class="modal-body">
+        ${renderLightDeviceSettingsInterface(device)}
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Close on background click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  });
+}
+
+/**
+ * Render the light configuration form (for device profiles and configurations)
+ */
+function renderLightConfigurationForm(device: LightDevice): string {
+  return `
+    <div class="light-config-form">
+      <div class="form-section">
+        <h3>Device Information</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Device ID:</label>
+            <input type="text" value="${device.id}" readonly style="background: #f5f5f5;">
+          </div>
+          <div class="form-group">
+            <label>Name:</label>
+            <input type="text" id="light-device-name" value="${device.name || ''}" placeholder="Enter device name">
+          </div>
+          <div class="form-group">
+            <label>Timezone:</label>
+            <input type="text" id="light-timezone" value="${device.timezone || 'UTC'}" placeholder="e.g., America/New_York">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h3>Channel Configuration</h3>
+        <p class="section-description">Configure the available channels for this light device.</p>
+        <div class="channels-container">
+          ${renderLightChannels(device.channels || [])}
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="window.addLightChannel()">+ Add Channel</button>
+      </div>
+
+      <div class="form-section">
+        <h3>Active Configuration</h3>
+        <div class="form-group">
+          <label>Active Configuration:</label>
+          <select id="active-config-select">
+            <option value="">None</option>
+            ${(device.configurations || []).map(config => `
+              <option value="${config.id}" ${config.id === device.activeConfigurationId ? 'selected' : ''}>
+                ${config.name || config.id}
+              </option>
+            `).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-primary" onclick="window.saveLightConfiguration('${device.id}')">Save Configuration</button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render the light device settings interface - for commands and controls
+ */
+function renderLightDeviceSettingsInterface(device: LightDevice): string {
+  // Get device name from metadata, fallback to device.name or default
+  const deviceMetadata = lightMetadata.find(m => m.id === device.id);
+  const deviceDisplayName = deviceMetadata?.name || device.name || 'Unnamed Light';
+
+  return `
+    <div class="light-settings-interface">
+      <!-- Device Info Section -->
+      <div class="config-section">
+        <h3>Device Information</h3>
+        <p class="section-description">Send commands directly to the light device for immediate control.</p>
+
+        <div class="device-info-readonly">
+          <div class="info-item">
+            <span class="info-label">Device Name:</span>
+            <span class="info-value">${deviceDisplayName}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">Device Address:</span>
+            <span class="info-value">${device.id}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabbed Control Interface -->
+      <div class="config-section">
+        <div class="tab-interface">
+          <div class="tab-nav">
+            <button class="tab-button active" onclick="window.switchLightSettingsTab(event, 'manual')">Manual Control</button>
+            <button class="tab-button" onclick="window.switchLightSettingsTab(event, 'auto')">Auto Mode</button>
+          </div>
+
+          <!-- Manual Control Tab -->
+          <div id="manual-tab" class="tab-content active">
+            <h3>Manual Controls</h3>
+            <p class="section-description">Control light brightness and mode directly.</p>
+
+            <div class="manual-controls">
+              <div class="control-group">
+                <h4>Basic Controls</h4>
+                <div class="button-group">
+                  <button class="btn btn-success" onclick="window.handleTurnLightOn('${device.id}')">
+                    <span>💡</span> Turn On
+                  </button>
+                  <button class="btn btn-danger" onclick="window.handleTurnLightOff('${device.id}')">
+                    <span>🌙</span> Turn Off
+                  </button>
+                  <button class="btn btn-secondary" onclick="window.handleSetManualMode('${device.id}')">
+                    <span>🎛️</span> Manual Mode
+                  </button>
+                  <button class="btn btn-secondary" onclick="window.handleEnableAutoMode('${device.id}')">
+                    <span>🕐</span> Auto Mode
+                  </button>
+                </div>
+              </div>
+
+              <div class="control-group">
+                <h4>Manual Brightness</h4>
+                <form id="manual-brightness-form" onsubmit="window.handleManualBrightness(event, '${device.id}')">
+                  ${renderChannelBrightnessInputs(device, device.id)}
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Set Brightness</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- Auto Mode Tab -->
+          <div id="auto-tab" class="tab-content">
+            <h3>Auto Program Scheduler</h3>
+            <p class="section-description">Create and send auto programs that run on the device's internal timer.</p>
+
+            <form id="light-config-form" onsubmit="window.handleAddAutoProgram(event, '${device.id}')">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="light-label">Program Label:</label>
+                  <input type="text" id="light-label" placeholder="e.g., Daily Cycle" class="form-input">
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="sunrise-time">Sunrise Time:</label>
+                  <input type="time" id="sunrise-time" value="08:00" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label for="sunset-time">Sunset Time:</label>
+                  <input type="time" id="sunset-time" value="20:00" class="form-input">
+                </div>
+                <div class="form-group">
+                  <label for="ramp-minutes">Ramp Time (minutes):</label>
+                  <input type="number" id="ramp-minutes" value="30" min="0" max="150" class="form-input">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Channel Brightness (%):</label>
+                <div class="brightness-inputs">
+                  ${renderChannelBrightnessInputs(device, device.id)}
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Active Days:</label>
+                <div class="weekday-selector">
+                  ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+                    <label class="weekday-option">
+                      <input type="checkbox" value="${day}" checked>
+                      <span class="weekday-label">${day}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button type="submit" class="btn btn-success">Add Auto Program</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Advanced Controls Section -->
+      <div class="config-section">
+        <h3>Advanced Controls</h3>
+        <p class="section-description">Advanced device management commands.</p>
+
+        <div class="advanced-controls">
+          <button class="btn btn-warning" onclick="window.handleResetAutoSettings('${device.id}')">
+            <span>🔄</span> Reset Auto Settings
+          </button>
+          <button class="btn btn-secondary" onclick="window.handleRefreshDevice('${device.id}')">
+            <span>🔄</span> Refresh Status
+          </button>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove();">
+          Close
+        </button>
+      </div>
+    </div>
+  `;
+}
+
 /**
  * Render the server configuration interface - device and head names only
  */
@@ -2485,9 +2746,9 @@ function renderHeadCommandInterface(headIndex: number): string {
           <select id="schedule-mode-${headIndex}" class="form-select" onchange="window.updateScheduleModeUI(${headIndex}, this.value)">
             <option value="disabled" ${!head?.active ? 'selected' : ''}>Disabled</option>
             <option value="single" ${schedule.mode === 'single' ? 'selected' : ''}>Daily - Single dose at set time</option>
+            <option value="timer" ${schedule.mode === 'timer' ? 'selected' : ''}>Timer - Multiple specific times</option>
             <option value="every_hour" ${schedule.mode === 'every_hour' ? 'selected' : ''}>24 Hour - Hourly dosing</option>
             <option value="custom_periods" ${schedule.mode === 'custom_periods' ? 'selected' : ''}>Custom - Custom time periods</option>
-            <option value="timer" ${schedule.mode === 'timer' ? 'selected' : ''}>Timer - Multiple specific times</option>
           </select>
         </div>
 
@@ -2702,179 +2963,113 @@ function calculateTimerTotal(doses: any[]): number {
 }
 
 /**
+ * Render light channels configuration
+ */
+function renderLightChannels(channels: LightChannel[]): string {
+  return channels.map((channel, index) => `
+    <div class="channel-config" data-channel-index="${index}">
+      <div class="channel-header">
+        <h5>Channel ${index + 1}</h5>
+        <button type="button" class="btn btn-sm btn-danger" onclick="window.removeLightChannel(${index})">Remove</button>
+      </div>
+      <div class="channel-form">
+        <div class="form-group">
+          <label>Key:</label>
+          <input type="text" value="${channel.key}" onchange="window.updateChannelKey(${index}, this.value)">
+        </div>
+        <div class="form-group">
+          <label>Label:</label>
+          <input type="text" value="${channel.label || ''}" onchange="window.updateChannelLabel(${index}, this.value)">
+        </div>
+        <div class="form-group">
+          <label>Min:</label>
+          <input type="number" value="${channel.min || 0}" onchange="window.updateChannelMin(${index}, this.value)">
+        </div>
+        <div class="form-group">
+          <label>Max:</label>
+          <input type="number" value="${channel.max || 100}" onchange="window.updateChannelMax(${index}, this.value)">
+        </div>
+        <div class="form-group">
+          <label>Step:</label>
+          <input type="number" value="${channel.step || 1}" onchange="window.updateChannelStep(${index}, this.value)">
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+/**
  * Render channel brightness inputs for new auto program
  */
-function renderChannelBrightnessInputs(device: LightDevice): string {
-  const channels = device.channels || [];
-  const isWRGB2Pro = device.id.toLowerCase().includes('wrgb2pro');
+function renderChannelBrightnessInputs(device: LightDevice, deviceAddress?: string): string {
+  // First try to get actual device status for real channel information
+  const actualDeviceAddress = deviceAddress || device.id;
+  const deviceStatusInfo = deviceStatus && deviceStatus[actualDeviceAddress];
+
+  let channels = device.channels || [];
+
+  // If we have actual device status with channels, use that
+  if (deviceStatusInfo && deviceStatusInfo.channels && deviceStatusInfo.channels.length > 0) {
+    channels = deviceStatusInfo.channels.map((ch: any) => ({
+      key: ch.name.toLowerCase(),
+      label: ch.name.charAt(0).toUpperCase() + ch.name.slice(1),
+      min: 0,
+      max: 100,
+      step: 1
+    }));
+  }
+  // If no channels in configuration or device status, try to derive from device model
+  else if (channels.length === 0) {
+    // Check device name/model for known multi-channel devices
+    const deviceName = (device.name || '').toLowerCase();
+    const deviceId = device.id.toLowerCase();
+    const modelName = deviceStatusInfo?.model_name?.toLowerCase() || '';
+
+    // Use model name first if available, then fall back to device name/ID
+    const nameToCheck = modelName || deviceName || deviceId;
+
+    if (nameToCheck.includes('wrgb') && nameToCheck.includes('pro')) {
+      // WRGB II Pro - 4 channels
+      channels = [
+        { key: 'red', label: 'Red', min: 0, max: 100, step: 1 },
+        { key: 'green', label: 'Green', min: 0, max: 100, step: 1 },
+        { key: 'blue', label: 'Blue', min: 0, max: 100, step: 1 },
+        { key: 'white', label: 'White', min: 0, max: 100, step: 1 }
+      ];
+    } else if (nameToCheck.includes('wrgb')) {
+      // Other WRGB devices - 3 channels
+      channels = [
+        { key: 'red', label: 'Red', min: 0, max: 100, step: 1 },
+        { key: 'green', label: 'Green', min: 0, max: 100, step: 1 },
+        { key: 'blue', label: 'Blue', min: 0, max: 100, step: 1 }
+      ];
+    } else if (nameToCheck.includes('rgb')) {
+      // RGB devices - 3 channels
+      channels = [
+        { key: 'red', label: 'Red', min: 0, max: 100, step: 1 },
+        { key: 'green', label: 'Green', min: 0, max: 100, step: 1 },
+        { key: 'blue', label: 'Blue', min: 0, max: 100, step: 1 }
+      ];
+    }
+  }
 
   if (channels.length === 0) {
     return '<div class="channel-input"><label>Brightness (%):</label><input type="number" id="brightness-default" min="0" max="100" value="80"></div>';
   }
 
   return channels.map((channel, index) => {
-    let channelName = `Ch${index + 1}`;
-    if (isWRGB2Pro && channels.length === 4) {
-      const names = ['Red', 'Green', 'Blue', 'White'];
-      channelName = names[index] || channelName;
-    }
+    const channelName = channel.label || channel.key || `Ch${index + 1}`;
+    const channelId = `brightness-${channel.key || index}`;
 
     return `
       <div class="channel-input">
         <label>${channelName} (%):</label>
-        <input type="number" id="brightness-ch${index}" min="0" max="100" value="80">
+        <input type="number" id="${channelId}" min="0" max="100" value="80" data-channel-key="${channel.key || index}">
       </div>
     `;
   }).join('');
 }
 
-/**
- * Render an existing auto program with edit/delete controls
- */
-function renderAutoProgram(program: any, index: number, deviceId: string): string {
-  const enabledDays = program.days || [];
-  const daysText = enabledDays.length === 7 ? 'Every day' :
-                   enabledDays.length === 0 ? 'No days' :
-                   enabledDays.join(', ');
-
-  const channelLevels = program.levels || {};
-  const levelsText = Object.entries(channelLevels)
-    .map(([channel, level]) => `${channel}: ${level}%`)
-    .join(', ') || 'No levels set';
-
-  return `
-    <div class="auto-program-item" data-program-index="${index}">
-      <div class="program-header">
-        <div class="program-title">
-          <strong>${program.label || `Program ${index + 1}`}</strong>
-          ${program.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-gray">Disabled</span>'}
-        </div>
-        <div class="program-actions">
-          <button class="btn-small btn-secondary" onclick="window.editAutoProgram('${deviceId}', ${index})">Edit</button>
-          <button class="btn-small btn-danger" onclick="window.removeAutoProgram('${deviceId}', ${index})">Remove</button>
-        </div>
-      </div>
-      <div class="program-details">
-        <div class="program-info">
-          <div><strong>Time:</strong> ${program.sunrise} → ${program.sunset}</div>
-          <div><strong>Ramp:</strong> ${program.rampMinutes} minutes</div>
-          <div><strong>Days:</strong> ${daysText}</div>
-          <div><strong>Levels:</strong> ${levelsText}</div>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-/**
- * Show the light configuration modal
- */
-function showLightConfigurationModal(device: LightDevice): void {
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-content" style="max-width: 600px;">
-      <div class="modal-header">
-        <h2>Configure Light: ${device.name || device.id}</h2>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove();">×</button>
-      </div>
-      <div class="modal-body">
-        ${renderLightConfigurationForm(device)}
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  // Close on background click
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) {
-      modal.remove();
-    }
-  });
-}
-
-/**
- * Render the light configuration form with support for up to 7 auto programs
- */
-function renderLightConfigurationForm(device: LightDevice): string {
-  const activeConfig = device.configurations.find(c => c.id === device.activeConfigurationId);
-  const latestRevision = activeConfig?.revisions[activeConfig.revisions.length - 1];
-  const currentProfile = latestRevision?.profile;
-  const existingPrograms = currentProfile?.mode === 'auto' ? currentProfile.programs : [];
-
-  return `
-    <div class="config-form" id="light-config-form">
-      <div class="form-section">
-        <h3>Auto Mode Programs</h3>
-        <p class="form-note">Manage up to 7 auto programs. Each program defines sunrise/sunset times for specific days. Programs cannot overlap in time.</p>
-
-        ${existingPrograms.length > 0 ? `
-          <div class="existing-programs">
-            <h4>Existing Programs (${existingPrograms.length}/7)</h4>
-            <div class="programs-list">
-              ${existingPrograms.map((program: any, index: number) => renderAutoProgram(program, index, device.id)).join('')}
-            </div>
-          </div>
-        ` : ''}
-
-        ${existingPrograms.length < 7 ? `
-          <div class="new-program-section">
-            <h4>Add New Program</h4>
-            <div class="form-grid" style="grid-template-columns: 1fr 1fr;">
-              <div class="form-group">
-                <label for="light-sunrise">Sunrise Time:</label>
-                <input type="time" id="light-sunrise" value="08:00">
-              </div>
-              <div class="form-group">
-                <label for="light-sunset">Sunset Time:</label>
-                <input type="time" id="light-sunset" value="20:00">
-              </div>
-              <div class="form-group">
-                <label for="light-ramp">Ramp Duration (minutes):</label>
-                <input type="number" id="light-ramp" min="0" max="120" value="30">
-              </div>
-              <div class="form-group">
-                <label for="light-label">Program Label (optional):</label>
-                <input type="text" id="light-label" placeholder="e.g., Weekday Schedule">
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Channel Brightness (%):</label>
-              <div class="channel-brightness-grid">
-                ${renderChannelBrightnessInputs(device)}
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Active Days:</label>
-              <div class="weekday-selector">
-                ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
-                  <label class="weekday-label">
-                    <input type="checkbox" value="${day}" checked><span>${day}</span>
-                  </label>`).join('')}
-              </div>
-            </div>
-
-            <div class="form-actions">
-              <button class="btn btn-primary" onclick="window.sendLightAutoSettingToDevice('${device.id}')">Add Program</button>
-            </div>
-          </div>
-        ` : `
-          <div class="max-programs-notice">
-            <p style="color: var(--gray-600); font-style: italic;">Maximum of 7 auto programs reached. Remove an existing program to add a new one.</p>
-          </div>
-        `}
-      </div>
-
-      <div class="form-actions">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-        ${existingPrograms.length > 0 ? `<button class="btn btn-warning" onclick="window.clearAllAutoPrograms('${device.id}')">Clear All Programs</button>` : ''}
-      </div>
-    </div>
-  `;
-}
 /**
  * Render the doser configuration form
  */
@@ -2914,6 +3109,44 @@ function renderDoserConfigurationForm(device: DoserDevice): string {
         <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
         <button class="btn btn-primary" onclick="window.saveDoserConfiguration('${device.id}')">Save Configuration</button>
         <button class="btn btn-success" onclick="window.sendToDevice('${device.id}')">Send to Device</button>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Render an existing auto program with edit/delete controls
+ */
+function renderAutoProgram(program: any, index: number, deviceId: string): string {
+  const enabledDays = program.days || [];
+  const daysText = enabledDays.length === 7 ? 'Every day' :
+                   enabledDays.length === 0 ? 'No days' :
+                   enabledDays.join(', ');
+
+  const channelLevels = program.levels || {};
+  const levelsText = Object.entries(channelLevels)
+    .map(([channel, level]) => `${channel}: ${level}%`)
+    .join(', ') || 'No levels set';
+
+  return `
+    <div class="auto-program-item" data-program-index="${index}">
+      <div class="program-header">
+        <div class="program-title">
+          <strong>${program.label || `Program ${index + 1}`}</strong>
+          ${program.enabled ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-gray">Disabled</span>'}
+        </div>
+        <div class="program-actions">
+          <button class="btn-icon" title="Edit" onclick="window.editAutoProgram('${deviceId}', ${index})">Edit</button>
+          <button class="btn-icon" title="Remove" onclick="window.removeAutoProgram('${deviceId}', ${index})">Remove</button>
+        </div>
+      </div>
+      <div class="program-details">
+        <div class="program-times">
+          <span class="time sunrise">🌅 ${program.sunrise || '08:00'}</span>
+          <span class="time sunset">🌇 ${program.sunset || '20:00'}</span>
+        </div>
+        <div class="program-days">${daysText}</div>
+        <div class="program-levels">${levelsText}</div>
       </div>
     </div>
   `;
@@ -3083,7 +3316,7 @@ let selectedHeadIndex: number | null = null;
 
     if (selectedWeekdays.length > 0) {
       // Convert to PumpWeekday enum format expected by backend
-      const weekdayMap: { [key: string]: string } = {
+      const weekdayMap: Record<string, string> = {
         'Mon': 'monday',
         'Tue': 'tuesday',
         'Wed': 'wednesday',
@@ -3645,6 +3878,247 @@ let selectedHeadIndex: number | null = null;
   }
 };
 
+// Additional Light Control Handlers for Settings Modal
+(window as any).handleTurnLightOn = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { turnLightOn } = await import("../api/commands");
+    await turnLightOn(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Light turned on successfully'
+    });
+
+    // Refresh device status
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to turn light on: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleTurnLightOff = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { turnLightOff } = await import("../api/commands");
+    await turnLightOff(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Light turned off successfully'
+    });
+
+    // Refresh device status
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to turn light off: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleEnableAutoMode = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { enableAutoMode } = await import("../api/commands");
+    await enableAutoMode(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Auto mode enabled successfully'
+    });
+
+    // Refresh device status
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to enable auto mode: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleResetAutoSettings = async (deviceAddress: string) => {
+  const { addNotification } = useActions();
+
+  try {
+    const { resetAutoSettings } = await import("../api/commands");
+    await resetAutoSettings(deviceAddress);
+
+    addNotification({
+      type: 'success',
+      message: 'Auto settings reset successfully'
+    });
+
+    // Refresh device status
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to reset auto settings: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+(window as any).handleManualBrightness = async (event: Event, deviceAddress: string) => {
+  event.preventDefault();
+  const { addNotification } = useActions();
+
+  try {
+    const form = event.target as HTMLFormElement;
+
+    // Get device status to map channel keys to indices
+    const deviceStatusInfo = deviceStatus && deviceStatus[deviceAddress];
+
+    // Collect brightness values from all channel inputs
+    const brightnessInputs = form.querySelectorAll('input[type="number"]');
+    const channels: Record<string, number> = {};
+
+    brightnessInputs.forEach((input) => {
+      const inputElement = input as HTMLInputElement;
+      const brightness = parseInt(inputElement.value, 10);
+      if (!isNaN(brightness)) {
+        const channelKey = inputElement.getAttribute('data-channel-key') || '';
+        if (channelKey) {
+          channels[channelKey] = brightness;
+        }
+      }
+    });
+
+    if (Object.keys(channels).length === 0) {
+      addNotification({
+        type: 'warning',
+        message: 'No valid brightness values found'
+      });
+      return;
+    }
+
+    // Use the new multi-channel brightness command
+    const { executeCommand } = await import("../api/commands");
+    await executeCommand(deviceAddress, {
+      action: "set_multi_channel_brightness",
+      args: { channels },
+      timeout: 15,
+    });
+
+    addNotification({
+      type: 'success',
+      message: 'Manual brightness set successfully'
+    });
+
+    // Refresh device status
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to set manual brightness: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};(window as any).handleAddAutoProgram = async (event: Event, deviceAddress: string) => {
+  event.preventDefault();
+  const { addNotification } = useActions();
+
+  try {
+    const form = event.target as HTMLFormElement;
+
+    // Get form values
+    const sunriseTime = (form.querySelector('#sunrise-time') as HTMLInputElement)?.value;
+    const sunsetTime = (form.querySelector('#sunset-time') as HTMLInputElement)?.value;
+    const rampMinutes = parseInt((form.querySelector('#ramp-minutes') as HTMLInputElement)?.value || '30', 10);
+    const label = (form.querySelector('#light-label') as HTMLInputElement)?.value || 'Auto Program';
+
+    // Get channel brightness values
+    const brightnessInputs = form.querySelectorAll('.brightness-inputs input[type="number"]');
+    const channels: Record<string, number> = {};
+
+    brightnessInputs.forEach((input) => {
+      const inputElement = input as HTMLInputElement;
+      const brightness = parseInt(inputElement.value, 10);
+      if (!isNaN(brightness)) {
+        const channelKey = inputElement.getAttribute('data-channel-key') || '';
+        if (channelKey) {
+          channels[channelKey] = brightness;
+        }
+      }
+    });    // Get selected weekdays
+    const dayCheckboxes = form.querySelectorAll('.weekday-selector input:checked') as NodeListOf<HTMLInputElement>;
+    const selectedDays = Array.from(dayCheckboxes).map(cb => cb.value);
+
+    // Convert UI weekdays to API format
+    const convertUiWeekdaysToEnum = (days: string[]) => {
+      const weekdayMap: Record<string, string> = {
+        'Mon': 'monday',
+        'Tue': 'tuesday',
+        'Wed': 'wednesday',
+        'Thu': 'thursday',
+        'Fri': 'friday',
+        'Sat': 'saturday',
+        'Sun': 'sunday'
+      };
+      return days.map(day => weekdayMap[day]).filter(Boolean);
+    };
+
+    const { addAutoSetting } = await import("../api/commands");
+
+    await addAutoSetting(deviceAddress, {
+      sunrise: sunriseTime,
+      sunset: sunsetTime,
+      channels,
+      ramp_up_minutes: rampMinutes,
+      weekdays: convertUiWeekdaysToEnum(selectedDays) as any // Cast to fix type mismatch
+    });
+
+    addNotification({
+      type: 'success',
+      message: 'Auto program added successfully'
+    });
+
+    // Close modal and refresh
+    document.querySelector('.modal-overlay')?.remove();
+    setTimeout(() => {
+      loadAllConfigurations();
+    }, 1000);
+  } catch (error) {
+    addNotification({
+      type: 'error',
+      message: `Failed to add auto program: ${error instanceof Error ? error.message : String(error)}`
+    });
+  }
+};
+
+// Light Settings Tab Switching
+(window as any).switchLightSettingsTab = (event: Event, tabName: string) => {
+  // Remove active class from all tabs and buttons
+  document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+  // Add active class to clicked button
+  (event.target as HTMLElement).classList.add('active');
+
+  // Show the selected tab content
+  const targetTab = document.getElementById(`${tabName}-tab`);
+  if (targetTab) {
+    targetTab.classList.add('active');
+  }
+};
+
 // Helper functions
 function findHead(headIndex: number): any {
   if (!currentConfigDevice) return null;
@@ -3737,7 +4211,7 @@ function convertUiWeekdaysToEnum(uiDays: string[]): string[] {
     'Mon': 'monday',
     'Tue': 'tuesday',
     'Wed': 'wednesday',
-    'Thu': 'thursday',
+       'Thu': 'thursday',
     'Fri': 'friday',
     'Sat': 'saturday',
     'Sun': 'sunday'

@@ -157,7 +157,8 @@ export interface SetBrightnessArgs {
 export interface AddAutoSettingArgs {
   sunrise: string; // HH:MM format
   sunset: string; // HH:MM format
-  brightness: number; // 0-100
+  brightness?: number; // 0-100, for single channel (legacy)
+  channels?: Record<string, number>; // Per-channel brightness values
   ramp_up_minutes?: number; // default 0
   weekdays?: string[]; // e.g., ["monday", "tuesday"]
 }

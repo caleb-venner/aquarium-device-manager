@@ -169,9 +169,18 @@ async def add_light_auto_setting(
                 ramp_up_minutes,
                 weekdays or [LightWeekday.everyday],
             )
+        elif isinstance(brightness, dict):
+            # Handle per-channel brightness dict from frontend
+            await device.add_multi_channel_setting(
+                sunrise,
+                sunset,
+                channel_brightness=brightness,
+                ramp_up_in_minutes=ramp_up_minutes,
+                weekdays=weekdays or [LightWeekday.everyday],
+            )
         else:
             raise ValueError(
-                "brightness must be an int or three-element sequence"
+                "brightness must be an int, three-element sequence, or dict"
             )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

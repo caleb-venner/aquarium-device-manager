@@ -260,6 +260,7 @@ export interface DeviceMetadata {
   name?: string;
   timezone: string;
   headNames?: { [key: number]: string };
+  autoReconnect?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -268,6 +269,7 @@ export interface LightMetadata {
   id: string;
   name?: string;
   timezone: string;
+  autoReconnect?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

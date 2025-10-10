@@ -94,7 +94,8 @@ export async function addAutoSetting(
   args: {
     sunrise: string;
     sunset: string;
-    brightness: number;
+    brightness?: number; // Legacy single channel
+    channels?: Record<string, number>; // Multi-channel
     ramp_up_minutes?: number;
     weekdays?: number[];
   },

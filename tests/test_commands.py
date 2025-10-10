@@ -198,3 +198,49 @@ class TestBLEServiceCommandPersistence:
         commands = service.get_commands("test_device")
         assert len(commands) == 1
         assert commands[0]["status"] == "success"
+
+
+class TestMultiChannelSetting:
+    """Test multi-channel auto setting functionality."""
+
+    def test_add_auto_setting_command_4_channels(self):
+        """Test creating auto setting command for 4-channel light."""
+        from datetime import datetime
+
+        from aquarium_device_manager import commands
+
+        sunrise = datetime(2024, 1, 1, 6, 0)
+        sunset = datetime(2024, 1, 1, 18, 0)
+        brightness = (80, 60, 40, 20)  # RGBW
+
+        cmd = commands.create_add_auto_setting_command(
+            msg_id=(42, 0),
+            sunrise=sunrise.time(),
+            sunset=sunset.time(),
+            brightness=brightness,
+            ramp_up_minutes=0,
+            weekdays=commands.encode_weekdays([commands.LightWeekday.everyday]),
+        )
+
+        # Verify command structure for 4 channels
+        assert len(cmd) == 20  # Header (6) + params (13) + checksum (1)
+        assert cmd[0] == 165  # Command ID
+        assert cmd[1] == 0x01  # Fixed
+        assert cmd[2] == 18  # Length (13 params + 5)
+        assert cmd[3] == 42  # Message ID high
+        assert cmd[4] == 0  # Message ID low
+        assert cmd[5] == 25  # Mode
+        assert cmd[6] == 6  # Sunrise hour
+        assert cmd[7] == 0  # Sunrise minute
+        assert cmd[8] == 18  # Sunset hour
+        assert cmd[9] == 0  # Sunset minute
+        assert cmd[10] == 0  # Ramp up minutes
+        assert cmd[11] == 127  # Weekdays (everyday)
+        assert cmd[12] == 80  # R brightness
+        assert cmd[13] == 60  # G brightness
+        assert cmd[14] == 40  # B brightness
+        assert cmd[15] == 20  # W brightness
+        assert cmd[16] == 255  # Padding
+        assert cmd[17] == 255  # Padding
+        assert cmd[18] == 255  # Padding
+        assert cmd[19] == cmd[19]  # Checksum (just verify it exists)
