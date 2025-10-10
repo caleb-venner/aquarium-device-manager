@@ -2,6 +2,7 @@
 
 ## Light Features
 
+- Manual brightness setting should be sent as one payload.
 - Should have auto/manual/favourited settings for light devices on the ‘Overview’ page.
 - Need to figure out the Custom Mode. I think it just creates a bunch of auto mode settings; the device itself must compute how they all interact.
 - Ensure Auto settings do not overlap. One can end at 21:00 with another starting at 21:00; cannot have end 21:01 start 21:00.

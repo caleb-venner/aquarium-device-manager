@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 from .commands.encoder import decode_pump_weekdays, pump_weekdays_to_names
 from .doser_status import DoserStatus, HeadSnapshot
@@ -22,6 +22,7 @@ from .doser_storage import (
     DoserHeadStats,
     Recurrence,
     SingleSchedule,
+    Weekday,
 )
 from .doser_storage import _now_iso as _doser_now_iso
 from .light_storage import _now_iso as _light_now_iso
@@ -174,7 +175,7 @@ def create_doser_config_from_status(
                 dailyDoseMl=head_snap.dosed_ml() or 10.0,
                 startTime=f"{head_snap.hour:02d}:{head_snap.minute:02d}",
             ),
-            recurrence=Recurrence(days=recurrence_days),
+            recurrence=Recurrence(days=cast(list[Weekday], recurrence_days)),
             missedDoseCompensation=False,
             calibration=Calibration(
                 mlPerSecond=0.1, lastCalibratedAt=timestamp
