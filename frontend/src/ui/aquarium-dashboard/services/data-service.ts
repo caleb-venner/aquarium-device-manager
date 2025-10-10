@@ -20,7 +20,6 @@ import {
   setLightMetadata,
   setSummary,
   setDeviceStatus,
-  setLoading,
   setError,
   markDeviceStable,
   markDeviceUnstable,
@@ -31,7 +30,6 @@ import {
  * Load all dashboard data from APIs
  */
 export async function loadAllDashboardData(): Promise<void> {
-  setLoading(true);
   setError(null);
 
   try {
@@ -146,7 +144,5 @@ export async function loadAllDashboardData(): Promise<void> {
     setError(`Failed to load dashboard data: ${errorMessage}`);
     // Ensure deviceStatus is set to empty object so UI shows "no devices" instead of "no data"
     setDeviceStatus({});
-  } finally {
-    setLoading(false);
   }
 }

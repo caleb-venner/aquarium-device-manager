@@ -90,15 +90,6 @@ function renderNavigation(): string {
 function renderContent(): string {
   const state = getDashboardState();
 
-  if (state.isLoading) {
-    return `
-      <div class="loading-state">
-        <div class="loading-spinner">🔄</div>
-        <p>Loading dashboard data...</p>
-      </div>
-    `;
-  }
-
   if (state.error) {
     return `
       <div class="error-state">

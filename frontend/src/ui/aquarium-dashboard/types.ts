@@ -23,7 +23,6 @@ export interface DashboardState {
   lightMetadata: LightMetadata[];
   summary: ConfigurationSummary | null;
   deviceStatus: StatusResponse | null;
-  isLoading: boolean;
   error: string | null;
   scanResults: ScanDevice[];
   isScanning: boolean;

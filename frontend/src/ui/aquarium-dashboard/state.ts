@@ -15,7 +15,6 @@ let dashboardState: DashboardState = {
   lightMetadata: [],
   summary: null,
   deviceStatus: null,
-  isLoading: false,
   error: null,
   scanResults: [],
   isScanning: false,
@@ -43,13 +42,6 @@ export function updateDashboardState(updates: Partial<DashboardState>): void {
  */
 export function setCurrentTab(tab: DashboardTab): void {
   dashboardState.currentTab = tab;
-}
-
-/**
- * Set loading state
- */
-export function setLoading(loading: boolean): void {
-  dashboardState.isLoading = loading;
 }
 
 /**
