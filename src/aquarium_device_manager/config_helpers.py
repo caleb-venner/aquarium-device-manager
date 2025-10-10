@@ -743,6 +743,30 @@ def create_light_config_from_command(
         else:
             weekday_strings = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+        # Handle brightness - could be single value or per-channel dict
+        brightness_data = command_args.get("brightness") or command_args.get(
+            "channels"
+        )
+        if isinstance(brightness_data, dict):
+            # Per-channel brightness from frontend
+            levels = {
+                "red": brightness_data.get("red", 100),
+                "green": brightness_data.get("green", 100),
+                "blue": brightness_data.get("blue", 100),
+                "white": brightness_data.get("white", 100),
+            }
+        else:
+            # Legacy single brightness value
+            brightness_value = (
+                brightness_data if brightness_data is not None else 100
+            )
+            levels = {
+                "red": brightness_value,
+                "green": brightness_value,
+                "blue": brightness_value,
+                "white": brightness_value,
+            }
+
         auto_program = AutoProgram(
             id="auto-program-1",
             label="Auto Program",
@@ -751,12 +775,7 @@ def create_light_config_from_command(
             sunrise=command_args["sunrise"],
             sunset=command_args["sunset"],
             rampMinutes=command_args.get("ramp_up_minutes", 0),
-            levels={
-                "red": command_args["brightness"],
-                "green": command_args["brightness"],
-                "blue": command_args["brightness"],
-                "white": command_args["brightness"],
-            },
+            levels=levels,
         )
 
         profile = AutoProfile(mode="auto", programs=[auto_program])
