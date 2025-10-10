@@ -144,6 +144,8 @@ export async function loadAllDashboardData(): Promise<void> {
     const errorMessage = err instanceof Error ? err.message : String(err);
     console.error("❌ Failed to load dashboard data:", errorMessage);
     setError(`Failed to load dashboard data: ${errorMessage}`);
+    // Ensure deviceStatus is set to empty object so UI shows "no devices" instead of "no data"
+    setDeviceStatus({});
   } finally {
     setLoading(false);
   }

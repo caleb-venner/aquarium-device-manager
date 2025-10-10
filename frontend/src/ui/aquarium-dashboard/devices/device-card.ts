@@ -71,13 +71,10 @@ function renderDeviceCardHeader(
             ${device.address}
           </div>
         </div>
-        <div style="text-align: right;">
+        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+          ${connectionStatus}
           <div style="font-size: 11px; color: var(--gray-500);">${timeAgo}</div>
         </div>
-      </div>
-      <!-- Connection indicator positioned in top right -->
-      <div style="position: absolute; top: 16px; right: 16px;">
-        ${connectionStatus}
       </div>
     </div>
   `;

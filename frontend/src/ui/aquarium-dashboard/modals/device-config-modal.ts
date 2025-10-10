@@ -6,17 +6,48 @@
 import type { CachedStatus } from "../../../types/models";
 import { getDashboardState } from "../state";
 import { renderModalConnectionStatus, getConnectionHealth, getConnectionMessage } from "../utils/connection-utils";
+import { connectDevice } from "../../../api/devices";
 
 /**
  * Show the unified device configuration modal
  */
-export function showDeviceConfigModal(deviceAddress: string): void {
+export async function showDeviceConfigModal(deviceAddress: string): Promise<void> {
   const state = getDashboardState();
-  const device = state.deviceStatus?.[deviceAddress];
+  let device = state.deviceStatus?.[deviceAddress];
 
   if (!device) {
     console.error('Device not found:', deviceAddress);
     return;
+  }
+
+  // Show loading modal while performing handshake
+  const loadingModal = document.createElement('div');
+  loadingModal.className = 'modal-overlay';
+  loadingModal.innerHTML = `
+    <div class="modal-content" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>Connecting to Device...</h3>
+      </div>
+      <div class="modal-body" style="text-align: center; padding: 40px;">
+        <div class="scan-spinner" style="font-size: 48px; margin-bottom: 20px;">🔄</div>
+        <p>Establishing connection to ensure device is ready for configuration...</p>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(loadingModal);
+
+  try {
+    // Perform handshake by attempting to reconnect
+    await connectDevice(deviceAddress);
+
+    // Refresh device status after handshake
+    const updatedState = getDashboardState();
+    device = updatedState.deviceStatus?.[deviceAddress] || device;
+  } catch (error) {
+    console.warn('Handshake failed, proceeding with cached status:', error);
+    // Continue with cached device status if handshake fails
+  } finally {
+    loadingModal.remove();
   }
 
   const modal = document.createElement('div');
