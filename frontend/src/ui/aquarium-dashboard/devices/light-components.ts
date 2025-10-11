@@ -36,8 +36,9 @@ export function renderLightCardStatus(device: CachedStatus & { address: string }
     ? Math.max(...currentKeyframes.map((kf: any) => kf.percent || 0))
     : 0;
 
-  // Use device.channels for actual channel count, default to 4 if not available
-  const channelCount = device.channels?.length || 4;
+  // Use device type to determine channel count
+  const channelNames = getDeviceChannelNames(device.address);
+  const channelCount = channelNames.length;
 
   return `
     <div style="padding: 16px; background: var(--gray-50);">
@@ -64,7 +65,9 @@ export function renderLightCardStatus(device: CachedStatus & { address: string }
  * Render channel brightness levels with interactive controls
  */
 export function renderChannelLevels(keyframes: any[], channels?: any[], deviceAddress?: string): string {
-  const channelCount = channels?.length || 4; // Default to 4 channels if not specified
+  // Get channel names for the device to determine count
+  const channelNames = deviceAddress ? getDeviceChannelNames(deviceAddress) : ['Channel 1', 'Channel 2', 'Channel 3', 'Channel 4'];
+  const channelCount = channelNames.length;
 
   // Get current schedule intensity from keyframes (represents max intensity across all channels)
   const currentIntensity = keyframes.length > 0
@@ -80,9 +83,6 @@ export function renderChannelLevels(keyframes: any[], channels?: any[], deviceAd
       </div>
     `;
   }
-
-  // Get channel names for the device
-  const channelNames = getDeviceChannelNames(deviceAddress);
 
   return `
     <div style="background: white; padding: 16px; border-radius: 6px;">

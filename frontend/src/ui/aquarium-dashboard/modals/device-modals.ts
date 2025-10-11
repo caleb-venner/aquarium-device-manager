@@ -425,6 +425,54 @@ function renderLightModeSelector(device: LightDevice): string {
 }
 
 /**
+ * Render existing auto programs for the device
+ */
+function renderExistingAutoPrograms(device: LightDevice): string {
+  // Check if device has auto programs in its profile
+  if (device.profile?.mode !== 'auto' || !device.profile.programs || device.profile.programs.length === 0) {
+    return `
+      <div class="existing-programs-section">
+        <h4>Existing Programs</h4>
+        <p class="no-programs">No auto programs currently configured for this device.</p>
+      </div>
+    `;
+  }
+
+  const programs = device.profile.programs;
+
+  return `
+    <div class="existing-programs-section">
+      <h4>Existing Programs</h4>
+      <div class="programs-list">
+        ${programs.map((program, index) => `
+          <div class="program-item">
+            <div class="program-info">
+              <div class="program-title">${program.label || `Program ${index + 1}`}</div>
+              <div class="program-details">
+                <span class="time-range">${program.sunrise} - ${program.sunset}</span>
+                <span class="ramp-time">Ramp: ${program.rampMinutes}min</span>
+                <span class="days">${program.days.join(', ')}</span>
+              </div>
+              <div class="brightness-levels">
+                ${Object.entries(program.levels).map(([channel, value]) =>
+                  `<span class="channel-level">${channel}: ${value}%</span>`
+                ).join(' ')}
+              </div>
+            </div>
+            <div class="program-actions">
+              <button type="button" class="btn btn-danger btn-sm"
+                      onclick="window.handleDeleteSpecificAutoProgram('${device.id}', '${program.sunrise}', '${program.sunset}', ${program.rampMinutes})">
+                Delete
+              </button>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+/**
  * Render light mode interface content (based on doser head command interface)
  */
 export function renderLightModeInterface(modeIndex: number, device: LightDevice): string {
@@ -449,52 +497,59 @@ export function renderLightModeInterface(modeIndex: number, device: LightDevice)
       <h3>Auto Program Scheduler</h3>
       <p class="section-description">Create and send auto programs that run on the device's internal timer.</p>
 
-      <form id="light-config-form" onsubmit="window.handleAddAutoProgram(event, '${device.id}')">
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="light-label">Program Label:</label>
-            <input type="text" id="light-label" placeholder="e.g., Daily Cycle" class="form-input">
-          </div>
-        </div>
+      <!-- Existing Programs Section -->
+      ${renderExistingAutoPrograms(device)}
 
-        <div class="form-grid">
-          <div class="form-group">
-            <label for="sunrise-time">Sunrise Time:</label>
-            <input type="time" id="sunrise-time" name="sunrise-time" value="08:00" class="form-input">
+      <!-- Add New Program Section -->
+      <div class="form-section">
+        <h4>Add New Program</h4>
+        <form id="light-config-form" onsubmit="window.handleAddAutoProgram(event, '${device.id}')">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="light-label">Program Label:</label>
+              <input type="text" id="light-label" placeholder="e.g., Daily Cycle" class="form-input">
+            </div>
           </div>
-          <div class="form-group">
-            <label for="sunset-time">Sunset Time:</label>
-            <input type="time" id="sunset-time" name="sunset-time" value="20:00" class="form-input">
-          </div>
-          <div class="form-group">
-            <label for="ramp-minutes">Ramp Time (minutes):</label>
-            <input type="number" id="ramp-minutes" name="ramp-minutes" value="30" min="0" max="150" class="form-input">
-          </div>
-        </div>
 
-        <div class="form-group">
-          <label>Peak Brightness (%):</label>
-          <div class="brightness-inputs">
-            ${renderChannelBrightnessInputs(device)}
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="sunrise-time">Sunrise Time:</label>
+              <input type="time" id="sunrise-time" name="sunrise-time" value="08:00" class="form-input">
+            </div>
+            <div class="form-group">
+              <label for="sunset-time">Sunset Time:</label>
+              <input type="time" id="sunset-time" name="sunset-time" value="20:00" class="form-input">
+            </div>
+            <div class="form-group">
+              <label for="ramp-minutes">Ramp Time (minutes):</label>
+              <input type="number" id="ramp-minutes" name="ramp-minutes" value="30" min="0" max="150" class="form-input">
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label>Active Days:</label>
-          <div class="weekday-selector">
-            ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
-              <label class="weekday-option">
-                <input type="checkbox" value="${day}" checked>
-                <span class="weekday-label">${day}</span>
-              </label>
-            `).join('')}
+          <div class="form-group">
+            <label>Peak Brightness (%):</label>
+            <div class="brightness-inputs">
+              ${renderChannelBrightnessInputs(device)}
+            </div>
           </div>
-        </div>
 
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Add Program</button>
-        </div>
-      </form>
+          <div class="form-group">
+            <label>Active Days:</label>
+            <div class="weekday-selector">
+              ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => `
+                <label class="weekday-option">
+                  <input type="checkbox" value="${day}" checked>
+                  <span class="weekday-label">${day}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Add Program</button>
+          </div>
+        </form>
+      </div>
     `;
   }
 
@@ -513,7 +568,14 @@ function renderChannelBrightnessInputs(device: LightDevice): string {
     { key: 'W', label: 'White', min: 0, max: 100, step: 1 }
   ];
 
-  return channels.map((channel, index) => `
+  // Get current brightness levels from device profile if it's a manual profile
+  const currentLevels = device.profile?.mode === 'manual' ? device.profile.levels : {};
+
+  return channels.map((channel, index) => {
+    // Use current level from device profile, or default to 0
+    const currentValue = currentLevels[channel.key] || 0;
+
+    return `
     <div class="channel-input">
       <label for="channel-${channel.key}">${channel.label || channel.key}:</label>
       <input type="number" id="channel-${channel.key}"
@@ -521,11 +583,12 @@ function renderChannelBrightnessInputs(device: LightDevice): string {
              min="${channel.min || 0}"
              max="${channel.max || 100}"
              step="${channel.step || 1}"
-             value="0"
+             value="${currentValue}"
              class="form-input">
       <span class="unit">%</span>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 /**

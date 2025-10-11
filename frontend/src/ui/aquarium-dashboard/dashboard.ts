@@ -4,7 +4,7 @@
 
 import { renderProductionDashboard, refreshDashboard } from "./render";
 import { loadAllDashboardData } from "./services/data-service";
-import { setCurrentTab } from "./state";
+import { setCurrentTab, getDashboardState } from "./state";
 import { renderWattageCalculator, calculateWattageFromInputs, setWattageTestCase } from "./components/wattage-calculator";
 import { renderHeadCommandInterface } from "./modals/device-modals";
 import "./modals/device-config-modal"; // Import the new unified device config modal
@@ -267,29 +267,40 @@ export function initializeDashboardHandlers(): void {
       const form = event.target as HTMLFormElement;
       const formData = new FormData(form);
 
+      console.log('=== Manual Brightness Debug ===');
+      console.log('Form:', form);
+      console.log('Device ID:', deviceId);
+
       // Collect brightness values for each channel
       const payloads: Array<{ index: number; value: number }> = [];
 
       // Get all brightness inputs (they're named like channel-R, channel-G, etc.)
       const inputs = form.querySelectorAll('input[name^="channel-"]');
+      console.log('Found inputs:', inputs.length);
+
       inputs.forEach((element, index) => {
         const input = element as HTMLInputElement;
         const value = parseInt(input.value) || 0;
+        console.log(`Channel ${index}: name="${input.name}", value="${input.value}", parsed=${value}`);
         payloads.push({ index, value });
       });
+
+      console.log('Collected payloads:', payloads);
 
       if (payloads.length === 0) {
         throw new Error('No brightness values found');
       }
 
-      console.log('Setting manual brightness:', deviceId, payloads);
-      await sendManualBrightnessCommands(deviceId, payloads);
+      console.log('Sending manual brightness command:', deviceId, payloads);
+      const result = await sendManualBrightnessCommands(deviceId, payloads);
+      console.log('Command result:', result);
 
       useActions().addNotification({
         type: 'success',
         message: `Brightness set for light ${deviceId}`
       });
     } catch (error) {
+      console.error('Error in handleManualBrightness:', error);
       const { useActions } = await import("../../stores/deviceStore");
       useActions().addNotification({
         type: 'error',
@@ -316,10 +327,13 @@ export function initializeDashboardHandlers(): void {
       // Collect channel brightness values
       const channels: Record<string, number> = {};
       const channelInputs = form.querySelectorAll('input[name^="channel-"]');
+      console.log('Auto program - Found channel inputs:', channelInputs.length);
+
       channelInputs.forEach((element) => {
         const input = element as HTMLInputElement;
         const channelKey = input.name.replace('channel-', '');
         const value = parseInt(input.value) || 0;
+        console.log(`Auto program - Channel ${channelKey}: name="${input.name}", value="${input.value}", parsed=${value}`);
         channels[channelKey] = value;
       });
 
@@ -349,6 +363,116 @@ export function initializeDashboardHandlers(): void {
       useActions().addNotification({
         type: 'error',
         message: `Failed to add auto program for ${deviceId}: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  };
+
+  (window as any).handleDeleteAutoProgram = async (event: Event, deviceId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    try {
+      const { deleteAutoSetting } = await import('../../api/commands');
+      const { useActions } = await import("../../stores/deviceStore");
+
+      // Get the form that contains the current values
+      const button = event.target as HTMLButtonElement;
+      const form = button.closest('form') as HTMLFormElement;
+
+      if (!form) {
+        throw new Error('Could not find the auto program form');
+      }
+
+      const formData = new FormData(form);
+
+      // Extract form values - we need the same sunrise/sunset and ramp time to identify the setting
+      const sunrise = formData.get('sunrise-time') as string;
+      const sunset = formData.get('sunset-time') as string;
+      const rampMinutes = parseInt(formData.get('ramp-minutes') as string) || 30;
+
+      if (!sunrise || !sunset) {
+        throw new Error('Sunrise and sunset times are required to delete the auto program');
+      }
+
+      // Confirm deletion
+      const confirmed = confirm(`Are you sure you want to delete the auto program ${sunrise}-${sunset}?`);
+      if (!confirmed) {
+        return;
+      }
+
+      const args = {
+        sunrise,
+        sunset,
+        ramp_up_minutes: rampMinutes,
+      };
+
+      console.log('Deleting auto program:', deviceId, args);
+      await deleteAutoSetting(deviceId, args);
+
+      useActions().addNotification({
+        type: 'success',
+        message: `Auto program ${sunrise}-${sunset} deleted for light ${deviceId}`
+      });
+
+      // Clear the form
+      form.reset();
+    } catch (error) {
+      const { useActions } = await import("../../stores/deviceStore");
+      useActions().addNotification({
+        type: 'error',
+        message: `Failed to delete auto program for ${deviceId}: ${error instanceof Error ? error.message : String(error)}`
+      });
+    }
+  };
+
+  (window as any).handleDeleteSpecificAutoProgram = async (
+    deviceId: string,
+    sunrise: string,
+    sunset: string,
+    rampMinutes: number
+  ) => {
+    try {
+      const { deleteAutoSetting } = await import('../../api/commands');
+      const { useActions } = await import("../../stores/deviceStore");
+
+      // Confirm deletion
+      const confirmed = confirm(`Are you sure you want to delete the auto program ${sunrise}-${sunset}?`);
+      if (!confirmed) {
+        return;
+      }
+
+      const args = {
+        sunrise,
+        sunset,
+        ramp_up_minutes: rampMinutes,
+      };
+
+      console.log('Deleting specific auto program:', deviceId, args);
+      await deleteAutoSetting(deviceId, args);
+
+      useActions().addNotification({
+        type: 'success',
+        message: `Auto program ${sunrise}-${sunset} deleted for light ${deviceId}`
+      });
+
+      // Refresh the modal content to update the programs list
+      // Get device data and re-render the mode interface
+      const { getDashboardState } = await import('./state');
+      const { renderLightModeInterface } = await import('./modals/device-modals');
+      const state = getDashboardState();
+      const device = state.lightConfigs.find((d: any) => d.name === deviceId || d.id === deviceId);
+
+      if (device) {
+        const commandInterface = document.getElementById('light-command-interface');
+        if (commandInterface) {
+          commandInterface.innerHTML = renderLightModeInterface(2, device as any); // 2 = Auto Mode
+        }
+      }
+    } catch (error) {
+      const { useActions } = await import("../../stores/deviceStore");
+      useActions().addNotification({
+        type: 'error',
+        message: `Failed to delete auto program for ${deviceId}: ${error instanceof Error ? error.message : String(error)}`
       });
     }
   };
@@ -494,6 +618,25 @@ export function initializeDashboardHandlers(): void {
     }
   };
 }
+
+// Debug function to test light device modal - accessible from browser console
+(window as any).testLightModal = function() {
+  const state = getDashboardState();
+  console.log('Current dashboard state:', state);
+  console.log('Light configs:', state.lightConfigs);
+
+  if (state.lightConfigs.length > 0) {
+    const device = state.lightConfigs[0];
+    console.log('Testing with device:', device);
+
+    // Import and show the modal
+    import('./modals/device-modals').then(({ showLightConfigurationModal }) => {
+      showLightConfigurationModal(device as any);
+    });
+  } else {
+    console.log('No light devices found');
+  }
+};
 
 // Auto-load data on module import
 loadAllDashboardData();

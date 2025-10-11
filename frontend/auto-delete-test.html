@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto Program Delete Test</title>
+</head>
+<body>
+    <h1>Auto Program Delete Test</h1>
+
+    <h2>Test 1: Add Auto Program</h2>
+    <button id="add-program">Add Auto Program (08:00-20:00)</button>
+
+    <h2>Test 2: Delete Auto Program</h2>
+    <button id="delete-program">Delete Auto Program (08:00-20:00)</button>
+
+    <h2>Results</h2>
+    <div id="results"></div>
+
+    <script>
+        const deviceId = 'A6A644D2-08CB-9326-46AA-7087FB7DD70A';
+        const resultsDiv = document.getElementById('results');
+
+        function logResult(message, data = null) {
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong>: ${message}`;
+            if (data) {
+                div.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            resultsDiv.appendChild(div);
+            console.log(message, data);
+        }
+
+        // Test adding an auto program
+        document.getElementById('add-program').addEventListener('click', async () => {
+            try {
+                logResult('Adding auto program...');
+
+                const response = await fetch(`http://localhost:8000/api/devices/${deviceId}/commands`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'add_auto_setting',
+                        args: {
+                            sunrise: '08:00',
+                            sunset: '20:00',
+                            channels: { red: 75, green: 50, blue: 25, white: 100 },
+                            ramp_up_minutes: 30
+                        },
+                        timeout: 15
+                    })
+                });
+
+                const data = await response.json();
+                logResult(`Add result: ${data.status}`, data);
+
+            } catch (error) {
+                logResult('Add error: ' + error.message);
+            }
+        });
+
+        // Test deleting an auto program
+        document.getElementById('delete-program').addEventListener('click', async () => {
+            try {
+                logResult('Deleting auto program...');
+
+                const response = await fetch(`http://localhost:8000/api/devices/${deviceId}/commands`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'add_auto_setting',
+                        args: {
+                            sunrise: '08:00',
+                            sunset: '20:00',
+                            channels: { red: 255, green: 255, blue: 255, white: 255 },
+                            ramp_up_minutes: 30
+                        },
+                        timeout: 15
+                    })
+                });
+
+                const data = await response.json();
+                logResult(`Delete result: ${data.status}`, data);
+
+            } catch (error) {
+                logResult('Delete error: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

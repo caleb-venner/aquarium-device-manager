@@ -248,4 +248,4 @@ class LightDevice(BaseDevice):
     async def set_manual_mode(self) -> None:
         """Switch to manual mode by sending a manual mode command."""
         for color_name in self._colors:
-            await self.set_color_brightness(100, color_name)
+            await self.set_color_brightness(0, color_name)

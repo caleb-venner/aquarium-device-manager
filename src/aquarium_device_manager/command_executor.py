@@ -188,35 +188,11 @@ class CommandExecutor:
             return cached_status_to_dict(self.ble_service, status)
 
         elif action == "set_multi_channel_brightness":
-            # Handle multiple channel brightness setting
-            channels = args.get("channels", {})
-            if not channels:
-                raise ValueError(
-                    "channels argument required for multi-channel brightness"
-                )
-
-            # Set brightness for each channel
-            for channel_name, brightness in channels.items():
-                await self.ble_service.set_light_brightness(
-                    address,
-                    brightness=brightness,
-                    color=channel_name,
-                )
-
-            # Get final status after all channels are set
-            status = await self.ble_service.request_status(address)
-
-            # Update and persist light configuration
-            await self._save_light_brightness_config(address, args)
-
-            return cached_status_to_dict(self.ble_service, status)
-
-        elif action == "set_manual_multi_channel_brightness":
             # Handle manual multi-channel brightness setting in one payload
             channels = args.get("channels", [])
             if not channels:
                 raise ValueError(
-                    "channels argument required for manual multi-channel brightness"
+                    "channels argument required for multi-channel brightness"
                 )
 
             if not isinstance(channels, (list, tuple)) or len(channels) > 4:
@@ -227,7 +203,7 @@ class CommandExecutor:
             # Convert to tuple of ints
             brightness_tuple = tuple(int(x) for x in channels)
 
-            status = await self.ble_service.set_manual_multi_channel_brightness(
+            status = await self.ble_service.set_multi_channel_brightness(
                 address, brightness_tuple
             )
 
@@ -353,12 +329,29 @@ class CommandExecutor:
         Args:
             address: Device MAC address
             args: Command arguments from set_brightness
+            or multi-channel brightness commands
         """
         if not self.ble_service._auto_save_config:
             logger.debug("Auto-save config disabled, skipping")
             return
 
         try:
+            # Check if this is a multi-channel command (has 'channels' key)
+            if "channels" in args:
+                # Skip saving for multi-channel commands for now
+                # TODO: Implement proper multi-channel configuration saving
+                logger.debug(
+                    f"Skipping config save for multi-channel command on {address}"
+                )
+                return
+
+            # Handle single-channel brightness command
+            if "brightness" not in args:
+                logger.warning(
+                    f"No brightness data found in args for {address}: {args}"
+                )
+                return
+
             from .config_helpers import update_light_brightness
 
             device = self.ble_service._light_storage.get_device(address)

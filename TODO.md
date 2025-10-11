@@ -1,33 +1,44 @@
-# Aquarium Device Controller TODO
+# Project TODO
 
-## Light Features
+## High Priority
 
-- Manual brightness setting should be sent as one payload.
-- Should have auto/manual/favourited settings for light devices on the ‘Overview’ page.
-- Need to figure out the Custom Mode. I think it just creates a bunch of auto mode settings; the device itself must compute how they all interact.
-- Ensure Auto settings do not overlap. One can end at 21:00 with another starting at 21:00; cannot have end 21:01 start 21:00.
-- Real time light values - need to be implemented from saved config data.
-- What are we exposing as devices, entities, helpers, attributes?
-- For light devices that support it —> 140% brightness, dependant on wattage calculations.
-Devices --> Settings --> Turn On, Turn Off settings not working; low priority.
+### Doser Features
 
-## Doser Features
+- Implement manual and one-time dosing commands.
+- Add support for advanced schedule types (interval, countdown, conditional).
+- Implement dosing pump calibration and priming functionality.
+- Add full schedule management (Create, Read, Update, Delete).
 
-- **Manual/One-time dosing**: No immediate dose commands - need encoder functions and device methods for manual dosing
-- **Different schedule types**: Only daily recurring schedules supported - need interval-based, countdown, and conditional dosing modes
-- **Dose calibration/testing**: No priming or calibration commands - need calibration and priming functionality
-- **Schedule management**: No commands to read, modify, or delete existing schedules - need CRUD operations for schedules
-- **Advanced scheduling**: No interval-based, countdown, or conditional dosing - need more sophisticated scheduling options
+### Light Features
 
-## General Features
-- Drop 'Searching' Notification when Scan Device
-- Need to rethink the overview display for devices. What information do we want?
-- When a device is first connected to, the user needs to fill out the device 'Config' information. Device name, head names etc. They should also be made aware that the device will be 'reset' and they need to create new schedules/settings etc. So take note from controller app --> transfer.
-- Device config/state/setting file needs to maintain its current state whilst allowing partial updates through command execution and/or status updates.
-  - Do we need revision/previous states saved?
+- Investigate and implement "Custom Mode".
+- Add auto, manual, and favorite settings to the device overview.
+- Prevent overlapping auto mode schedules.
+- Display real-time light values from saved configuration.
+- Fix "Turn On" / "Turn Off" functionality in device settings.
 
-## Nice to haves
+### General & UI
 
-- Container data structure that is tracked against dosed volume —> exposed in HASSIO and WebUI
-- Connecting animations/statuses should operate within the connect button to keep the user aware/updated.
-- **Device Model Name Specifications**: Backend `model_name` field should include full device specifications (e.g., "WRGB II Pro 120cm" instead of "WRGB II Pro"). Current frontend properly displays whatever backend provides, but model names are truncated and missing size/variant information.
+- Implement a first-time setup wizard for new devices.
+- Redesign the device overview page for better clarity.
+- Ensure device configuration supports partial updates.
+- Create virtual devices for testing different hardware configurations.
+
+## Medium Priority
+
+### Medium Priority Light Features
+
+- Support 140% brightness for capable devices based on wattage calculations.
+- Define the Home Assistant entity model for lights.
+- Implement single-payload manual brightness setting.
+
+### Medium Priority General & UI
+
+- Improve connection status feedback in the UI.
+- Remove the "Searching" notification when scanning for devices.
+- Consider implementing versioning for device configurations.
+
+## Low Priority / Nice to Haves
+
+- Track dosed volume against container size and expose to UI and Home Assistant.
+- Expand device model names in the backend to include full specifications (e.g., size).

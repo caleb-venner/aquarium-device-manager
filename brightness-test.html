@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Brightness Form Test</title>
+</head>
+<body>
+    <h1>Manual Brightness Test</h1>
+    <form id="test-form">
+        <div>
+            <label for="channel-red">Red:</label>
+            <input type="number" id="channel-red" name="channel-red" min="0" max="100" value="75">
+        </div>
+        <div>
+            <label for="channel-green">Green:</label>
+            <input type="number" id="channel-green" name="channel-green" min="0" max="100" value="50">
+        </div>
+        <div>
+            <label for="channel-blue">Blue:</label>
+            <input type="number" id="channel-blue" name="channel-blue" min="0" max="100" value="25">
+        </div>
+        <div>
+            <label for="channel-white">White:</label>
+            <input type="number" id="channel-white" name="channel-white" min="0" max="100" value="100">
+        </div>
+        <button type="submit">Set Brightness</button>
+    </form>
+
+    <script>
+        document.getElementById('test-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            console.log('=== Form Submission Test ===');
+
+            const form = event.target;
+            const payloads = [];
+
+            // Simulate the frontend logic
+            const inputs = form.querySelectorAll('input[name^="channel-"]');
+            console.log('Found inputs:', inputs.length);
+
+            inputs.forEach((element, index) => {
+                const input = element;
+                const value = parseInt(input.value) || 0;
+                console.log(`Channel ${index}: name="${input.name}", value="${input.value}", parsed=${value}`);
+                payloads.push({ index, value });
+            });
+
+            console.log('Collected payloads:', payloads);
+
+            // Simulate the sendManualBrightnessCommands logic
+            const sanitized = payloads
+                .map(({ index, value }) => ({
+                    index: Number.isFinite(index) ? Math.trunc(index) : 0,
+                    value: Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0,
+                }))
+                .sort((a, b) => a.index - b.index);
+
+            const brightnessValues = sanitized.map(p => p.value);
+            console.log('Final brightness values that would be sent:', brightnessValues);
+
+            // Test the actual API call
+            fetch('http://localhost:8000/api/devices/A6A644D2-08CB-9326-46AA-7087FB7DD70A/commands', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    action: 'set_manual_multi_channel_brightness',
+                    args: { channels: brightnessValues },
+                    timeout: 10
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('API Response:', data);
+                alert('Command sent! Check console for details.');
+            })
+            .catch(error => {
+                console.error('API Error:', error);
+                alert('Error: ' + error.message);
+            });
+        });
+    </script>
+</body>
+</html>

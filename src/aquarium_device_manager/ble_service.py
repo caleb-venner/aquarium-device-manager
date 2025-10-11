@@ -772,13 +772,20 @@ class BLEService:
             self, address, brightness=brightness, color=color
         )
 
-    async def set_manual_multi_channel_brightness(
+    async def set_multi_channel_brightness(
         self, address: str, brightness: tuple[int, ...]
     ) -> CachedStatus:
-        """Set manual multi-channel brightness for a light device in one payload."""
-        return await device_commands.set_manual_multi_channel_brightness(
-            self, address, brightness
-        )
+        """Set multi-channel brightness for a light device in one payload."""
+        device = cast(LightDevice, await self._ensure_device(address, "light"))
+        try:
+            await device.set_multi_channel_brightness(brightness)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except (BleakNotFoundError, BleakConnectionError) as exc:
+            raise HTTPException(
+                status_code=404, detail="Light not reachable"
+            ) from exc
+        return await self._refresh_device_status("light", persist=True)
 
     async def turn_light_on(self, address: str) -> CachedStatus:
         """Turn the light device at the address on."""
